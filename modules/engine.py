@@ -32,6 +32,8 @@ class Trade:
     pnl: float
     bars_held: int
     exit_reason: str
+    mae_points: float
+    mfe_points: float
 
 
 class MasterStrategyEngine:
@@ -94,9 +96,23 @@ class MasterStrategyEngine:
             pnl=net_pnl,
             bars_held=bars_held,
             exit_reason=exit_reason,
+            mae_points=float(self.position["mae_points"]),
+            mfe_points=float(self.position["mfe_points"]),
         )
         self.trades.append(trade)
         self.position = None
+
+    def _update_open_position_excursions(self, bar_low: float, bar_high: float) -> None:
+        if self.position is None:
+            return
+
+        entry_price = self.position["entry_price"]
+
+        adverse_excursion = bar_low - entry_price
+        favorable_excursion = bar_high - entry_price
+
+        self.position["mae_points"] = min(self.position["mae_points"], adverse_excursion)
+        self.position["mfe_points"] = max(self.position["mfe_points"], favorable_excursion)
 
     def run(
         self,
@@ -128,6 +144,7 @@ class MasterStrategyEngine:
             timestamp = self.data.index[i]
             close_price = float(bar["close"])
             low_price = float(bar["low"])
+            high_price = float(bar["high"])
 
             self.equity_curve.append(
                 {
@@ -138,6 +155,12 @@ class MasterStrategyEngine:
 
             if self.position is not None:
                 bars_held = i - self.position["entry_index"]
+
+                self._update_open_position_excursions(
+                    bar_low=low_price,
+                    bar_high=high_price,
+                )
+
                 stop_price = self.position["stop_price"]
 
                 if low_price <= stop_price:
@@ -178,13 +201,22 @@ class MasterStrategyEngine:
                             "entry_price": entry_price,
                             "stop_price": stop_price,
                             "contracts": contracts,
+                            "mae_points": 0.0,
+                            "mfe_points": 0.0,
                         }
 
         if self.position is not None:
             final_bar = self.data.iloc[-1]
             final_time = self.data.index[-1]
             final_close = float(final_bar["close"])
+            final_low = float(final_bar["low"])
+            final_high = float(final_bar["high"])
             bars_held = len(self.data) - 1 - self.position["entry_index"]
+
+            self._update_open_position_excursions(
+                bar_low=final_low,
+                bar_high=final_high,
+            )
 
             final_exit_price = final_close - (slippage_points / 2.0)
             self._close_position(
@@ -210,6 +242,8 @@ class MasterStrategyEngine:
                     "pnl": t.pnl,
                     "bars_held": t.bars_held,
                     "exit_reason": t.exit_reason,
+                    "mae_points": t.mae_points,
+                    "mfe_points": t.mfe_points,
                 }
                 for t in self.trades
             ]
@@ -256,6 +290,17 @@ class MasterStrategyEngine:
         for trade in self.trades:
             exit_reason_counts[trade.exit_reason] = exit_reason_counts.get(trade.exit_reason, 0) + 1
 
+        average_mae = (
+            sum(t.mae_points for t in self.trades) / total_trades
+            if total_trades > 0
+            else 0.0
+        )
+        average_mfe = (
+            sum(t.mfe_points for t in self.trades) / total_trades
+            if total_trades > 0
+            else 0.0
+        )
+
         return {
             "Strategy": self.strategy_name,
             "Symbol": self.config.symbol,
@@ -267,6 +312,8 @@ class MasterStrategyEngine:
             "Average Trade": f"${average_trade:,.2f}",
             "Profit Factor": f"{profit_factor:.2f}",
             "Max Drawdown": f"${max_drawdown:,.2f}",
+            "Average MAE (pts)": f"{average_mae:.2f}",
+            "Average MFE (pts)": f"{average_mfe:.2f}",
             "Total Trades": total_trades,
             "Wins": wins,
             "Losses": losses,
