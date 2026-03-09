@@ -11,6 +11,7 @@ import pandas as pd
 
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
+from modules.optimizer import StrategyOptimizer
 from modules.strategies import TestStrategy
 
 
@@ -41,13 +42,16 @@ if __name__ == "__main__":
         symbol="ES",
     )
 
+    # -----------------------------
+    # Single test run
+    # -----------------------------
     strategy = TestStrategy()
     engine = MasterStrategyEngine(data=data, config=cfg)
 
     print("\n🚀 Master Strategy Engine Initialized.")
     print("Engine Results Snapshot (Before Run):", engine.results())
 
-    engine.run(strategy=strategy, hold_bars=3, stop_distance_points=10.0)
+    engine.run(strategy=strategy)
 
     print("\n✅ Backtest run completed.")
     print("Engine Results Snapshot (After Run):", engine.results())
@@ -56,3 +60,25 @@ if __name__ == "__main__":
     if not trades_df.empty:
         print("\nFirst 5 Trades:")
         print(trades_df.head())
+
+    # -----------------------------
+    # Optimization run
+    # -----------------------------
+    optimizer = StrategyOptimizer(
+        engine_class=MasterStrategyEngine,
+        data=data,
+        strategy_class=TestStrategy,
+        config=cfg,
+    )
+
+    optimization_df = optimizer.run_grid_search(
+        hold_bars=[2, 3, 4, 5],
+        stop_distance_points=[6.0, 8.0, 10.0, 12.0],
+        min_trades=1,
+    )
+
+    if not optimization_df.empty:
+        print("\n📊 Top Optimization Results:")
+        print(optimizer.top_results(10))
+    else:
+        print("\nNo optimization results met the filter criteria.")
