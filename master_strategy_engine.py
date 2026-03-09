@@ -11,6 +11,7 @@ import pandas as pd
 
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
+from modules.heatmap import OptimizationHeatmap
 from modules.optimizer import StrategyOptimizer
 from modules.strategies import TestStrategy
 
@@ -86,5 +87,25 @@ if __name__ == "__main__":
 
         saved_path = optimizer.save_results_csv(OPTIMIZATION_CSV_PATH)
         print(f"\n💾 Full optimization results saved to: {saved_path}")
+
+        # -----------------------------
+        # Heatmap analysis
+        # -----------------------------
+        heatmap = OptimizationHeatmap(optimization_df)
+
+        heatmap.print_heatmap(
+            metric="profit_factor",
+            title="Profit Factor Heatmap",
+        )
+
+        heatmap.print_heatmap(
+            metric="average_trade",
+            title="Average Trade Heatmap",
+        )
+
+        heatmap.print_heatmap(
+            metric="net_pnl",
+            title="Net PnL Heatmap",
+        )
     else:
         print("\nNo optimization results met the filter criteria.")
