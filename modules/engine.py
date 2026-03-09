@@ -49,6 +49,7 @@ class MasterStrategyEngine:
         self.position: Optional[dict] = None
         self.trades: list[Trade] = []
         self.equity_curve: list[dict] = []
+        self.strategy_name: str = "UnknownStrategy"
 
     def calculate_position_size_contracts(
         self,
@@ -97,7 +98,12 @@ class MasterStrategyEngine:
         self.trades.append(trade)
         self.position = None
 
-    def run(self, strategy, hold_bars: int = 3, stop_distance_points: float = 10.0) -> None:
+    def run(
+        self,
+        strategy,
+        hold_bars: Optional[int] = None,
+        stop_distance_points: Optional[float] = None,
+    ) -> None:
         if len(self.data) < 2:
             raise ValueError("Not enough data to run backtest.")
 
@@ -105,6 +111,13 @@ class MasterStrategyEngine:
         self.trades = []
         self.equity_curve = []
         self.current_capital = float(self.initial_capital)
+        self.strategy_name = getattr(strategy, "name", "UnknownStrategy")
+
+        if hold_bars is None:
+            hold_bars = getattr(strategy, "hold_bars", 3)
+
+        if stop_distance_points is None:
+            stop_distance_points = getattr(strategy, "stop_distance_points", 10.0)
 
         slippage_points = self.config.slippage_ticks * (
             self.config.tick_value / self.config.dollars_per_point
@@ -127,7 +140,6 @@ class MasterStrategyEngine:
                 bars_held = i - self.position["entry_index"]
                 stop_price = self.position["stop_price"]
 
-                # 1. Stop-loss check first
                 if low_price <= stop_price:
                     stop_exit_price = stop_price - (slippage_points / 2.0)
                     self._close_position(
@@ -138,7 +150,6 @@ class MasterStrategyEngine:
                     )
                     continue
 
-                # 2. Time exit second
                 if bars_held >= hold_bars:
                     time_exit_price = close_price - (slippage_points / 2.0)
                     self._close_position(
@@ -216,6 +227,7 @@ class MasterStrategyEngine:
             exit_reason_counts[trade.exit_reason] = exit_reason_counts.get(trade.exit_reason, 0) + 1
 
         return {
+            "Strategy": self.strategy_name,
             "Symbol": self.config.symbol,
             "Initial Capital": f"${self.initial_capital:,.2f}",
             "Current Capital": f"${self.current_capital:,.2f}",

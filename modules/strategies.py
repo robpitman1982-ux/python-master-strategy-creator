@@ -11,6 +11,8 @@ class BaseStrategy(ABC):
 
     name: str = "BaseStrategy"
     direction: str = "LONG_ONLY"
+    hold_bars: int = 3
+    stop_distance_points: float = 10.0
 
     @abstractmethod
     def generate_signal(self, data: pd.DataFrame, i: int) -> int:
@@ -30,6 +32,8 @@ class TestStrategy(BaseStrategy):
 
     name = "TestStrategy"
     direction = "LONG_ONLY"
+    hold_bars = 3
+    stop_distance_points = 10.0
 
     def generate_signal(self, data: pd.DataFrame, i: int) -> int:
         if i < 1:
