@@ -215,12 +215,42 @@ class MasterStrategyEngine:
             ]
         )
 
+    def equity_curve_dataframe(self) -> pd.DataFrame:
+        if not self.equity_curve:
+            return pd.DataFrame()
+
+        return pd.DataFrame(self.equity_curve)
+
+    def _calculate_max_drawdown(self) -> float:
+        equity_df = self.equity_curve_dataframe()
+        if equity_df.empty or "equity" not in equity_df.columns:
+            return 0.0
+
+        running_peak = equity_df["equity"].cummax()
+        drawdown = equity_df["equity"] - running_peak
+        max_drawdown = float(drawdown.min())
+
+        return max_drawdown
+
     def results(self) -> dict:
         total_pnl = self.current_capital - self.initial_capital
         total_trades = len(self.trades)
+
+        gross_profit = sum(t.pnl for t in self.trades if t.pnl > 0)
+        gross_loss = sum(t.pnl for t in self.trades if t.pnl < 0)
+        net_pnl = gross_profit + gross_loss
+
         wins = sum(1 for t in self.trades if t.pnl > 0)
         losses = sum(1 for t in self.trades if t.pnl <= 0)
         win_rate = (wins / total_trades * 100.0) if total_trades > 0 else 0.0
+        average_trade = (net_pnl / total_trades) if total_trades > 0 else 0.0
+
+        if gross_loss != 0:
+            profit_factor = gross_profit / abs(gross_loss)
+        else:
+            profit_factor = 0.0
+
+        max_drawdown = self._calculate_max_drawdown()
 
         exit_reason_counts: dict[str, int] = {}
         for trade in self.trades:
@@ -232,6 +262,11 @@ class MasterStrategyEngine:
             "Initial Capital": f"${self.initial_capital:,.2f}",
             "Current Capital": f"${self.current_capital:,.2f}",
             "Net PnL": f"${total_pnl:,.2f}",
+            "Gross Profit": f"${gross_profit:,.2f}",
+            "Gross Loss": f"${gross_loss:,.2f}",
+            "Average Trade": f"${average_trade:,.2f}",
+            "Profit Factor": f"{profit_factor:.2f}",
+            "Max Drawdown": f"${max_drawdown:,.2f}",
             "Total Trades": total_trades,
             "Wins": wins,
             "Losses": losses,
