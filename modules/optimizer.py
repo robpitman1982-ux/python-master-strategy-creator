@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import product
+from pathlib import Path
 from typing import Any, Type
 
 import pandas as pd
@@ -81,7 +82,7 @@ class StrategyOptimizer:
         combinations = list(product(hold_bars, stop_distance_points))
         total_runs = len(combinations)
 
-        print(f"\n🔍 Running optimization grid search...")
+        print("\n🔍 Running optimization grid search...")
         print(f"Total combinations: {total_runs}")
 
         for run_number, (hb, stop_pts) in enumerate(combinations, start=1):
@@ -139,8 +140,64 @@ class StrategyOptimizer:
 
         return df
 
-    def top_results(self, n: int = 10) -> pd.DataFrame:
+    def display_dataframe(self) -> pd.DataFrame:
+        """
+        Returns a cleaner dataframe for terminal display.
+        """
         df = self.results_dataframe()
         if df.empty:
             return df
+
+        display_columns = [
+            "hold_bars",
+            "stop_distance_points",
+            "total_trades",
+            "profit_factor",
+            "average_trade",
+            "net_pnl",
+            "max_drawdown",
+            "win_rate",
+            "average_mae_points",
+            "average_mfe_points",
+        ]
+
+        available_columns = [col for col in display_columns if col in df.columns]
+        display_df = df[available_columns].copy()
+
+        money_columns = ["average_trade", "net_pnl", "max_drawdown"]
+        for col in money_columns:
+            if col in display_df.columns:
+                display_df[col] = display_df[col].round(2)
+
+        float_columns = [
+            "stop_distance_points",
+            "profit_factor",
+            "win_rate",
+            "average_mae_points",
+            "average_mfe_points",
+        ]
+        for col in float_columns:
+            if col in display_df.columns:
+                display_df[col] = display_df[col].round(2)
+
+        return display_df
+
+    def top_results(self, n: int = 10) -> pd.DataFrame:
+        df = self.display_dataframe()
+        if df.empty:
+            return df
         return df.head(n)
+
+    def save_results_csv(self, filepath: str | Path) -> Path:
+        """
+        Saves the full optimization results dataframe to CSV.
+        """
+        df = self.results_dataframe()
+        if df.empty:
+            raise ValueError("No optimization results to save.")
+
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        df.to_csv(output_path, index=False)
+        return output_path

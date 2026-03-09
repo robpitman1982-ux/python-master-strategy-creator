@@ -29,6 +29,8 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
 
 if __name__ == "__main__":
     CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
+    OUTPUTS_DIR = Path("Outputs")
+    OPTIMIZATION_CSV_PATH = OUTPUTS_DIR / "test_strategy_optimization_results.csv"
 
     print("Loading data from:", CSV_PATH)
     data = load_tradestation_csv(CSV_PATH, debug=True)
@@ -80,5 +82,8 @@ if __name__ == "__main__":
     if not optimization_df.empty:
         print("\n📊 Top Optimization Results:")
         print(optimizer.top_results(10))
+
+        saved_path = optimizer.save_results_csv(OPTIMIZATION_CSV_PATH)
+        print(f"\n💾 Full optimization results saved to: {saved_path}")
     else:
         print("\nNo optimization results met the filter criteria.")
