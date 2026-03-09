@@ -76,7 +76,8 @@ if __name__ == "__main__":
     optimization_df = optimizer.run_grid_search(
         hold_bars=[2, 3, 4, 5],
         stop_distance_points=[6.0, 8.0, 10.0, 12.0],
-        min_trades=1,
+        min_trades=150,
+        min_trades_per_year=20.0,
     )
 
     if not optimization_df.empty:
