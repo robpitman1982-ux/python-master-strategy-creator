@@ -31,6 +31,7 @@ class Trade:
     contracts: int
     pnl: float
     bars_held: int
+    exit_reason: str
 
 
 class MasterStrategyEngine:
@@ -66,6 +67,36 @@ class MasterStrategyEngine:
 
         return max(1, contracts) if contracts > 0 else 0
 
+    def _close_position(
+        self,
+        exit_time: pd.Timestamp,
+        exit_price: float,
+        bars_held: int,
+        exit_reason: str,
+    ) -> None:
+        entry_price = self.position["entry_price"]
+        contracts = self.position["contracts"]
+
+        gross_pnl = (exit_price - entry_price) * self.config.dollars_per_point * contracts
+        commission_cost = contracts * self.config.commission_per_contract * 2.0
+        net_pnl = gross_pnl - commission_cost
+
+        self.current_capital += net_pnl
+
+        trade = Trade(
+            entry_time=self.position["entry_time"],
+            exit_time=exit_time,
+            direction="LONG",
+            entry_price=entry_price,
+            exit_price=exit_price,
+            contracts=contracts,
+            pnl=net_pnl,
+            bars_held=bars_held,
+            exit_reason=exit_reason,
+        )
+        self.trades.append(trade)
+        self.position = None
+
     def run(self, strategy, hold_bars: int = 3, stop_distance_points: float = 10.0) -> None:
         if len(self.data) < 2:
             raise ValueError("Not enough data to run backtest.")
@@ -83,6 +114,7 @@ class MasterStrategyEngine:
             bar = self.data.iloc[i]
             timestamp = self.data.index[i]
             close_price = float(bar["close"])
+            low_price = float(bar["low"])
 
             self.equity_curve.append(
                 {
@@ -93,30 +125,28 @@ class MasterStrategyEngine:
 
             if self.position is not None:
                 bars_held = i - self.position["entry_index"]
+                stop_price = self.position["stop_price"]
 
-                if bars_held >= hold_bars:
-                    exit_price = close_price - slippage_points / 2.0
-                    entry_price = self.position["entry_price"]
-                    contracts = self.position["contracts"]
-
-                    gross_pnl = (exit_price - entry_price) * self.config.dollars_per_point * contracts
-                    commission_cost = contracts * self.config.commission_per_contract * 2.0
-                    net_pnl = gross_pnl - commission_cost
-
-                    self.current_capital += net_pnl
-
-                    trade = Trade(
-                        entry_time=self.position["entry_time"],
+                # 1. Stop-loss check first
+                if low_price <= stop_price:
+                    stop_exit_price = stop_price - (slippage_points / 2.0)
+                    self._close_position(
                         exit_time=timestamp,
-                        direction="LONG",
-                        entry_price=entry_price,
-                        exit_price=exit_price,
-                        contracts=contracts,
-                        pnl=net_pnl,
+                        exit_price=stop_exit_price,
                         bars_held=bars_held,
+                        exit_reason="STOP",
                     )
-                    self.trades.append(trade)
-                    self.position = None
+                    continue
+
+                # 2. Time exit second
+                if bars_held >= hold_bars:
+                    time_exit_price = close_price - (slippage_points / 2.0)
+                    self._close_position(
+                        exit_time=timestamp,
+                        exit_price=time_exit_price,
+                        bars_held=bars_held,
+                        exit_reason="TIME",
+                    )
                     continue
 
             if self.position is None:
@@ -128,12 +158,14 @@ class MasterStrategyEngine:
                     )
 
                     if contracts > 0:
-                        entry_price = close_price + slippage_points / 2.0
+                        entry_price = close_price + (slippage_points / 2.0)
+                        stop_price = entry_price - stop_distance_points
 
                         self.position = {
                             "entry_index": i,
                             "entry_time": timestamp,
                             "entry_price": entry_price,
+                            "stop_price": stop_price,
                             "contracts": contracts,
                         }
 
@@ -141,30 +173,15 @@ class MasterStrategyEngine:
             final_bar = self.data.iloc[-1]
             final_time = self.data.index[-1]
             final_close = float(final_bar["close"])
-
-            exit_price = final_close - slippage_points / 2.0
-            entry_price = self.position["entry_price"]
-            contracts = self.position["contracts"]
             bars_held = len(self.data) - 1 - self.position["entry_index"]
 
-            gross_pnl = (exit_price - entry_price) * self.config.dollars_per_point * contracts
-            commission_cost = contracts * self.config.commission_per_contract * 2.0
-            net_pnl = gross_pnl - commission_cost
-
-            self.current_capital += net_pnl
-
-            trade = Trade(
-                entry_time=self.position["entry_time"],
+            final_exit_price = final_close - (slippage_points / 2.0)
+            self._close_position(
                 exit_time=final_time,
-                direction="LONG",
-                entry_price=entry_price,
-                exit_price=exit_price,
-                contracts=contracts,
-                pnl=net_pnl,
+                exit_price=final_exit_price,
                 bars_held=bars_held,
+                exit_reason="FINAL_BAR",
             )
-            self.trades.append(trade)
-            self.position = None
 
     def trades_dataframe(self) -> pd.DataFrame:
         if not self.trades:
@@ -181,6 +198,7 @@ class MasterStrategyEngine:
                     "contracts": t.contracts,
                     "pnl": t.pnl,
                     "bars_held": t.bars_held,
+                    "exit_reason": t.exit_reason,
                 }
                 for t in self.trades
             ]
@@ -193,6 +211,10 @@ class MasterStrategyEngine:
         losses = sum(1 for t in self.trades if t.pnl <= 0)
         win_rate = (wins / total_trades * 100.0) if total_trades > 0 else 0.0
 
+        exit_reason_counts: dict[str, int] = {}
+        for trade in self.trades:
+            exit_reason_counts[trade.exit_reason] = exit_reason_counts.get(trade.exit_reason, 0) + 1
+
         return {
             "Symbol": self.config.symbol,
             "Initial Capital": f"${self.initial_capital:,.2f}",
@@ -202,4 +224,5 @@ class MasterStrategyEngine:
             "Wins": wins,
             "Losses": losses,
             "Win Rate": f"{win_rate:.2f}%",
+            "Exit Reasons": exit_reason_counts,
         }
