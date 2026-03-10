@@ -13,7 +13,7 @@ from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.heatmap import OptimizationHeatmap
 from modules.optimizer import StrategyOptimizer
-from modules.strategies import TestStrategy
+from modules.strategies import SmaTrendStrategy
 
 
 def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
@@ -31,7 +31,7 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
 if __name__ == "__main__":
     CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
     OUTPUTS_DIR = Path("Outputs")
-    OPTIMIZATION_CSV_PATH = OUTPUTS_DIR / "test_strategy_optimization_results.csv"
+    OPTIMIZATION_CSV_PATH = OUTPUTS_DIR / "sma_trend_strategy_optimization_results.csv"
 
     print("Loading data from:", CSV_PATH)
     data = load_tradestation_csv(CSV_PATH, debug=True)
@@ -46,9 +46,9 @@ if __name__ == "__main__":
     )
 
     # -----------------------------
-    # Single test run
+    # Single strategy test run
     # -----------------------------
-    strategy = TestStrategy()
+    strategy = SmaTrendStrategy()
     engine = MasterStrategyEngine(data=data, config=cfg)
 
     print("\n🚀 Master Strategy Engine Initialized.")
@@ -63,6 +63,8 @@ if __name__ == "__main__":
     if not trades_df.empty:
         print("\nFirst 5 Trades:")
         print(trades_df.head())
+    else:
+        print("\nNo trades generated.")
 
     # -----------------------------
     # Optimization run
@@ -70,15 +72,15 @@ if __name__ == "__main__":
     optimizer = StrategyOptimizer(
         engine_class=MasterStrategyEngine,
         data=data,
-        strategy_class=TestStrategy,
+        strategy_class=SmaTrendStrategy,
         config=cfg,
     )
 
     optimization_df = optimizer.run_grid_search(
-        hold_bars=[2, 3, 4, 5],
-        stop_distance_points=[6.0, 8.0, 10.0, 12.0],
+        hold_bars=[4, 6, 8, 10],
+        stop_distance_points=[8.0, 10.0, 12.0, 14.0],
         min_trades=150,
-        min_trades_per_year=20.0,
+        min_trades_per_year=8.0,
     )
 
     if not optimization_df.empty:

@@ -46,3 +46,46 @@ class TestStrategy(BaseStrategy):
             return 1
 
         return 0
+
+
+class SmaTrendStrategy(BaseStrategy):
+    """
+    Simple trend-following pullback recovery strategy.
+
+    Logic:
+    - Bull trend when fast SMA > slow SMA
+    - Enter long when price closes back above the fast SMA
+      after being at/below it on the previous bar
+    """
+
+    name = "SmaTrendStrategy"
+    direction = "LONG_ONLY"
+    hold_bars = 6
+    stop_distance_points = 12.0
+
+    fast_length = 50
+    slow_length = 200
+
+    def generate_signal(self, data: pd.DataFrame, i: int) -> int:
+        required_bars = max(self.fast_length, self.slow_length)
+
+        if i < required_bars:
+            return 0
+
+        close_series = data["close"]
+
+        fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+        slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+
+        prev_fast_sma = close_series.iloc[i - self.fast_length : i].mean()
+
+        current_close = close_series.iloc[i]
+        previous_close = close_series.iloc[i - 1]
+
+        bull_trend = fast_sma > slow_sma
+        recovery_above_fast = current_close > fast_sma and previous_close <= prev_fast_sma
+
+        if bull_trend and recovery_above_fast:
+            return 1
+
+        return 0
