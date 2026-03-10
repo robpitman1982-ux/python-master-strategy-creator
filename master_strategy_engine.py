@@ -190,11 +190,12 @@ def run_top_combo_refinement(
         config=cfg,
     )
 
+    # Narrow second-pass refinement around the winning zone
     refinement_df = refiner.run_refinement(
-        hold_bars=[6, 8, 10],
-        stop_distance_points=[10.0, 12.0, 14.0],
-        min_avg_range=[7.0, 8.0, 9.0],
-        momentum_lookback=[8, 12],
+        hold_bars=[8, 9, 10, 11, 12],
+        stop_distance_points=[9.0, 10.0, 11.0, 12.0],
+        min_avg_range=[8.0, 8.5, 9.0, 9.5],
+        momentum_lookback=[11, 12, 13, 14],
         min_trades=150,
         min_trades_per_year=8.0,
         parallel=True,
@@ -209,9 +210,9 @@ def run_top_combo_refinement(
         plateau = PlateauAnalyzer(refinement_df)
         plateau.print_report(top_n=10)
 
-        output_path = Path("Outputs") / "top_combo_refinement_results.csv"
+        output_path = Path("Outputs") / "top_combo_refinement_results_narrow.csv"
         saved_path = refiner.save_results_csv(output_path)
-        print(f"\n💾 Top-combo refinement saved to: {saved_path}")
+        print(f"\n💾 Narrow top-combo refinement saved to: {saved_path}")
     else:
         print("\nNo refinement results met the trade filters.")
 
@@ -234,7 +235,7 @@ if __name__ == "__main__":
         data,
         sma_lengths=[50, 200],
         avg_range_lookbacks=[20],
-        momentum_lookbacks=[8, 10, 12],
+        momentum_lookbacks=[8, 10, 11, 12, 13, 14],
     )
     print("Precomputed features added.")
 
