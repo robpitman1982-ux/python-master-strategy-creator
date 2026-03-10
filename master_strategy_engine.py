@@ -11,9 +11,19 @@ import pandas as pd
 
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
-from modules.heatmap import OptimizationHeatmap
-from modules.optimizer import StrategyOptimizer
-from modules.strategies import SmaTrendStrategy
+from modules.filter_combinator import generate_filter_combinations
+from modules.filters import (
+    MomentumFilter,
+    PullbackFilter,
+    RecoveryTriggerFilter,
+    TrendDirectionFilter,
+    VolatilityFilter,
+)
+from modules.refiner import StrategyParameterRefiner
+from modules.strategies import (
+    CombinableFilterTrendStrategy,
+    RefinedFiveFilterTrendStrategy,
+)
 
 
 def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
@@ -28,27 +38,24 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
     print(df.tail(3))
 
 
-if __name__ == "__main__":
-    CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
-    OUTPUTS_DIR = Path("Outputs")
-    OPTIMIZATION_CSV_PATH = OUTPUTS_DIR / "sma_trend_strategy_optimization_results.csv"
+def run_single_strategy_test(
+    data: pd.DataFrame,
+    cfg: EngineConfig,
+) -> None:
+    filters = [
+        TrendDirectionFilter(fast_length=50, slow_length=200),
+        PullbackFilter(fast_length=50),
+        RecoveryTriggerFilter(fast_length=50),
+        VolatilityFilter(lookback=20, min_avg_range=8.0),
+        MomentumFilter(lookback=10),
+    ]
 
-    print("Loading data from:", CSV_PATH)
-    data = load_tradestation_csv(CSV_PATH, debug=True)
-    print("Data loaded successfully.")
-
-    print_data_summary(data, name="ES Data (2008+)")
-
-    cfg = EngineConfig(
-        initial_capital=250_000.0,
-        risk_per_trade=0.01,
-        symbol="ES",
+    strategy = CombinableFilterTrendStrategy(
+        filters=filters,
+        hold_bars=8,
+        stop_distance_points=12.0,
     )
 
-    # -----------------------------
-    # Single strategy test run
-    # -----------------------------
-    strategy = SmaTrendStrategy()
     engine = MasterStrategyEngine(data=data, config=cfg)
 
     print("\n🚀 Master Strategy Engine Initialized.")
@@ -66,48 +73,165 @@ if __name__ == "__main__":
     else:
         print("\nNo trades generated.")
 
-    # -----------------------------
-    # Optimization run
-    # -----------------------------
-    optimizer = StrategyOptimizer(
+
+def run_filter_combination_sweep(
+    data: pd.DataFrame,
+    cfg: EngineConfig,
+) -> pd.DataFrame:
+    filter_classes = [
+        TrendDirectionFilter,
+        PullbackFilter,
+        RecoveryTriggerFilter,
+        VolatilityFilter,
+        MomentumFilter,
+    ]
+
+    combinations = generate_filter_combinations(
+        filter_classes=filter_classes,
+        min_filters=3,
+        max_filters=5,
+    )
+
+    print("\n🧪 Running filter combination sweep...")
+    print(f"Total filter combinations: {len(combinations)}")
+
+    results: list[dict] = []
+
+    for idx, combo_classes in enumerate(combinations, start=1):
+        filter_objects = []
+        for cls in combo_classes:
+            if cls is TrendDirectionFilter:
+                filter_objects.append(cls(fast_length=50, slow_length=200))
+            elif cls is PullbackFilter:
+                filter_objects.append(cls(fast_length=50))
+            elif cls is RecoveryTriggerFilter:
+                filter_objects.append(cls(fast_length=50))
+            elif cls is VolatilityFilter:
+                filter_objects.append(cls(lookback=20, min_avg_range=8.0))
+            elif cls is MomentumFilter:
+                filter_objects.append(cls(lookback=10))
+            else:
+                filter_objects.append(cls())
+
+        strategy = CombinableFilterTrendStrategy(
+            filters=filter_objects,
+            hold_bars=8,
+            stop_distance_points=12.0,
+        )
+
+        print(f"  Combo {idx}/{len(combinations)} | {strategy.name}")
+
+        engine = MasterStrategyEngine(data=data, config=cfg)
+        engine.run(strategy=strategy)
+        summary = engine.results()
+
+        total_trades = int(summary["Total Trades"])
+        years_in_sample = (data.index.max() - data.index.min()).days / 365.25
+        trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
+        passes_filter = total_trades >= 150 and trades_per_year >= 8.0
+
+        result_row = {
+            "strategy_name": summary["Strategy"],
+            "filter_count": len(filter_objects),
+            "filters": ",".join([f.name for f in filter_objects]),
+            "total_trades": total_trades,
+            "trades_per_year": round(trades_per_year, 2),
+            "passes_trade_filter": passes_filter,
+            "net_pnl": float(str(summary["Net PnL"]).replace("$", "").replace(",", "")),
+            "gross_profit": float(str(summary["Gross Profit"]).replace("$", "").replace(",", "")),
+            "gross_loss": float(str(summary["Gross Loss"]).replace("$", "").replace(",", "")),
+            "average_trade": float(str(summary["Average Trade"]).replace("$", "").replace(",", "")),
+            "profit_factor": float(summary["Profit Factor"]),
+            "max_drawdown": float(str(summary["Max Drawdown"]).replace("$", "").replace(",", "")),
+            "win_rate": float(str(summary["Win Rate"]).replace("%", "")),
+            "avg_mae_pts": float(summary["Average MAE (pts)"]),
+            "avg_mfe_pts": float(summary["Average MFE (pts)"]),
+        }
+
+        results.append(result_row)
+
+    results_df = pd.DataFrame(results)
+
+    if not results_df.empty:
+        results_df = results_df.sort_values(
+            by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
+            ascending=[False, False, False, False],
+        ).reset_index(drop=True)
+
+    return results_df
+
+
+def run_top_combo_refinement(
+    data: pd.DataFrame,
+    cfg: EngineConfig,
+) -> pd.DataFrame:
+    refiner = StrategyParameterRefiner(
         engine_class=MasterStrategyEngine,
         data=data,
-        strategy_class=SmaTrendStrategy,
+        strategy_factory=RefinedFiveFilterTrendStrategy,
         config=cfg,
     )
 
-    optimization_df = optimizer.run_grid_search(
-        hold_bars=[4, 6, 8, 10],
-        stop_distance_points=[8.0, 10.0, 12.0, 14.0],
+    refinement_df = refiner.run_refinement(
+        hold_bars=[6, 8, 10],
+        stop_distance_points=[10.0, 12.0, 14.0],
+        min_avg_range=[7.0, 8.0, 9.0],
+        momentum_lookback=[8, 12],
         min_trades=150,
         min_trades_per_year=8.0,
     )
 
-    if not optimization_df.empty:
-        print("\n📊 Top Optimization Results:")
-        print(optimizer.top_results(10))
+    if not refinement_df.empty:
+        print("\n🎯 Top Refinement Results:")
+        print(refiner.top_results(10))
 
-        saved_path = optimizer.save_results_csv(OPTIMIZATION_CSV_PATH)
-        print(f"\n💾 Full optimization results saved to: {saved_path}")
-
-        # -----------------------------
-        # Heatmap analysis
-        # -----------------------------
-        heatmap = OptimizationHeatmap(optimization_df)
-
-        heatmap.print_heatmap(
-            metric="profit_factor",
-            title="Profit Factor Heatmap",
-        )
-
-        heatmap.print_heatmap(
-            metric="average_trade",
-            title="Average Trade Heatmap",
-        )
-
-        heatmap.print_heatmap(
-            metric="net_pnl",
-            title="Net PnL Heatmap",
-        )
+        output_path = Path("Outputs") / "top_combo_refinement_results.csv"
+        saved_path = refiner.save_results_csv(output_path)
+        print(f"\n💾 Top-combo refinement saved to: {saved_path}")
     else:
-        print("\nNo optimization results met the filter criteria.")
+        print("\nNo refinement results met the trade filters.")
+
+    return refinement_df
+
+
+if __name__ == "__main__":
+    CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
+    OUTPUTS_DIR = Path("Outputs")
+    COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
+
+    print("Loading data from:", CSV_PATH)
+    data = load_tradestation_csv(CSV_PATH, debug=True)
+    print("Data loaded successfully.")
+
+    print_data_summary(data, name="ES Data (2008+)")
+
+    cfg = EngineConfig(
+        initial_capital=250_000.0,
+        risk_per_trade=0.01,
+        symbol="ES",
+    )
+
+    # ---------------------------------
+    # Single sanity-check run
+    # ---------------------------------
+    run_single_strategy_test(data=data, cfg=cfg)
+
+    # ---------------------------------
+    # Filter combination sweep
+    # ---------------------------------
+    combo_results_df = run_filter_combination_sweep(data=data, cfg=cfg)
+
+    if not combo_results_df.empty:
+        print("\n📊 Top Filter Combination Results:")
+        print(combo_results_df.head(10))
+
+        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+        combo_results_df.to_csv(COMBO_SWEEP_CSV_PATH, index=False)
+        print(f"\n💾 Filter combination sweep saved to: {COMBO_SWEEP_CSV_PATH}")
+    else:
+        print("\nNo filter combination results generated.")
+
+    # ---------------------------------
+    # Top-combo refinement
+    # ---------------------------------
+    run_top_combo_refinement(data=data, cfg=cfg)

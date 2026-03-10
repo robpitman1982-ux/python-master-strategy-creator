@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+import pandas as pd
+
+
+class BaseFilter(ABC):
+    """
+    Base class for reusable strategy filters.
+    """
+
+    name: str = "BaseFilter"
+
+    @abstractmethod
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        raise NotImplementedError
+
+
+class TrendDirectionFilter(BaseFilter):
+    """
+    Bull trend when fast SMA > slow SMA.
+    """
+
+    name = "TrendDirectionFilter"
+
+    def __init__(self, fast_length: int = 50, slow_length: int = 200):
+        self.fast_length = fast_length
+        self.slow_length = slow_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        required_bars = max(self.fast_length, self.slow_length)
+        if i < required_bars:
+            return False
+
+        close_series = data["close"]
+        fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+        slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+
+        return fast_sma > slow_sma
+
+
+class PullbackFilter(BaseFilter):
+    """
+    Previous close is at or below the fast SMA.
+    """
+
+    name = "PullbackFilter"
+
+    def __init__(self, fast_length: int = 50):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+
+        close_series = data["close"]
+        prev_fast_sma = close_series.iloc[i - self.fast_length : i].mean()
+        previous_close = close_series.iloc[i - 1]
+
+        return previous_close <= prev_fast_sma
+
+
+class RecoveryTriggerFilter(BaseFilter):
+    """
+    Current close is back above the fast SMA.
+    """
+
+    name = "RecoveryTriggerFilter"
+
+    def __init__(self, fast_length: int = 50):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+
+        close_series = data["close"]
+        fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+        current_close = close_series.iloc[i]
+
+        return current_close > fast_sma
+
+
+class VolatilityFilter(BaseFilter):
+    """
+    Average bar range over lookback must exceed a minimum threshold.
+    """
+
+    name = "VolatilityFilter"
+
+    def __init__(self, lookback: int = 20, min_avg_range: float = 8.0):
+        self.lookback = lookback
+        self.min_avg_range = min_avg_range
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        window = data.iloc[i - self.lookback + 1 : i + 1]
+        avg_range = (window["high"] - window["low"]).mean()
+
+        return avg_range >= self.min_avg_range
+
+
+class MomentumFilter(BaseFilter):
+    """
+    Current close must be above close N bars ago.
+    """
+
+    name = "MomentumFilter"
+
+    def __init__(self, lookback: int = 10):
+        self.lookback = lookback
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        close_series = data["close"]
+        current_close = close_series.iloc[i]
+        past_close = close_series.iloc[i - self.lookback]
+
+        return current_close > past_close
