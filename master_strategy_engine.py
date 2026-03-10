@@ -139,7 +139,7 @@ def run_single_strategy_test(
 def run_filter_combination_sweep(
     data: pd.DataFrame,
     cfg: EngineConfig,
-    max_workers: int = 8,
+    max_workers: int = 10,
 ) -> pd.DataFrame:
     filter_classes = [
         TrendDirectionFilter,
@@ -157,7 +157,7 @@ def run_filter_combination_sweep(
 
     print("\n🧪 Running filter combination sweep...")
     print(f"Total filter combinations: {len(combinations)}")
-    print(f"Parallel mode: ON | max_workers={max_workers}")
+    print(f"Parallel mode: ON | max_={max_worworkerskers}")
 
     tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
     results: list[dict] = []
@@ -197,7 +197,7 @@ def run_top_combo_refinement(
         min_trades=150,
         min_trades_per_year=8.0,
         parallel=True,
-        max_workers=8,
+        max_workers=10,
     )
 
     if not refinement_df.empty:
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     combo_results_df = run_filter_combination_sweep(
         data=data,
         cfg=cfg,
-        max_workers=8,
+        max_workers=10,
     )
     combo_elapsed = time.perf_counter() - combo_start
 
