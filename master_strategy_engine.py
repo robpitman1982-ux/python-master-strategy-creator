@@ -22,6 +22,7 @@ from modules.filters import (
     TrendDirectionFilter,
     VolatilityFilter,
 )
+from modules.plateau_analyzer import PlateauAnalyzer
 from modules.refiner import StrategyParameterRefiner
 from modules.strategies import (
     CombinableFilterTrendStrategy,
@@ -157,7 +158,7 @@ def run_filter_combination_sweep(
 
     print("\n🧪 Running filter combination sweep...")
     print(f"Total filter combinations: {len(combinations)}")
-    print(f"Parallel mode: ON | max_={max_worworkerskers}")
+    print(f"Parallel mode: ON | max_workers={max_workers}")
 
     tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
     results: list[dict] = []
@@ -204,6 +205,9 @@ def run_top_combo_refinement(
         print("\n🎯 Top Refinement Results:")
         print(refiner.top_results(10))
         refiner.print_summary_report(top_n=10)
+
+        plateau = PlateauAnalyzer(refinement_df)
+        plateau.print_report(top_n=10)
 
         output_path = Path("Outputs") / "top_combo_refinement_results.csv"
         saved_path = refiner.save_results_csv(output_path)
