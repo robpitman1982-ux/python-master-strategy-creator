@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import product
@@ -150,7 +151,6 @@ class StrategyParameterRefiner:
 
     def _default_max_workers(self) -> int:
         cpu_count = os.cpu_count() or 4
-        # Leave some headroom so the laptop stays responsive
         return max(1, min(6, cpu_count - 2))
 
     def run_refinement(
@@ -330,6 +330,83 @@ class StrategyParameterRefiner:
         if df.empty:
             return df
         return df.head(n)
+
+    def summary_report(self, top_n: int = 10) -> dict[str, Any]:
+        df = self.results_dataframe()
+        if df.empty:
+            return {}
+
+        top_df = df.head(top_n)
+
+        best_pf = df.sort_values(by="profit_factor", ascending=False).iloc[0].to_dict()
+        best_avg_trade = df.sort_values(by="average_trade", ascending=False).iloc[0].to_dict()
+        best_net_pnl = df.sort_values(by="net_pnl", ascending=False).iloc[0].to_dict()
+
+        hold_counter = Counter(top_df["hold_bars"].tolist())
+        stop_counter = Counter(top_df["stop_distance_points"].tolist())
+        range_counter = Counter(top_df["min_avg_range"].tolist())
+        mom_counter = Counter(top_df["momentum_lookback"].tolist())
+
+        return {
+            "best_pf": best_pf,
+            "best_average_trade": best_avg_trade,
+            "best_net_pnl": best_net_pnl,
+            "top_n": top_n,
+            "common_hold_bars": hold_counter.most_common(),
+            "common_stop_distance_points": stop_counter.most_common(),
+            "common_min_avg_range": range_counter.most_common(),
+            "common_momentum_lookback": mom_counter.most_common(),
+        }
+
+    def print_summary_report(self, top_n: int = 10) -> None:
+        report = self.summary_report(top_n=top_n)
+        if not report:
+            print("\nNo refinement summary available.")
+            return
+
+        print("\n🧠 Refinement Summary Report")
+
+        best_pf = report["best_pf"]
+        print("\nBest Profit Factor setting:")
+        print(
+            f"  hold_bars={best_pf['hold_bars']}, "
+            f"stop={best_pf['stop_distance_points']}, "
+            f"min_avg_range={best_pf['min_avg_range']}, "
+            f"momentum_lookback={best_pf['momentum_lookback']} | "
+            f"PF={best_pf['profit_factor']:.2f}, "
+            f"avg_trade={best_pf['average_trade']:.2f}, "
+            f"net_pnl={best_pf['net_pnl']:.2f}"
+        )
+
+        best_avg_trade = report["best_average_trade"]
+        print("\nBest Average Trade setting:")
+        print(
+            f"  hold_bars={best_avg_trade['hold_bars']}, "
+            f"stop={best_avg_trade['stop_distance_points']}, "
+            f"min_avg_range={best_avg_trade['min_avg_range']}, "
+            f"momentum_lookback={best_avg_trade['momentum_lookback']} | "
+            f"avg_trade={best_avg_trade['average_trade']:.2f}, "
+            f"PF={best_avg_trade['profit_factor']:.2f}, "
+            f"net_pnl={best_avg_trade['net_pnl']:.2f}"
+        )
+
+        best_net_pnl = report["best_net_pnl"]
+        print("\nBest Net PnL setting:")
+        print(
+            f"  hold_bars={best_net_pnl['hold_bars']}, "
+            f"stop={best_net_pnl['stop_distance_points']}, "
+            f"min_avg_range={best_net_pnl['min_avg_range']}, "
+            f"momentum_lookback={best_net_pnl['momentum_lookback']} | "
+            f"net_pnl={best_net_pnl['net_pnl']:.2f}, "
+            f"PF={best_net_pnl['profit_factor']:.2f}, "
+            f"avg_trade={best_net_pnl['average_trade']:.2f}"
+        )
+
+        print(f"\nMost common values in top {report['top_n']} results:")
+        print(f"  hold_bars: {report['common_hold_bars']}")
+        print(f"  stop_distance_points: {report['common_stop_distance_points']}")
+        print(f"  min_avg_range: {report['common_min_avg_range']}")
+        print(f"  momentum_lookback: {report['common_momentum_lookback']}")
 
     def save_results_csv(self, filepath: str | Path) -> Path:
         df = self.results_dataframe()

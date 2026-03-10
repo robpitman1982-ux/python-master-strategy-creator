@@ -6,6 +6,7 @@ Project: Python Master Strategy Creator
 from __future__ import annotations
 
 import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -37,6 +38,65 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
     print(df.head(3))
     print("\nTail:")
     print(df.tail(3))
+
+
+def _build_filter_objects_from_classes(combo_classes: list[type]) -> list:
+    filter_objects = []
+
+    for cls in combo_classes:
+        if cls is TrendDirectionFilter:
+            filter_objects.append(cls(fast_length=50, slow_length=200))
+        elif cls is PullbackFilter:
+            filter_objects.append(cls(fast_length=50))
+        elif cls is RecoveryTriggerFilter:
+            filter_objects.append(cls(fast_length=50))
+        elif cls is VolatilityFilter:
+            filter_objects.append(cls(lookback=20, min_avg_range=8.0))
+        elif cls is MomentumFilter:
+            filter_objects.append(cls(lookback=10))
+        else:
+            filter_objects.append(cls())
+
+    return filter_objects
+
+
+def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> dict:
+    data, cfg, combo_classes = task
+
+    filter_objects = _build_filter_objects_from_classes(combo_classes)
+
+    strategy = CombinableFilterTrendStrategy(
+        filters=filter_objects,
+        hold_bars=8,
+        stop_distance_points=12.0,
+    )
+
+    engine = MasterStrategyEngine(data=data, config=cfg)
+    engine.run(strategy=strategy)
+    summary = engine.results()
+
+    total_trades = int(summary["Total Trades"])
+    years_in_sample = (data.index.max() - data.index.min()).days / 365.25
+    trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
+    passes_filter = total_trades >= 150 and trades_per_year >= 8.0
+
+    return {
+        "strategy_name": summary["Strategy"],
+        "filter_count": len(filter_objects),
+        "filters": ",".join([f.name for f in filter_objects]),
+        "total_trades": total_trades,
+        "trades_per_year": round(trades_per_year, 2),
+        "passes_trade_filter": passes_filter,
+        "net_pnl": float(str(summary["Net PnL"]).replace("$", "").replace(",", "")),
+        "gross_profit": float(str(summary["Gross Profit"]).replace("$", "").replace(",", "")),
+        "gross_loss": float(str(summary["Gross Loss"]).replace("$", "").replace(",", "")),
+        "average_trade": float(str(summary["Average Trade"]).replace("$", "").replace(",", "")),
+        "profit_factor": float(summary["Profit Factor"]),
+        "max_drawdown": float(str(summary["Max Drawdown"]).replace("$", "").replace(",", "")),
+        "win_rate": float(str(summary["Win Rate"]).replace("%", "")),
+        "avg_mae_pts": float(summary["Average MAE (pts)"]),
+        "avg_mfe_pts": float(summary["Average MFE (pts)"]),
+    }
 
 
 def run_single_strategy_test(
@@ -78,6 +138,7 @@ def run_single_strategy_test(
 def run_filter_combination_sweep(
     data: pd.DataFrame,
     cfg: EngineConfig,
+    max_workers: int = 8,
 ) -> pd.DataFrame:
     filter_classes = [
         TrendDirectionFilter,
@@ -95,61 +156,15 @@ def run_filter_combination_sweep(
 
     print("\n🧪 Running filter combination sweep...")
     print(f"Total filter combinations: {len(combinations)}")
+    print(f"Parallel mode: ON | max_workers={max_workers}")
 
+    tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
     results: list[dict] = []
 
-    for idx, combo_classes in enumerate(combinations, start=1):
-        filter_objects = []
-        for cls in combo_classes:
-            if cls is TrendDirectionFilter:
-                filter_objects.append(cls(fast_length=50, slow_length=200))
-            elif cls is PullbackFilter:
-                filter_objects.append(cls(fast_length=50))
-            elif cls is RecoveryTriggerFilter:
-                filter_objects.append(cls(fast_length=50))
-            elif cls is VolatilityFilter:
-                filter_objects.append(cls(lookback=20, min_avg_range=8.0))
-            elif cls is MomentumFilter:
-                filter_objects.append(cls(lookback=10))
-            else:
-                filter_objects.append(cls())
-
-        strategy = CombinableFilterTrendStrategy(
-            filters=filter_objects,
-            hold_bars=8,
-            stop_distance_points=12.0,
-        )
-
-        print(f"  Combo {idx}/{len(combinations)} | {strategy.name}")
-
-        engine = MasterStrategyEngine(data=data, config=cfg)
-        engine.run(strategy=strategy)
-        summary = engine.results()
-
-        total_trades = int(summary["Total Trades"])
-        years_in_sample = (data.index.max() - data.index.min()).days / 365.25
-        trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
-        passes_filter = total_trades >= 150 and trades_per_year >= 8.0
-
-        result_row = {
-            "strategy_name": summary["Strategy"],
-            "filter_count": len(filter_objects),
-            "filters": ",".join([f.name for f in filter_objects]),
-            "total_trades": total_trades,
-            "trades_per_year": round(trades_per_year, 2),
-            "passes_trade_filter": passes_filter,
-            "net_pnl": float(str(summary["Net PnL"]).replace("$", "").replace(",", "")),
-            "gross_profit": float(str(summary["Gross Profit"]).replace("$", "").replace(",", "")),
-            "gross_loss": float(str(summary["Gross Loss"]).replace("$", "").replace(",", "")),
-            "average_trade": float(str(summary["Average Trade"]).replace("$", "").replace(",", "")),
-            "profit_factor": float(summary["Profit Factor"]),
-            "max_drawdown": float(str(summary["Max Drawdown"]).replace("$", "").replace(",", "")),
-            "win_rate": float(str(summary["Win Rate"]).replace("%", "")),
-            "avg_mae_pts": float(summary["Average MAE (pts)"]),
-            "avg_mfe_pts": float(summary["Average MFE (pts)"]),
-        }
-
-        results.append(result_row)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        for idx, result in enumerate(executor.map(_run_combo_case, tasks), start=1):
+            print(f"  Combo {idx}/{len(combinations)} | {result['strategy_name']}")
+            results.append(result)
 
     results_df = pd.DataFrame(results)
 
@@ -181,12 +196,13 @@ def run_top_combo_refinement(
         min_trades=150,
         min_trades_per_year=8.0,
         parallel=True,
-        max_workers=6,
+        max_workers=8,
     )
 
     if not refinement_df.empty:
         print("\n🎯 Top Refinement Results:")
         print(refiner.top_results(10))
+        refiner.print_summary_report(top_n=10)
 
         output_path = Path("Outputs") / "top_combo_refinement_results.csv"
         saved_path = refiner.save_results_csv(output_path)
@@ -225,7 +241,11 @@ if __name__ == "__main__":
     # Filter combination sweep
     # ---------------------------------
     combo_start = time.perf_counter()
-    combo_results_df = run_filter_combination_sweep(data=data, cfg=cfg)
+    combo_results_df = run_filter_combination_sweep(
+        data=data,
+        cfg=cfg,
+        max_workers=8,
+    )
     combo_elapsed = time.perf_counter() - combo_start
 
     if not combo_results_df.empty:
