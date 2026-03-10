@@ -13,6 +13,7 @@ import pandas as pd
 
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
+from modules.feature_builder import add_precomputed_features
 from modules.filter_combinator import generate_filter_combinations
 from modules.filters import (
     MomentumFilter,
@@ -223,6 +224,15 @@ if __name__ == "__main__":
     print("Loading data from:", CSV_PATH)
     data = load_tradestation_csv(CSV_PATH, debug=True)
     print("Data loaded successfully.")
+
+    print("\n⚙ Adding precomputed feature columns...")
+    data = add_precomputed_features(
+        data,
+        sma_lengths=[50, 200],
+        avg_range_lookbacks=[20],
+        momentum_lookbacks=[8, 10, 12],
+    )
+    print("Precomputed features added.")
 
     print_data_summary(data, name="ES Data (2008+)")
 

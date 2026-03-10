@@ -32,9 +32,19 @@ class TrendDirectionFilter(BaseFilter):
         if i < required_bars:
             return False
 
-        close_series = data["close"]
-        fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
-        slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+
+        if fast_col in data.columns and slow_col in data.columns:
+            fast_sma = data.iloc[i][fast_col]
+            slow_sma = data.iloc[i][slow_col]
+        else:
+            close_series = data["close"]
+            fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+            slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+
+        if pd.isna(fast_sma) or pd.isna(slow_sma):
+            return False
 
         return fast_sma > slow_sma
 
@@ -53,9 +63,18 @@ class PullbackFilter(BaseFilter):
         if i < self.fast_length:
             return False
 
-        close_series = data["close"]
-        prev_fast_sma = close_series.iloc[i - self.fast_length : i].mean()
-        previous_close = close_series.iloc[i - 1]
+        fast_col = f"sma_{self.fast_length}"
+
+        if fast_col in data.columns and "prev_close" in data.columns:
+            prev_fast_sma = data.iloc[i - 1][fast_col]
+            previous_close = data.iloc[i]["prev_close"]
+        else:
+            close_series = data["close"]
+            prev_fast_sma = close_series.iloc[i - self.fast_length : i].mean()
+            previous_close = close_series.iloc[i - 1]
+
+        if pd.isna(prev_fast_sma) or pd.isna(previous_close):
+            return False
 
         return previous_close <= prev_fast_sma
 
@@ -74,9 +93,18 @@ class RecoveryTriggerFilter(BaseFilter):
         if i < self.fast_length:
             return False
 
-        close_series = data["close"]
-        fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
-        current_close = close_series.iloc[i]
+        fast_col = f"sma_{self.fast_length}"
+
+        if fast_col in data.columns:
+            fast_sma = data.iloc[i][fast_col]
+            current_close = data.iloc[i]["close"]
+        else:
+            close_series = data["close"]
+            fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+            current_close = close_series.iloc[i]
+
+        if pd.isna(fast_sma) or pd.isna(current_close):
+            return False
 
         return current_close > fast_sma
 
@@ -96,8 +124,16 @@ class VolatilityFilter(BaseFilter):
         if i < self.lookback:
             return False
 
-        window = data.iloc[i - self.lookback + 1 : i + 1]
-        avg_range = (window["high"] - window["low"]).mean()
+        avg_range_col = f"avg_range_{self.lookback}"
+
+        if avg_range_col in data.columns:
+            avg_range = data.iloc[i][avg_range_col]
+        else:
+            window = data.iloc[i - self.lookback + 1 : i + 1]
+            avg_range = (window["high"] - window["low"]).mean()
+
+        if pd.isna(avg_range):
+            return False
 
         return avg_range >= self.min_avg_range
 
@@ -115,6 +151,14 @@ class MomentumFilter(BaseFilter):
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         if i < self.lookback:
             return False
+
+        diff_col = f"mom_diff_{self.lookback}"
+
+        if diff_col in data.columns:
+            mom_value = data.iloc[i][diff_col]
+            if pd.isna(mom_value):
+                return False
+            return mom_value > 0
 
         close_series = data["close"]
         current_close = close_series.iloc[i]
