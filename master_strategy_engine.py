@@ -5,6 +5,7 @@ Project: Python Master Strategy Creator
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -179,6 +180,8 @@ def run_top_combo_refinement(
         momentum_lookback=[8, 12],
         min_trades=150,
         min_trades_per_year=8.0,
+        parallel=True,
+        max_workers=6,
     )
 
     if not refinement_df.empty:
@@ -195,6 +198,8 @@ def run_top_combo_refinement(
 
 
 if __name__ == "__main__":
+    total_start = time.perf_counter()
+
     CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
     OUTPUTS_DIR = Path("Outputs")
     COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
@@ -219,7 +224,9 @@ if __name__ == "__main__":
     # ---------------------------------
     # Filter combination sweep
     # ---------------------------------
+    combo_start = time.perf_counter()
     combo_results_df = run_filter_combination_sweep(data=data, cfg=cfg)
+    combo_elapsed = time.perf_counter() - combo_start
 
     if not combo_results_df.empty:
         print("\n📊 Top Filter Combination Results:")
@@ -231,7 +238,12 @@ if __name__ == "__main__":
     else:
         print("\nNo filter combination results generated.")
 
+    print(f"\n⏱ Filter combination sweep runtime: {combo_elapsed:.2f} seconds")
+
     # ---------------------------------
     # Top-combo refinement
     # ---------------------------------
     run_top_combo_refinement(data=data, cfg=cfg)
+
+    total_elapsed = time.perf_counter() - total_start
+    print(f"\n🏁 Total script runtime: {total_elapsed:.2f} seconds")
