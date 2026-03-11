@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 
@@ -34,9 +34,6 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
 
 
 def _parse_money(value: Any) -> float:
-    """
-    Converts strings like '$-200,201.50' into float.
-    """
     if isinstance(value, (int, float)):
         return float(value)
 
@@ -45,9 +42,6 @@ def _parse_money(value: Any) -> float:
 
 
 def _parse_percent(value: Any) -> float:
-    """
-    Converts strings like '34.84%' into float.
-    """
     if isinstance(value, (int, float)):
         return float(value)
 
@@ -179,16 +173,6 @@ def apply_promotion_gate(
     require_positive_net_pnl: bool = False,
     top_n: int = 5,
 ) -> pd.DataFrame:
-    """
-    Promotes only promising combo-sweep candidates into the refinement stage.
-
-    Rules:
-    - must pass trade-frequency filter
-    - must meet minimum PF
-    - must meet minimum average trade
-    - optionally must have positive net PnL
-    """
-
     if combo_results_df.empty:
         return pd.DataFrame()
 
@@ -235,37 +219,57 @@ def apply_promotion_gate(
     return promoted
 
 
-def build_strategy_from_promoted_row(strategy_type, promoted_row: pd.Series):
+def map_promoted_row_to_combo_classes(strategy_type, promoted_row: pd.Series) -> list[type]:
     """
-    Rebuilds a combo strategy from the promoted row's filter names.
-
-    We match the row's filter-name list back to filter classes for refinement selection.
+    Rebuild the exact promoted filter combo from the saved filter names.
     """
     filter_name_list = str(promoted_row["filters"]).split(",")
     available_filter_classes = strategy_type.get_filter_classes()
 
     combo_classes: list[type] = []
+
     for filter_name in filter_name_list:
-        matched = False
+        matched_class = None
         for cls in available_filter_classes:
             if getattr(cls, "name", cls.__name__) == filter_name:
-                combo_classes.append(cls)
-                matched = True
+                matched_class = cls
                 break
 
-        if not matched:
+        if matched_class is None:
             raise ValueError(
-                f"Could not map promoted filter '{filter_name}' "
-                f"back to a filter class for strategy type '{strategy_type.name}'."
+                f"Could not map promoted filter '{filter_name}' back to a filter class "
+                f"for strategy type '{strategy_type.name}'."
             )
 
-    combo_defaults = strategy_type.get_combo_sweep_defaults()
+        combo_classes.append(matched_class)
 
-    return strategy_type.create_combo_strategy(
-        combo_classes=combo_classes,
-        hold_bars=int(combo_defaults["hold_bars"]),
-        stop_distance_points=float(combo_defaults["stop_distance_points"]),
-    )
+    return combo_classes
+
+
+def build_candidate_specific_refinement_factory(
+    strategy_type,
+    promoted_combo_classes: list[type],
+) -> Callable[..., Any]:
+    """
+    Returns a strategy factory that always rebuilds the exact promoted combo,
+    while allowing the refiner to vary hold/stop and family-specific tuning params.
+    """
+
+    def candidate_specific_strategy_factory(
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ):
+        return strategy_type.create_refinement_strategy_from_combo(
+            combo_classes=promoted_combo_classes,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
+
+    return candidate_specific_strategy_factory
 
 
 def run_top_combo_refinement(
@@ -288,10 +292,20 @@ def run_top_combo_refinement(
     print(f"Average Trade: {top_candidate['average_trade']:.2f}")
     print(f"Net PnL: {top_candidate['net_pnl']:.2f}")
 
+    promoted_combo_classes = map_promoted_row_to_combo_classes(
+        strategy_type=strategy_type,
+        promoted_row=top_candidate,
+    )
+
+    candidate_strategy_factory = build_candidate_specific_refinement_factory(
+        strategy_type=strategy_type,
+        promoted_combo_classes=promoted_combo_classes,
+    )
+
     refiner = StrategyParameterRefiner(
         engine_class=MasterStrategyEngine,
         data=data,
-        strategy_factory=strategy_type.create_refinement_strategy,
+        strategy_factory=candidate_strategy_factory,
         config=cfg,
     )
 
