@@ -17,10 +17,6 @@ from modules.strategy_types.base_strategy_type import BaseStrategyType
 
 
 class MeanReversionStrategyType(BaseStrategyType):
-    """
-    Mean reversion strategy family (v1).
-    """
-
     name = "mean_reversion"
 
     def get_feature_requirements(self) -> dict[str, list[int]]:
@@ -74,13 +70,11 @@ class MeanReversionStrategyType(BaseStrategyType):
         stop_distance_points: float,
     ) -> CombinableFilterTrendStrategy:
         filter_objects = self.build_filter_objects_from_classes(combo_classes)
-
         strategy = CombinableFilterTrendStrategy(
             filters=filter_objects,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = f"ComboMeanReversion_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
         return strategy
 
@@ -90,9 +84,6 @@ class MeanReversionStrategyType(BaseStrategyType):
         stop_distance_points: float,
         **kwargs: Any,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Family-default refinement stack for mean reversion.
-        """
         max_avg_range_allowed = float(kwargs.get("min_avg_range", 12.0))
         stretch_distance_points = float(kwargs.get("momentum_lookback", 4.0))
 
@@ -110,7 +101,6 @@ class MeanReversionStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedMeanReversionStrategy"
             f"_HB{hold_bars}"
@@ -118,7 +108,6 @@ class MeanReversionStrategyType(BaseStrategyType):
             f"_MAXRANGE{max_avg_range_allowed}"
             f"_DIST{stretch_distance_points}"
         )
-
         return strategy
 
     def create_refinement_strategy_from_combo(
@@ -129,13 +118,6 @@ class MeanReversionStrategyType(BaseStrategyType):
         min_avg_range: float,
         momentum_lookback: int,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Candidate-specific refinement for the exact promoted mean-reversion combo.
-
-        Mapping:
-        - min_avg_range -> max average range allowed for low-vol regime
-        - momentum_lookback -> distance-below-SMA points when needed
-        """
         filter_objects: list[BaseFilter] = []
 
         for cls in combo_classes:
@@ -161,7 +143,6 @@ class MeanReversionStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedMeanReversionCombo"
             f"_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
@@ -170,7 +151,6 @@ class MeanReversionStrategyType(BaseStrategyType):
             f"_MAXRANGE{float(min_avg_range)}"
             f"_DIST{int(momentum_lookback)}"
         )
-
         return strategy
 
     def get_refinement_grid(self) -> dict[str, list[Any]]:
@@ -192,3 +172,22 @@ class MeanReversionStrategyType(BaseStrategyType):
             "hold_bars": 4,
             "stop_distance_points": 8.0,
         }
+
+    def get_active_refinement_grid_for_combo(
+        self,
+        combo_classes: list[type],
+    ) -> dict[str, list[Any]]:
+        base_grid = self.get_refinement_grid()
+
+        active_grid = {
+            "hold_bars": base_grid["hold_bars"],
+            "stop_distance_points": base_grid["stop_distance_points"],
+        }
+
+        if LowVolatilityRegimeFilter in combo_classes:
+            active_grid["min_avg_range"] = base_grid["min_avg_range"]
+
+        if DistanceBelowSMAFilter in combo_classes:
+            active_grid["momentum_lookback"] = base_grid["momentum_lookback"]
+
+        return active_grid

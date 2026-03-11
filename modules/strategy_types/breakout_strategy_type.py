@@ -17,10 +17,6 @@ from modules.strategy_types.base_strategy_type import BaseStrategyType
 
 
 class BreakoutStrategyType(BaseStrategyType):
-    """
-    Breakout / volatility-expansion strategy family (v2).
-    """
-
     name = "breakout"
 
     def get_feature_requirements(self) -> dict[str, list[int]]:
@@ -74,13 +70,11 @@ class BreakoutStrategyType(BaseStrategyType):
         stop_distance_points: float,
     ) -> CombinableFilterTrendStrategy:
         filter_objects = self.build_filter_objects_from_classes(combo_classes)
-
         strategy = CombinableFilterTrendStrategy(
             filters=filter_objects,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = f"ComboBreakout_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
         return strategy
 
@@ -90,9 +84,6 @@ class BreakoutStrategyType(BaseStrategyType):
         stop_distance_points: float,
         **kwargs: Any,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Family-default refinement stack for breakout.
-        """
         compression_max_avg_range = float(kwargs.get("min_avg_range", 8.0))
         breakout_lookback = int(kwargs.get("momentum_lookback", 20))
 
@@ -111,7 +102,6 @@ class BreakoutStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedBreakoutStrategy"
             f"_HB{hold_bars}"
@@ -119,7 +109,6 @@ class BreakoutStrategyType(BaseStrategyType):
             f"_COMP{compression_max_avg_range}"
             f"_BRKLB{breakout_lookback}"
         )
-
         return strategy
 
     def create_refinement_strategy_from_combo(
@@ -130,9 +119,6 @@ class BreakoutStrategyType(BaseStrategyType):
         min_avg_range: float,
         momentum_lookback: int,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Candidate-specific refinement for the exact promoted breakout combo.
-        """
         filter_objects: list[BaseFilter] = []
 
         for cls in combo_classes:
@@ -158,7 +144,6 @@ class BreakoutStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedBreakoutCombo"
             f"_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
@@ -167,7 +152,6 @@ class BreakoutStrategyType(BaseStrategyType):
             f"_COMP{float(min_avg_range)}"
             f"_LB{int(momentum_lookback)}"
         )
-
         return strategy
 
     def get_refinement_grid(self) -> dict[str, list[Any]]:
@@ -189,3 +173,26 @@ class BreakoutStrategyType(BaseStrategyType):
             "hold_bars": 8,
             "stop_distance_points": 12.0,
         }
+
+    def get_active_refinement_grid_for_combo(
+        self,
+        combo_classes: list[type],
+    ) -> dict[str, list[Any]]:
+        base_grid = self.get_refinement_grid()
+
+        active_grid = {
+            "hold_bars": base_grid["hold_bars"],
+            "stop_distance_points": base_grid["stop_distance_points"],
+        }
+
+        if CompressionFilter in combo_classes:
+            active_grid["min_avg_range"] = base_grid["min_avg_range"]
+
+        if (
+            PriorRangePositionFilter in combo_classes
+            or RangeBreakoutFilter in combo_classes
+            or MinimumBreakDistanceFilter in combo_classes
+        ):
+            active_grid["momentum_lookback"] = base_grid["momentum_lookback"]
+
+        return active_grid

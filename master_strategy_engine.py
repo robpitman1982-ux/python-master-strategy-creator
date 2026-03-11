@@ -22,13 +22,6 @@ from modules.strategy_types import get_strategy_type, list_strategy_types
 
 
 class CandidateSpecificStrategyFactory:
-    """
-    Pickle-safe callable factory for multiprocessing refinement.
-
-    This replaces the earlier nested local function approach, which cannot
-    be pickled under Windows spawn multiprocessing.
-    """
-
     def __init__(self, strategy_type, promoted_combo_classes: list[type]):
         self.strategy_type = strategy_type
         self.promoted_combo_classes = promoted_combo_classes
@@ -64,17 +57,13 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
 def _parse_money(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
-
-    text = str(value).replace("$", "").replace(",", "").strip()
-    return float(text)
+    return float(str(value).replace("$", "").replace(",", "").strip())
 
 
 def _parse_percent(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
-
-    text = str(value).replace("%", "").strip()
-    return float(text)
+    return float(str(value).replace("%", "").strip())
 
 
 def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, object, list[type]]) -> dict[str, Any]:
@@ -205,7 +194,6 @@ def apply_promotion_gate(
         return pd.DataFrame()
 
     promoted = combo_results_df.copy()
-
     promoted = promoted[promoted["passes_trade_filter"] == True]
     promoted = promoted[promoted["profit_factor"] >= min_profit_factor]
     promoted = promoted[promoted["average_trade"] > min_average_trade]
@@ -238,7 +226,6 @@ def apply_promotion_gate(
             "trades_per_year",
         ]
         available_cols = [c for c in display_cols if c in promoted.columns]
-
         print("\n✅ Promoted Candidates:")
         print(promoted[available_cols])
     else:
@@ -248,9 +235,6 @@ def apply_promotion_gate(
 
 
 def map_promoted_row_to_combo_classes(strategy_type, promoted_row: pd.Series) -> list[type]:
-    """
-    Rebuild the exact promoted filter combo from the saved filter names.
-    """
     filter_name_list = str(promoted_row["filters"]).split(",")
     available_filter_classes = strategy_type.get_filter_classes()
 
@@ -272,6 +256,21 @@ def map_promoted_row_to_combo_classes(strategy_type, promoted_row: pd.Series) ->
         combo_classes.append(matched_class)
 
     return combo_classes
+
+
+def normalize_active_refinement_grid(
+    active_grid: dict[str, list[Any]],
+) -> dict[str, list[Any]]:
+    """
+    Refiner always expects four dimensions.
+    Fill unused dimensions with a single dummy value.
+    """
+    return {
+        "hold_bars": active_grid["hold_bars"],
+        "stop_distance_points": active_grid["stop_distance_points"],
+        "min_avg_range": active_grid.get("min_avg_range", [0.0]),
+        "momentum_lookback": active_grid.get("momentum_lookback", [0]),
+    }
 
 
 def run_top_combo_refinement(
@@ -299,6 +298,13 @@ def run_top_combo_refinement(
         promoted_row=top_candidate,
     )
 
+    active_grid = strategy_type.get_active_refinement_grid_for_combo(promoted_combo_classes)
+    normalized_grid = normalize_active_refinement_grid(active_grid)
+
+    print(f"\n🧩 Active refinement dimensions for promoted combo:")
+    for key, values in active_grid.items():
+        print(f"  {key}: {values}")
+
     candidate_strategy_factory = CandidateSpecificStrategyFactory(
         strategy_type=strategy_type,
         promoted_combo_classes=promoted_combo_classes,
@@ -311,14 +317,13 @@ def run_top_combo_refinement(
         config=cfg,
     )
 
-    grid = strategy_type.get_refinement_grid()
     thresholds = strategy_type.get_trade_filter_thresholds()
 
     refinement_df = refiner.run_refinement(
-        hold_bars=grid["hold_bars"],
-        stop_distance_points=grid["stop_distance_points"],
-        min_avg_range=grid["min_avg_range"],
-        momentum_lookback=grid["momentum_lookback"],
+        hold_bars=normalized_grid["hold_bars"],
+        stop_distance_points=normalized_grid["stop_distance_points"],
+        min_avg_range=normalized_grid["min_avg_range"],
+        momentum_lookback=normalized_grid["momentum_lookback"],
         min_trades=int(thresholds["min_trades"]),
         min_trades_per_year=float(thresholds["min_trades_per_year"]),
         parallel=True,
@@ -366,7 +371,6 @@ if __name__ == "__main__":
     STRATEGY_TYPE_NAME = "mean_reversion"
     MAX_WORKERS = 10
 
-    # Promotion gate settings
     PROMOTION_MIN_PROFIT_FACTOR = 1.00
     PROMOTION_MIN_AVERAGE_TRADE = 0.0
     PROMOTION_REQUIRE_POSITIVE_NET_PNL = False
@@ -401,18 +405,12 @@ if __name__ == "__main__":
 
     print_data_summary(data, name="ES Data (2008+)")
 
-    # ---------------------------------
-    # Single sanity-check run
-    # ---------------------------------
     run_single_strategy_test(
         data=data,
         cfg=cfg,
         strategy_type=strategy_type,
     )
 
-    # ---------------------------------
-    # Filter combination sweep
-    # ---------------------------------
     combo_start = time.perf_counter()
     combo_results_df = run_filter_combination_sweep(
         data=data,
@@ -435,9 +433,6 @@ if __name__ == "__main__":
 
     print(f"\n⏱ Filter combination sweep runtime: {combo_elapsed:.2f} seconds")
 
-    # ---------------------------------
-    # Promotion gate
-    # ---------------------------------
     promoted_candidates_df = apply_promotion_gate(
         combo_results_df=combo_results_df,
         strategy_type_name=strategy_type.name,
@@ -451,9 +446,6 @@ if __name__ == "__main__":
         promoted_candidates_df.to_csv(PROMOTED_CANDIDATES_CSV_PATH, index=False)
         print(f"\n💾 Promoted candidates saved to: {PROMOTED_CANDIDATES_CSV_PATH}")
 
-    # ---------------------------------
-    # Top-candidate refinement
-    # ---------------------------------
     run_top_combo_refinement(
         data=data,
         cfg=cfg,

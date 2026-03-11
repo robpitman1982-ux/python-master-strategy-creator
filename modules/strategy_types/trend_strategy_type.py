@@ -15,15 +15,6 @@ from modules.strategy_types.base_strategy_type import BaseStrategyType
 
 
 class TrendStrategyType(BaseStrategyType):
-    """
-    Trend-following strategy family.
-
-    Core hypothesis:
-    Markets that are in a broader uptrend and experience a pullback,
-    then recover with supportive momentum and volatility conditions,
-    may continue upward for a short holding window.
-    """
-
     name = "trend"
 
     def get_feature_requirements(self) -> dict[str, list[int]]:
@@ -71,13 +62,11 @@ class TrendStrategyType(BaseStrategyType):
         stop_distance_points: float,
     ) -> CombinableFilterTrendStrategy:
         filter_objects = self.build_filter_objects_from_classes(combo_classes)
-
         strategy = CombinableFilterTrendStrategy(
             filters=filter_objects,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = f"ComboTrend_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
         return strategy
 
@@ -87,9 +76,6 @@ class TrendStrategyType(BaseStrategyType):
         stop_distance_points: float,
         **kwargs: Any,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Family-default refinement stack for trend.
-        """
         min_avg_range = float(kwargs.get("min_avg_range", 8.0))
         momentum_lookback = int(kwargs.get("momentum_lookback", 10))
 
@@ -106,7 +92,6 @@ class TrendStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedTrendStrategy"
             f"_HB{hold_bars}"
@@ -114,7 +99,6 @@ class TrendStrategyType(BaseStrategyType):
             f"_RANGE{min_avg_range}"
             f"_MOM{momentum_lookback}"
         )
-
         return strategy
 
     def create_refinement_strategy_from_combo(
@@ -125,9 +109,6 @@ class TrendStrategyType(BaseStrategyType):
         min_avg_range: float,
         momentum_lookback: int,
     ) -> CombinableFilterTrendStrategy:
-        """
-        Candidate-specific refinement for the exact promoted trend combo.
-        """
         filter_objects: list[BaseFilter] = []
 
         for cls in combo_classes:
@@ -149,7 +130,6 @@ class TrendStrategyType(BaseStrategyType):
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
-
         strategy.name = (
             "RefinedTrendCombo"
             f"_{'_'.join([f.name.replace('Filter', '') for f in filter_objects])}"
@@ -158,7 +138,6 @@ class TrendStrategyType(BaseStrategyType):
             f"_RANGE{float(min_avg_range)}"
             f"_MOM{int(momentum_lookback)}"
         )
-
         return strategy
 
     def get_refinement_grid(self) -> dict[str, list[Any]]:
@@ -180,3 +159,22 @@ class TrendStrategyType(BaseStrategyType):
             "hold_bars": 8,
             "stop_distance_points": 12.0,
         }
+
+    def get_active_refinement_grid_for_combo(
+        self,
+        combo_classes: list[type],
+    ) -> dict[str, list[Any]]:
+        base_grid = self.get_refinement_grid()
+
+        active_grid = {
+            "hold_bars": base_grid["hold_bars"],
+            "stop_distance_points": base_grid["stop_distance_points"],
+        }
+
+        if VolatilityFilter in combo_classes:
+            active_grid["min_avg_range"] = base_grid["min_avg_range"]
+
+        if MomentumFilter in combo_classes:
+            active_grid["momentum_lookback"] = base_grid["momentum_lookback"]
+
+        return active_grid
