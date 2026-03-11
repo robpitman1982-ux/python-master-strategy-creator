@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 
@@ -19,6 +19,34 @@ from modules.filter_combinator import generate_filter_combinations
 from modules.plateau_analyzer import PlateauAnalyzer
 from modules.refiner import StrategyParameterRefiner
 from modules.strategy_types import get_strategy_type, list_strategy_types
+
+
+class CandidateSpecificStrategyFactory:
+    """
+    Pickle-safe callable factory for multiprocessing refinement.
+
+    This replaces the earlier nested local function approach, which cannot
+    be pickled under Windows spawn multiprocessing.
+    """
+
+    def __init__(self, strategy_type, promoted_combo_classes: list[type]):
+        self.strategy_type = strategy_type
+        self.promoted_combo_classes = promoted_combo_classes
+
+    def __call__(
+        self,
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ):
+        return self.strategy_type.create_refinement_strategy_from_combo(
+            combo_classes=self.promoted_combo_classes,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
 
 
 def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
@@ -246,32 +274,6 @@ def map_promoted_row_to_combo_classes(strategy_type, promoted_row: pd.Series) ->
     return combo_classes
 
 
-def build_candidate_specific_refinement_factory(
-    strategy_type,
-    promoted_combo_classes: list[type],
-) -> Callable[..., Any]:
-    """
-    Returns a strategy factory that always rebuilds the exact promoted combo,
-    while allowing the refiner to vary hold/stop and family-specific tuning params.
-    """
-
-    def candidate_specific_strategy_factory(
-        hold_bars: int,
-        stop_distance_points: float,
-        min_avg_range: float,
-        momentum_lookback: int,
-    ):
-        return strategy_type.create_refinement_strategy_from_combo(
-            combo_classes=promoted_combo_classes,
-            hold_bars=hold_bars,
-            stop_distance_points=stop_distance_points,
-            min_avg_range=min_avg_range,
-            momentum_lookback=momentum_lookback,
-        )
-
-    return candidate_specific_strategy_factory
-
-
 def run_top_combo_refinement(
     data: pd.DataFrame,
     cfg: EngineConfig,
@@ -297,7 +299,7 @@ def run_top_combo_refinement(
         promoted_row=top_candidate,
     )
 
-    candidate_strategy_factory = build_candidate_specific_refinement_factory(
+    candidate_strategy_factory = CandidateSpecificStrategyFactory(
         strategy_type=strategy_type,
         promoted_combo_classes=promoted_combo_classes,
     )
