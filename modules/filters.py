@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+
 import pandas as pd
 
 
@@ -15,6 +16,10 @@ class BaseFilter(ABC):
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         raise NotImplementedError
 
+
+# ============================================================
+# Trend-family filters
+# ============================================================
 
 class TrendDirectionFilter(BaseFilter):
     """
@@ -46,7 +51,7 @@ class TrendDirectionFilter(BaseFilter):
         if pd.isna(fast_sma) or pd.isna(slow_sma):
             return False
 
-        return fast_sma > slow_sma
+        return bool(fast_sma > slow_sma)
 
 
 class PullbackFilter(BaseFilter):
@@ -76,7 +81,7 @@ class PullbackFilter(BaseFilter):
         if pd.isna(prev_fast_sma) or pd.isna(previous_close):
             return False
 
-        return previous_close <= prev_fast_sma
+        return bool(previous_close <= prev_fast_sma)
 
 
 class RecoveryTriggerFilter(BaseFilter):
@@ -106,7 +111,7 @@ class RecoveryTriggerFilter(BaseFilter):
         if pd.isna(fast_sma) or pd.isna(current_close):
             return False
 
-        return current_close > fast_sma
+        return bool(current_close > fast_sma)
 
 
 class VolatilityFilter(BaseFilter):
@@ -135,7 +140,7 @@ class VolatilityFilter(BaseFilter):
         if pd.isna(avg_range):
             return False
 
-        return avg_range >= self.min_avg_range
+        return bool(avg_range >= self.min_avg_range)
 
 
 class MomentumFilter(BaseFilter):
@@ -158,10 +163,180 @@ class MomentumFilter(BaseFilter):
             mom_value = data.iloc[i][diff_col]
             if pd.isna(mom_value):
                 return False
-            return mom_value > 0
+            return bool(mom_value > 0)
 
         close_series = data["close"]
         current_close = close_series.iloc[i]
         past_close = close_series.iloc[i - self.lookback]
 
-        return current_close > past_close
+        return bool(current_close > past_close)
+
+
+# ============================================================
+# Breakout-family filters
+# ============================================================
+
+class CompressionFilter(BaseFilter):
+    """
+    Recent average range must be below a defined compression threshold.
+
+    Idea:
+    Breakouts often work better after quiet / compressed conditions.
+    """
+
+    name = "CompressionFilter"
+
+    def __init__(self, lookback: int = 20, max_avg_range: float = 6.0):
+        self.lookback = lookback
+        self.max_avg_range = max_avg_range
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        avg_range_col = f"avg_range_{self.lookback}"
+
+        if avg_range_col in data.columns:
+            avg_range = data.iloc[i][avg_range_col]
+        else:
+            window = data.iloc[i - self.lookback + 1 : i + 1]
+            avg_range = (window["high"] - window["low"]).mean()
+
+        if pd.isna(avg_range):
+            return False
+
+        return bool(avg_range <= self.max_avg_range)
+
+
+class RangeBreakoutFilter(BaseFilter):
+    """
+    Current close must break above the highest high of the prior N bars.
+
+    Uses prior bars only, excluding the current bar from the comparison
+    window to avoid look-ahead bias.
+    """
+
+    name = "RangeBreakoutFilter"
+
+    def __init__(self, lookback: int = 20):
+        self.lookback = lookback
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        prior_window = data.iloc[i - self.lookback : i]
+        if prior_window.empty:
+            return False
+
+        prior_high = prior_window["high"].max()
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(prior_high) or pd.isna(current_close):
+            return False
+
+        return bool(current_close > prior_high)
+
+
+class ExpansionBarFilter(BaseFilter):
+    """
+    Current bar range must exceed recent average range by a multiplier.
+
+    Idea:
+    A true breakout bar often expands meaningfully relative to recent bars.
+    """
+
+    name = "ExpansionBarFilter"
+
+    def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.5):
+        self.lookback = lookback
+        self.expansion_multiplier = expansion_multiplier
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        current_bar_range = data.iloc[i]["high"] - data.iloc[i]["low"]
+        avg_range_col = f"avg_range_{self.lookback}"
+
+        if avg_range_col in data.columns:
+            avg_range = data.iloc[i][avg_range_col]
+        else:
+            window = data.iloc[i - self.lookback + 1 : i + 1]
+            avg_range = (window["high"] - window["low"]).mean()
+
+        if pd.isna(current_bar_range) or pd.isna(avg_range) or avg_range <= 0:
+            return False
+
+        return bool(current_bar_range >= avg_range * self.expansion_multiplier)
+
+
+class BreakoutRetestFilter(BaseFilter):
+    """
+    Current close must be above the prior breakout level by at least a buffer.
+
+    This is a stricter breakout confirmation filter than simple range break.
+
+    Buffer is in points.
+    """
+
+    name = "BreakoutRetestFilter"
+
+    def __init__(self, lookback: int = 20, breakout_buffer_points: float = 0.0):
+        self.lookback = lookback
+        self.breakout_buffer_points = breakout_buffer_points
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        prior_window = data.iloc[i - self.lookback : i]
+        if prior_window.empty:
+            return False
+
+        prior_high = prior_window["high"].max()
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(prior_high) or pd.isna(current_close):
+            return False
+
+        breakout_level = prior_high + self.breakout_buffer_points
+        return bool(current_close > breakout_level)
+
+
+class BreakoutTrendFilter(BaseFilter):
+    """
+    Optional trend-alignment filter for breakout systems.
+
+    Requires fast SMA > slow SMA so we can test:
+    breakout with trend alignment
+    versus
+    breakout without trend alignment
+    """
+
+    name = "BreakoutTrendFilter"
+
+    def __init__(self, fast_length: int = 50, slow_length: int = 200):
+        self.fast_length = fast_length
+        self.slow_length = slow_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        required_bars = max(self.fast_length, self.slow_length)
+        if i < required_bars:
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+
+        if fast_col in data.columns and slow_col in data.columns:
+            fast_sma = data.iloc[i][fast_col]
+            slow_sma = data.iloc[i][slow_col]
+        else:
+            close_series = data["close"]
+            fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+            slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+
+        if pd.isna(fast_sma) or pd.isna(slow_sma):
+            return False
+
+        return bool(fast_sma > slow_sma)
