@@ -347,7 +347,7 @@ if __name__ == "__main__":
     COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
     PROMOTED_CANDIDATES_CSV_PATH = OUTPUTS_DIR / "promoted_candidates.csv"
 
-    STRATEGY_TYPE_NAME = "breakout"
+    STRATEGY_TYPE_NAME = "mean_reversion"
     MAX_WORKERS = 10
 
     # Promotion gate settings

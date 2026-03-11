@@ -179,9 +179,6 @@ class MomentumFilter(BaseFilter):
 class CompressionFilter(BaseFilter):
     """
     Recent average range must be below a defined compression threshold.
-
-    Idea:
-    Breakouts often work better after quiet / compressed conditions.
     """
 
     name = "CompressionFilter"
@@ -211,9 +208,6 @@ class CompressionFilter(BaseFilter):
 class RangeBreakoutFilter(BaseFilter):
     """
     Current close must break above the highest high of the prior N bars.
-
-    Uses prior bars only, excluding the current bar from the comparison
-    window to avoid look-ahead bias.
     """
 
     name = "RangeBreakoutFilter"
@@ -241,9 +235,6 @@ class RangeBreakoutFilter(BaseFilter):
 class ExpansionBarFilter(BaseFilter):
     """
     Current bar range must exceed recent average range by a multiplier.
-
-    Idea:
-    A true breakout bar often expands meaningfully relative to recent bars.
     """
 
     name = "ExpansionBarFilter"
@@ -274,10 +265,6 @@ class ExpansionBarFilter(BaseFilter):
 class BreakoutRetestFilter(BaseFilter):
     """
     Current close must be above the prior breakout level by at least a buffer.
-
-    This is a stricter breakout confirmation filter than simple range break.
-
-    Buffer is in points.
     """
 
     name = "BreakoutRetestFilter"
@@ -307,11 +294,6 @@ class BreakoutRetestFilter(BaseFilter):
 class BreakoutTrendFilter(BaseFilter):
     """
     Optional trend-alignment filter for breakout systems.
-
-    Requires fast SMA > slow SMA so we can test:
-    breakout with trend alignment
-    versus
-    breakout without trend alignment
     """
 
     name = "BreakoutTrendFilter"
@@ -345,13 +327,6 @@ class BreakoutTrendFilter(BaseFilter):
 class BreakoutCloseStrengthFilter(BaseFilter):
     """
     Require the close to finish near the high of the breakout bar.
-
-    This tries to eliminate weak breakout bars that poke higher but fade
-    before the close.
-
-    Example:
-    close_position_threshold = 0.70 means the close must finish in the
-    top 30% of the bar's range.
     """
 
     name = "BreakoutCloseStrengthFilter"
@@ -379,13 +354,6 @@ class PriorRangePositionFilter(BaseFilter):
     """
     Require the prior close to already be positioned near the top of the
     recent range before the breakout.
-
-    This helps avoid noisy 'breakouts' that actually start from the middle
-    of a choppy range.
-
-    Example:
-    min_position_in_range = 0.65 means the prior close must be in the
-    upper 35% of the prior N-bar range.
     """
 
     name = "PriorRangePositionFilter"
@@ -420,12 +388,6 @@ class PriorRangePositionFilter(BaseFilter):
 class MinimumBreakDistanceFilter(BaseFilter):
     """
     Require the breakout to clear the prior high by a minimum distance.
-
-    This helps reject tiny marginal breaks that may just be noise.
-
-    Example:
-    min_break_distance_points = 1.0 means current close must exceed the
-    highest high of the prior lookback window by at least 1.0 point.
     """
 
     name = "MinimumBreakDistanceFilter"
@@ -450,3 +412,206 @@ class MinimumBreakDistanceFilter(BaseFilter):
 
         break_distance = current_close - prior_high
         return bool(break_distance >= self.min_break_distance_points)
+
+
+# ============================================================
+# Mean-reversion-family filters
+# ============================================================
+
+class BelowFastSMAFilter(BaseFilter):
+    """
+    Current close must be below the fast SMA.
+
+    Used as a simple 'price stretched below mean' condition for long-only
+    mean reversion research.
+    """
+
+    name = "BelowFastSMAFilter"
+
+    def __init__(self, fast_length: int = 20):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+
+        if fast_col in data.columns:
+            fast_sma = data.iloc[i][fast_col]
+        else:
+            close_series = data["close"]
+            fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(fast_sma) or pd.isna(current_close):
+            return False
+
+        return bool(current_close < fast_sma)
+
+
+class DistanceBelowSMAFilter(BaseFilter):
+    """
+    Current close must be below the fast SMA by at least a minimum distance
+    measured in points.
+
+    This helps require a meaningful stretch rather than a tiny dip.
+    """
+
+    name = "DistanceBelowSMAFilter"
+
+    def __init__(self, fast_length: int = 20, min_distance_points: float = 4.0):
+        self.fast_length = fast_length
+        self.min_distance_points = min_distance_points
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+
+        if fast_col in data.columns:
+            fast_sma = data.iloc[i][fast_col]
+        else:
+            close_series = data["close"]
+            fast_sma = close_series.iloc[i - self.fast_length + 1 : i + 1].mean()
+
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(fast_sma) or pd.isna(current_close):
+            return False
+
+        distance_below = fast_sma - current_close
+        return bool(distance_below >= self.min_distance_points)
+
+
+class DownCloseFilter(BaseFilter):
+    """
+    Current close must be below previous close.
+
+    This helps identify short-term downward pressure / weakness before
+    mean reversion attempts.
+    """
+
+    name = "DownCloseFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+
+        current_close = data.iloc[i]["close"]
+        previous_close = data.iloc[i - 1]["close"]
+
+        if pd.isna(current_close) or pd.isna(previous_close):
+            return False
+
+        return bool(current_close < previous_close)
+
+
+class TwoBarDownFilter(BaseFilter):
+    """
+    Require two consecutive down closes.
+
+    This is a slightly stronger short-term exhaustion / weakness filter.
+    """
+
+    name = "TwoBarDownFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 2:
+            return False
+
+        close_0 = data.iloc[i]["close"]
+        close_1 = data.iloc[i - 1]["close"]
+        close_2 = data.iloc[i - 2]["close"]
+
+        if pd.isna(close_0) or pd.isna(close_1) or pd.isna(close_2):
+            return False
+
+        return bool(close_0 < close_1 and close_1 < close_2)
+
+
+class ReversalUpBarFilter(BaseFilter):
+    """
+    Current close must be above the current open.
+
+    Used as a simple reversal / snapback trigger for long-only
+    mean reversion research.
+    """
+
+    name = "ReversalUpBarFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        current_open = data.iloc[i]["open"]
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(current_open) or pd.isna(current_close):
+            return False
+
+        return bool(current_close > current_open)
+
+
+class LowVolatilityRegimeFilter(BaseFilter):
+    """
+    Average bar range must be below a maximum threshold.
+
+    This can help identify calmer / more mean-reverting environments
+    instead of high-volatility expansion environments.
+    """
+
+    name = "LowVolatilityRegimeFilter"
+
+    def __init__(self, lookback: int = 20, max_avg_range: float = 12.0):
+        self.lookback = lookback
+        self.max_avg_range = max_avg_range
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        avg_range_col = f"avg_range_{self.lookback}"
+
+        if avg_range_col in data.columns:
+            avg_range = data.iloc[i][avg_range_col]
+        else:
+            window = data.iloc[i - self.lookback + 1 : i + 1]
+            avg_range = (window["high"] - window["low"]).mean()
+
+        if pd.isna(avg_range):
+            return False
+
+        return bool(avg_range <= self.max_avg_range)
+
+
+class AboveLongTermSMAFilter(BaseFilter):
+    """
+    Current close must still be above a longer-term SMA.
+
+    This is useful for 'buy the dip in broader uptrend' mean reversion,
+    rather than catching falling knives in structural downtrends.
+    """
+
+    name = "AboveLongTermSMAFilter"
+
+    def __init__(self, slow_length: int = 200):
+        self.slow_length = slow_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.slow_length:
+            return False
+
+        slow_col = f"sma_{self.slow_length}"
+
+        if slow_col in data.columns:
+            slow_sma = data.iloc[i][slow_col]
+        else:
+            close_series = data["close"]
+            slow_sma = close_series.iloc[i - self.slow_length + 1 : i + 1].mean()
+
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(slow_sma) or pd.isna(current_close):
+            return False
+
+        return bool(current_close > slow_sma)
