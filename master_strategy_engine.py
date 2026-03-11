@@ -75,7 +75,7 @@ def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, object, list[type]])
     trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
 
     thresholds = strategy_type.get_trade_filter_thresholds()
-    passes_filter = (
+    passes_trade_filter = (
         total_trades >= thresholds["min_trades"]
         and trades_per_year >= thresholds["min_trades_per_year"]
     )
@@ -89,7 +89,7 @@ def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, object, list[type]])
         "filters": ",".join([f.name for f in filter_objects]),
         "total_trades": total_trades,
         "trades_per_year": round(trades_per_year, 2),
-        "passes_trade_filter": passes_filter,
+        "passes_trade_filter": passes_trade_filter,
         "net_pnl": _parse_money(summary["Net PnL"]),
         "gross_profit": _parse_money(summary["Gross Profit"]),
         "gross_loss": _parse_money(summary["Gross Loss"]),
@@ -171,12 +171,123 @@ def run_filter_combination_sweep(
     return results_df
 
 
+def apply_promotion_gate(
+    combo_results_df: pd.DataFrame,
+    strategy_type_name: str,
+    min_profit_factor: float = 1.00,
+    min_average_trade: float = 0.0,
+    require_positive_net_pnl: bool = False,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    """
+    Promotes only promising combo-sweep candidates into the refinement stage.
+
+    Rules:
+    - must pass trade-frequency filter
+    - must meet minimum PF
+    - must meet minimum average trade
+    - optionally must have positive net PnL
+    """
+
+    if combo_results_df.empty:
+        return pd.DataFrame()
+
+    promoted = combo_results_df.copy()
+
+    promoted = promoted[promoted["passes_trade_filter"] == True]
+    promoted = promoted[promoted["profit_factor"] >= min_profit_factor]
+    promoted = promoted[promoted["average_trade"] > min_average_trade]
+
+    if require_positive_net_pnl:
+        promoted = promoted[promoted["net_pnl"] > 0]
+
+    promoted = promoted.sort_values(
+        by=["profit_factor", "average_trade", "net_pnl"],
+        ascending=[False, False, False],
+    ).reset_index(drop=True)
+
+    if top_n > 0:
+        promoted = promoted.head(top_n).copy()
+
+    print(f"\n🚦 Promotion Gate Results for strategy type: {strategy_type_name}")
+    print(f"Minimum PF required: {min_profit_factor:.2f}")
+    print(f"Minimum average trade required: {min_average_trade:.2f}")
+    print(f"Require positive net PnL: {require_positive_net_pnl}")
+    print(f"Promoted candidates: {len(promoted)}")
+
+    if not promoted.empty:
+        display_cols = [
+            "strategy_name",
+            "filters",
+            "profit_factor",
+            "average_trade",
+            "net_pnl",
+            "total_trades",
+            "trades_per_year",
+        ]
+        available_cols = [c for c in display_cols if c in promoted.columns]
+
+        print("\n✅ Promoted Candidates:")
+        print(promoted[available_cols])
+    else:
+        print("\n❌ No candidates passed the promotion gate.")
+
+    return promoted
+
+
+def build_strategy_from_promoted_row(strategy_type, promoted_row: pd.Series):
+    """
+    Rebuilds a combo strategy from the promoted row's filter names.
+
+    We match the row's filter-name list back to filter classes for refinement selection.
+    """
+    filter_name_list = str(promoted_row["filters"]).split(",")
+    available_filter_classes = strategy_type.get_filter_classes()
+
+    combo_classes: list[type] = []
+    for filter_name in filter_name_list:
+        matched = False
+        for cls in available_filter_classes:
+            if getattr(cls, "name", cls.__name__) == filter_name:
+                combo_classes.append(cls)
+                matched = True
+                break
+
+        if not matched:
+            raise ValueError(
+                f"Could not map promoted filter '{filter_name}' "
+                f"back to a filter class for strategy type '{strategy_type.name}'."
+            )
+
+    combo_defaults = strategy_type.get_combo_sweep_defaults()
+
+    return strategy_type.create_combo_strategy(
+        combo_classes=combo_classes,
+        hold_bars=int(combo_defaults["hold_bars"]),
+        stop_distance_points=float(combo_defaults["stop_distance_points"]),
+    )
+
+
 def run_top_combo_refinement(
     data: pd.DataFrame,
     cfg: EngineConfig,
     strategy_type,
+    promoted_candidates_df: pd.DataFrame,
     max_workers: int = 10,
 ) -> pd.DataFrame:
+    if promoted_candidates_df.empty:
+        print(f"\n⛔ Skipping {strategy_type.name} refinement because no candidates were promoted.")
+        return pd.DataFrame()
+
+    top_candidate = promoted_candidates_df.iloc[0]
+
+    print(f"\n🏆 Selected top promoted candidate for refinement:")
+    print(f"Strategy: {top_candidate['strategy_name']}")
+    print(f"Filters: {top_candidate['filters']}")
+    print(f"PF: {top_candidate['profit_factor']:.2f}")
+    print(f"Average Trade: {top_candidate['average_trade']:.2f}")
+    print(f"Net PnL: {top_candidate['net_pnl']:.2f}")
+
     refiner = StrategyParameterRefiner(
         engine_class=MasterStrategyEngine,
         data=data,
@@ -234,9 +345,16 @@ if __name__ == "__main__":
     CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
     OUTPUTS_DIR = Path("Outputs")
     COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
+    PROMOTED_CANDIDATES_CSV_PATH = OUTPUTS_DIR / "promoted_candidates.csv"
 
     STRATEGY_TYPE_NAME = "breakout"
     MAX_WORKERS = 10
+
+    # Promotion gate settings
+    PROMOTION_MIN_PROFIT_FACTOR = 1.00
+    PROMOTION_MIN_AVERAGE_TRADE = 0.0
+    PROMOTION_REQUIRE_POSITIVE_NET_PNL = False
+    PROMOTION_TOP_N = 5
 
     strategy_type_name = validate_strategy_type_name(STRATEGY_TYPE_NAME)
     strategy_type = get_strategy_type(strategy_type_name)
@@ -288,11 +406,12 @@ if __name__ == "__main__":
     )
     combo_elapsed = time.perf_counter() - combo_start
 
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
     if not combo_results_df.empty:
         print(f"\n📊 Top {strategy_type.name} Filter Combination Results:")
         print(combo_results_df.head(10))
 
-        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
         combo_results_df.to_csv(COMBO_SWEEP_CSV_PATH, index=False)
         print(f"\n💾 Filter combination sweep saved to: {COMBO_SWEEP_CSV_PATH}")
     else:
@@ -301,12 +420,29 @@ if __name__ == "__main__":
     print(f"\n⏱ Filter combination sweep runtime: {combo_elapsed:.2f} seconds")
 
     # ---------------------------------
-    # Top-combo refinement
+    # Promotion gate
+    # ---------------------------------
+    promoted_candidates_df = apply_promotion_gate(
+        combo_results_df=combo_results_df,
+        strategy_type_name=strategy_type.name,
+        min_profit_factor=PROMOTION_MIN_PROFIT_FACTOR,
+        min_average_trade=PROMOTION_MIN_AVERAGE_TRADE,
+        require_positive_net_pnl=PROMOTION_REQUIRE_POSITIVE_NET_PNL,
+        top_n=PROMOTION_TOP_N,
+    )
+
+    if not promoted_candidates_df.empty:
+        promoted_candidates_df.to_csv(PROMOTED_CANDIDATES_CSV_PATH, index=False)
+        print(f"\n💾 Promoted candidates saved to: {PROMOTED_CANDIDATES_CSV_PATH}")
+
+    # ---------------------------------
+    # Top-candidate refinement
     # ---------------------------------
     run_top_combo_refinement(
         data=data,
         cfg=cfg,
         strategy_type=strategy_type,
+        promoted_candidates_df=promoted_candidates_df,
         max_workers=MAX_WORKERS,
     )
 
