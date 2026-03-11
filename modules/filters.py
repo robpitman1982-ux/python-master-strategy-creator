@@ -340,3 +340,113 @@ class BreakoutTrendFilter(BaseFilter):
             return False
 
         return bool(fast_sma > slow_sma)
+
+
+class BreakoutCloseStrengthFilter(BaseFilter):
+    """
+    Require the close to finish near the high of the breakout bar.
+
+    This tries to eliminate weak breakout bars that poke higher but fade
+    before the close.
+
+    Example:
+    close_position_threshold = 0.70 means the close must finish in the
+    top 30% of the bar's range.
+    """
+
+    name = "BreakoutCloseStrengthFilter"
+
+    def __init__(self, close_position_threshold: float = 0.70):
+        self.close_position_threshold = close_position_threshold
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        current_high = data.iloc[i]["high"]
+        current_low = data.iloc[i]["low"]
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(current_high) or pd.isna(current_low) or pd.isna(current_close):
+            return False
+
+        bar_range = current_high - current_low
+        if bar_range <= 0:
+            return False
+
+        close_position = (current_close - current_low) / bar_range
+        return bool(close_position >= self.close_position_threshold)
+
+
+class PriorRangePositionFilter(BaseFilter):
+    """
+    Require the prior close to already be positioned near the top of the
+    recent range before the breakout.
+
+    This helps avoid noisy 'breakouts' that actually start from the middle
+    of a choppy range.
+
+    Example:
+    min_position_in_range = 0.65 means the prior close must be in the
+    upper 35% of the prior N-bar range.
+    """
+
+    name = "PriorRangePositionFilter"
+
+    def __init__(self, lookback: int = 20, min_position_in_range: float = 0.65):
+        self.lookback = lookback
+        self.min_position_in_range = min_position_in_range
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback or i < 1:
+            return False
+
+        prior_window = data.iloc[i - self.lookback : i]
+        if prior_window.empty:
+            return False
+
+        range_low = prior_window["low"].min()
+        range_high = prior_window["high"].max()
+        prior_close = data.iloc[i - 1]["close"]
+
+        if pd.isna(range_low) or pd.isna(range_high) or pd.isna(prior_close):
+            return False
+
+        full_range = range_high - range_low
+        if full_range <= 0:
+            return False
+
+        position_in_range = (prior_close - range_low) / full_range
+        return bool(position_in_range >= self.min_position_in_range)
+
+
+class MinimumBreakDistanceFilter(BaseFilter):
+    """
+    Require the breakout to clear the prior high by a minimum distance.
+
+    This helps reject tiny marginal breaks that may just be noise.
+
+    Example:
+    min_break_distance_points = 1.0 means current close must exceed the
+    highest high of the prior lookback window by at least 1.0 point.
+    """
+
+    name = "MinimumBreakDistanceFilter"
+
+    def __init__(self, lookback: int = 20, min_break_distance_points: float = 1.0):
+        self.lookback = lookback
+        self.min_break_distance_points = min_break_distance_points
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        prior_window = data.iloc[i - self.lookback : i]
+        if prior_window.empty:
+            return False
+
+        prior_high = prior_window["high"].max()
+        current_close = data.iloc[i]["close"]
+
+        if pd.isna(prior_high) or pd.isna(current_close):
+            return False
+
+        break_distance = current_close - prior_high
+        return bool(break_distance >= self.min_break_distance_points)

@@ -235,7 +235,7 @@ if __name__ == "__main__":
     OUTPUTS_DIR = Path("Outputs")
     COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
 
-    STRATEGY_TYPE_NAME = "trend"
+    STRATEGY_TYPE_NAME = "breakout"
     MAX_WORKERS = 10
 
     strategy_type_name = validate_strategy_type_name(STRATEGY_TYPE_NAME)
