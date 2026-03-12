@@ -47,7 +47,7 @@ class _InlineMeanReversionStrategy:
         return 1
 
 # =============================================================================
-# RUNNER HELPER FOR SWEEP
+# RUNNER HELPERS FOR MULTIPROCESSING
 # =============================================================================
 def _run_mean_reversion_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> dict[str, Any]:
     data, cfg, combo_classes = task
@@ -95,6 +95,27 @@ def _run_mean_reversion_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[
         "avg_mae_pts": _parse_float(summary.get("Average MAE (pts)", 0.0)),
         "avg_mfe_pts": _parse_float(summary.get("Average MFE (pts)", 0.0)),
     }
+
+class _MeanReversionRefinementFactory:
+    """Top-level picklable factory for the ProcessPoolExecutor."""
+    def __init__(self, strategy_type_instance, promoted_combo_classes):
+        self.strategy_type_instance = strategy_type_instance
+        self.promoted_combo_classes = promoted_combo_classes
+
+    def __call__(
+        self,
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ):
+        return self.strategy_type_instance.build_candidate_specific_strategy(
+            promoted_combo_classes=self.promoted_combo_classes,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
 
 # =============================================================================
 # MEAN REVERSION STRATEGY TYPE
@@ -317,19 +338,8 @@ class MeanReversionStrategyType(BaseStrategyType):
         grid = self.get_active_refinement_grid_for_combo(promoted_combo_classes)
         trade_filters = self.get_trade_filter_thresholds()
 
-        def strategy_factory(
-            hold_bars: int,
-            stop_distance_points: float,
-            min_avg_range: float,
-            momentum_lookback: int,
-        ):
-            return self.build_candidate_specific_strategy(
-                promoted_combo_classes=promoted_combo_classes,
-                hold_bars=hold_bars,
-                stop_distance_points=stop_distance_points,
-                min_avg_range=min_avg_range,
-                momentum_lookback=momentum_lookback,
-            )
+        # Instantiate the picklable factory instead of a local function
+        strategy_factory = _MeanReversionRefinementFactory(self, promoted_combo_classes)
 
         refiner = StrategyParameterRefiner(
             engine_class=MasterStrategyEngine,
