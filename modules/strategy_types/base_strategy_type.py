@@ -7,13 +7,16 @@ from typing import Any
 class BaseStrategyType(ABC):
     """
     Base interface for all strategy families.
+    Every strategy type must implement the methods the master engine expects.
     """
 
     name: str = "base"
 
-    @abstractmethod
-    def get_feature_requirements(self) -> dict[str, list[int]]:
-        raise NotImplementedError
+    min_filters_per_combo: int = 3
+    max_filters_per_combo: int = 5
+
+    default_hold_bars: int = 3
+    default_stop_distance_points: float = 10.0
 
     @abstractmethod
     def get_filter_classes(self) -> list[type]:
@@ -24,27 +27,22 @@ class BaseStrategyType(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_combo_strategy(
+    def build_combinable_strategy(
         self,
-        combo_classes: list[type],
+        filters: list,
         hold_bars: int,
         stop_distance_points: float,
     ):
         raise NotImplementedError
 
     @abstractmethod
-    def create_refinement_strategy(
-        self,
-        hold_bars: int,
-        stop_distance_points: float,
-        **kwargs: Any,
-    ):
+    def build_default_sanity_filters(self) -> list:
         raise NotImplementedError
 
     @abstractmethod
-    def create_refinement_strategy_from_combo(
+    def build_candidate_specific_strategy(
         self,
-        combo_classes: list[type],
+        promoted_combo_classes: list[type],
         hold_bars: int,
         stop_distance_points: float,
         min_avg_range: float,
@@ -53,7 +51,10 @@ class BaseStrategyType(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_refinement_grid(self) -> dict[str, list[Any]]:
+    def get_active_refinement_grid_for_combo(
+        self,
+        promoted_combo_classes: list[type],
+    ) -> dict[str, list]:
         raise NotImplementedError
 
     @abstractmethod
@@ -61,18 +62,17 @@ class BaseStrategyType(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_combo_sweep_defaults(self) -> dict[str, float]:
+    def get_promotion_thresholds(self) -> dict[str, float | bool]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_active_refinement_grid_for_combo(
-        self,
-        combo_classes: list[type],
-    ) -> dict[str, list[Any]]:
-        """
-        Return only the refinement dimensions that matter for this promoted combo.
-        Must always include:
-            - hold_bars
-            - stop_distance_points
-        """
+    def get_required_sma_lengths(self) -> list[int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_required_avg_range_lookbacks(self) -> list[int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_required_momentum_lookbacks(self) -> list[int]:
         raise NotImplementedError
