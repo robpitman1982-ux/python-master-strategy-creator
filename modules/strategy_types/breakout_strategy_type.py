@@ -21,7 +21,6 @@ from modules.plateau_analyzer import PlateauAnalyzer
 from modules.refiner import StrategyParameterRefiner
 from modules.strategy_types.base_strategy_type import BaseStrategyType
 
-
 # =============================================================================
 # INLINE BREAKOUT STRATEGY
 # =============================================================================
@@ -95,7 +94,6 @@ def _run_breakout_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]
         "avg_mae_pts": _parse_float(summary.get("Average MAE (pts)", 0.0)),
         "avg_mfe_pts": _parse_float(summary.get("Average MFE (pts)", 0.0)),
     }
-
 
 # =============================================================================
 # BREAKOUT STRATEGY TYPE
@@ -253,6 +251,13 @@ class BreakoutStrategyType(BaseStrategyType):
             "min_avg_range": [6.0, 7.0, 8.0, 9.0], 
             "momentum_lookback": [0], 
         }
+
+    def get_refinement_grid_for_candidate(
+        self, 
+        candidate_row: dict[str, Any]
+    ) -> dict[str, list[Any]]:
+        promoted_combo_classes = candidate_row.get("filter_classes", [])
+        return self.get_active_refinement_grid_for_combo(promoted_combo_classes)
 
     def run_family_filter_combination_sweep(
         self,
