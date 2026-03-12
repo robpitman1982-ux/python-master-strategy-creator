@@ -231,11 +231,17 @@ class BreakoutStrategyType(BaseStrategyType):
             "require_positive_net_pnl": False,
         }
 
+    def get_promotion_gate_config(self) -> dict[str, float | bool]:
+        return self.get_promotion_thresholds()
+
     def get_trade_filter_thresholds(self) -> dict[str, float]:
         return {
             "min_trades": 150,
             "min_trades_per_year": 8.0,
         }
+
+    def get_trade_filter_config(self) -> dict[str, float]:
+        return self.get_trade_filter_thresholds()
 
     def get_active_refinement_grid_for_combo(
         self,

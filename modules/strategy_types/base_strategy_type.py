@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
+
+import pandas as pd
+from modules.engine import EngineConfig
 
 
 class BaseStrategyType(ABC):
     """
     Base interface for all strategy families.
-    Every strategy type must implement the methods the master engine expects.
+    Every strategy type must implement these methods so the master engine 
+    can generically orchestrate sweeps and refinements across any family.
     """
 
     name: str = "base"
@@ -58,11 +63,26 @@ class BaseStrategyType(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def get_refinement_grid_for_candidate(
+        self, 
+        candidate_row: dict[str, Any]
+    ) -> dict[str, list]:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_trade_filter_thresholds(self) -> dict[str, float]:
         raise NotImplementedError
 
     @abstractmethod
+    def get_trade_filter_config(self) -> dict[str, float]:
+        raise NotImplementedError
+
+    @abstractmethod
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_promotion_gate_config(self) -> dict[str, float | bool]:
         raise NotImplementedError
 
     @abstractmethod
@@ -75,4 +95,24 @@ class BaseStrategyType(ABC):
 
     @abstractmethod
     def get_required_momentum_lookbacks(self) -> list[int]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def run_family_filter_combination_sweep(
+        self,
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        max_workers: int = 10,
+    ) -> pd.DataFrame:
+        raise NotImplementedError
+
+    @abstractmethod
+    def run_top_combo_refinement(
+        self,
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        candidate_row: dict[str, Any],
+        output_dir: str | Path = "Outputs",
+        max_workers: int = 10,
+    ) -> pd.DataFrame:
         raise NotImplementedError
