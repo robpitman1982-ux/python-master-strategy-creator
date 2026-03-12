@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass
+from itertools import combinations, product
+from typing import Any, Callable
 
 import pandas as pd
 
 from modules.engine import EngineConfig, MasterStrategyEngine
-from modules.feature_builder import add_precomputed_features
-from modules.filter_combinator import generate_filter_combinations
 from modules.filters import (
     BreakoutCloseStrengthFilter,
     BreakoutTrendFilter,
@@ -17,18 +16,86 @@ from modules.filters import (
     PriorRangePositionFilter,
     RangeBreakoutFilter,
 )
-from modules.plateau_analyzer import PlateauAnalyzer
-from modules.refiner import StrategyParameterRefiner
-from modules.strategies import (
-    BreakoutStrategy,
-    CombinableBreakoutStrategy,
-)
+from modules.strategies import BaseStrategy
 from modules.strategy_types.base_strategy_type import BaseStrategyType
+
+
+class FilterBasedBreakoutStrategy(BaseStrategy):
+    """
+    Simple breakout strategy that enters long when all supplied filters pass.
+    Exits by stop or time stop.
+    """
+
+    def __init__(
+        self,
+        filters: list[Any],
+        hold_bars: int = 6,
+        stop_distance_points: float = 12.0,
+        strategy_name: str = "FilterBasedBreakoutStrategy",
+    ) -> None:
+        self.filters = filters
+        self.hold_bars = hold_bars
+        self.stop_distance_points = stop_distance_points
+        self.strategy_name = strategy_name
+
+    def on_bar(self, i: int, data: pd.DataFrame, state: dict[str, Any]) -> None:
+        if i < 1:
+            return
+
+        # Manage open trade first
+        if state.get("in_position", False):
+            bars_held = i - state["entry_index"]
+            low_price = float(data.iloc[i]["low"])
+
+            if low_price <= state["stop_price"]:
+                exit_price = state["stop_price"]
+                state["exit_trade"](i, exit_price, "STOP")
+                return
+
+            if bars_held >= self.hold_bars:
+                exit_price = float(data.iloc[i]["close"])
+                state["exit_trade"](i, exit_price, "TIME")
+                return
+
+            return
+
+        # Flat: evaluate entry
+        for flt in self.filters:
+            if not flt.passes(i, data):
+                return
+
+        entry_price = float(data.iloc[i]["close"])
+        stop_price = entry_price - self.stop_distance_points
+        state["enter_trade"](i, entry_price, stop_price, self.strategy_name)
+
+
+@dataclass
+class _SweepResult:
+    strategy_name: str
+    filters: str
+    hold_bars: int
+    stop_distance_points: float
+    min_avg_range: float
+    momentum_lookback: int
+    net_pnl: float
+    average_trade: float
+    profit_factor: float
+    max_drawdown: float
+    total_trades: int
+    wins: int
+    losses: int
+    win_rate: float
+    avg_mae_pts: float
+    avg_mfe_pts: float
+    trades_per_year: float
 
 
 class BreakoutStrategyType(BaseStrategyType):
     name = "breakout"
 
+    # ------------------------------------------------------------------
+    # Required feature dependencies
+    # ------------------------------------------------------------------
     def get_required_sma_lengths(self) -> list[int]:
         return [50, 200]
 
@@ -38,14 +105,27 @@ class BreakoutStrategyType(BaseStrategyType):
     def get_required_momentum_lookbacks(self) -> list[int]:
         return []
 
-    def add_features(self, data: pd.DataFrame) -> pd.DataFrame:
-        return add_precomputed_features(
-            data,
-            sma_lengths=self.get_required_sma_lengths(),
-            avg_range_lookbacks=self.get_required_avg_range_lookbacks(),
-            momentum_lookbacks=self.get_required_momentum_lookbacks(),
-        )
+    # ------------------------------------------------------------------
+    # Promotion / trade thresholds
+    # ------------------------------------------------------------------
+    def get_promotion_gate_config(self) -> dict[str, Any]:
+        return {
+            "min_profit_factor": 1.00,
+            "min_average_trade": 0.0,
+            "require_positive_net_pnl": False,
+            "min_trades": 150,
+            "min_trades_per_year": 8.0,
+        }
 
+    def get_trade_filter_thresholds(self) -> dict[str, Any]:
+        return {
+            "min_trades": 150,
+            "min_trades_per_year": 8.0,
+        }
+
+    # ------------------------------------------------------------------
+    # Filter library
+    # ------------------------------------------------------------------
     def get_filter_classes(self) -> list[type]:
         return [
             CompressionFilter,
@@ -57,307 +137,377 @@ class BreakoutStrategyType(BaseStrategyType):
             BreakoutTrendFilter,
         ]
 
-    def build_default_sanity_filters(self) -> list:
+    def build_filter_objects_from_classes(self, filter_classes: list[type]) -> list[Any]:
+        filters: list[Any] = []
+
+        for cls in filter_classes:
+            if cls is CompressionFilter:
+                filters.append(CompressionFilter(lookback=20, threshold=0.75))
+            elif cls is PriorRangePositionFilter:
+                filters.append(
+                    PriorRangePositionFilter(
+                        lookback=20,
+                        min_position_in_range=0.60,
+                    )
+                )
+            elif cls is RangeBreakoutFilter:
+                filters.append(RangeBreakoutFilter(lookback=20))
+            elif cls is MinimumBreakDistanceFilter:
+                filters.append(MinimumBreakDistanceFilter(min_break_distance=1.0))
+            elif cls is ExpansionBarFilter:
+                filters.append(ExpansionBarFilter(multiplier=1.2))
+            elif cls is BreakoutCloseStrengthFilter:
+                filters.append(BreakoutCloseStrengthFilter(min_close_position=0.65))
+            elif cls is BreakoutTrendFilter:
+                filters.append(BreakoutTrendFilter(fast_sma_col="sma_50", slow_sma_col="sma_200"))
+            else:
+                raise ValueError(f"Unsupported breakout filter class: {cls}")
+
+        return filters
+
+    # ------------------------------------------------------------------
+    # Baseline / sanity strategy
+    # ------------------------------------------------------------------
+    def build_default_sanity_filters(self) -> list[Any]:
         return [
-            CompressionFilter(lookback=20, max_avg_range=8.0),
-            PriorRangePositionFilter(lookback=20, max_position=0.60),
+            CompressionFilter(lookback=20, threshold=0.75),
+            PriorRangePositionFilter(lookback=20, min_position_in_range=0.60),
             RangeBreakoutFilter(lookback=20),
-            MinimumBreakDistanceFilter(min_break_distance=6.0),
-            ExpansionBarFilter(min_expansion_multiple=1.2, lookback=20),
-            BreakoutCloseStrengthFilter(min_close_position=0.60),
-            BreakoutTrendFilter(fast_length=50, slow_length=200),
+            MinimumBreakDistanceFilter(min_break_distance=1.0),
+            ExpansionBarFilter(multiplier=1.2),
+            BreakoutCloseStrengthFilter(min_close_position=0.65),
+            BreakoutTrendFilter(fast_sma_col="sma_50", slow_sma_col="sma_200"),
         ]
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list:
-        filter_objects = []
+    def build_default_strategy(self) -> BaseStrategy:
+        return FilterBasedBreakoutStrategy(
+            filters=self.build_default_sanity_filters(),
+            hold_bars=6,
+            stop_distance_points=12.0,
+            strategy_name="FilterBasedBreakoutStrategy",
+        )
 
-        for cls in combo_classes:
-            if cls is CompressionFilter:
-                filter_objects.append(cls(lookback=20, max_avg_range=8.0))
-            elif cls is PriorRangePositionFilter:
-                filter_objects.append(cls(lookback=20, max_position=0.60))
-            elif cls is RangeBreakoutFilter:
-                filter_objects.append(cls(lookback=20))
-            elif cls is MinimumBreakDistanceFilter:
-                filter_objects.append(cls(min_break_distance=6.0))
-            elif cls is ExpansionBarFilter:
-                filter_objects.append(cls(min_expansion_multiple=1.2, lookback=20))
-            elif cls is BreakoutCloseStrengthFilter:
-                filter_objects.append(cls(min_close_position=0.60))
-            elif cls is BreakoutTrendFilter:
-                filter_objects.append(cls(fast_length=50, slow_length=200))
-            else:
-                filter_objects.append(cls())
+    def build_sanity_check_strategy(self) -> BaseStrategy:
+        return self.build_default_strategy()
 
-        return filter_objects
-
-    def build_default_strategy(self):
-        return BreakoutStrategy()
-
+    # ------------------------------------------------------------------
+    # Generic strategy builders
+    # ------------------------------------------------------------------
     def build_combinable_strategy(
         self,
-        filters: list,
-        hold_bars: int | None = None,
-        stop_distance_points: float | None = None,
-    ):
-        return CombinableBreakoutStrategy(
+        filters: list[Any],
+        hold_bars: int = 6,
+        stop_distance_points: float = 12.0,
+        strategy_name: str = "ComboBreakoutStrategy",
+    ) -> BaseStrategy:
+        return FilterBasedBreakoutStrategy(
             filters=filters,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
+            strategy_name=strategy_name,
         )
 
     def build_candidate_specific_strategy(
         self,
-        promoted_row: dict[str, Any],
+        candidate_row: dict[str, Any],
         hold_bars: int,
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
-    ):
-        strategy_name = str(promoted_row.get("strategy_name", ""))
-        filters = self._rebuild_filters_from_strategy_name(
-            strategy_name=strategy_name,
-            min_avg_range=min_avg_range,
-            momentum_lookback=momentum_lookback,
+    ) -> BaseStrategy:
+        filter_names = [
+            name.strip()
+            for name in str(candidate_row.get("filters", "")).split(",")
+            if name.strip()
+        ]
+
+        class_map = {cls.__name__: cls for cls in self.get_filter_classes()}
+        selected_classes = [class_map[name] for name in filter_names if name in class_map]
+        filters = self.build_filter_objects_from_classes(selected_classes)
+
+        strategy_name = (
+            f"RefinedBreakoutStrategy_HB{hold_bars}_STOP{stop_distance_points}"
+            f"_RANGE{min_avg_range}_MOM{momentum_lookback}"
         )
 
-        return CombinableBreakoutStrategy(
+        return self.build_combinable_strategy(
             filters=filters,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
+            strategy_name=strategy_name,
         )
 
-    def _rebuild_filters_from_strategy_name(
+    # ------------------------------------------------------------------
+    # Sweep / refinement helpers
+    # ------------------------------------------------------------------
+    def _run_single_backtest(
         self,
-        strategy_name: str,
-        min_avg_range: float,
-        momentum_lookback: int,
-    ) -> list:
-        filters: list = []
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        strategy: BaseStrategy,
+    ) -> dict[str, Any]:
+        engine = MasterStrategyEngine(data=data, config=cfg)
+        engine.run(strategy=strategy)
 
-        if "Compression" in strategy_name:
-            filters.append(
-                CompressionFilter(
-                    lookback=20,
-                    max_avg_range=float(min_avg_range),
-                )
-            )
+        results = engine.results()
+        trades_df = engine.trades_dataframe()
 
-        if "PriorRangePosition" in strategy_name:
-            filters.append(PriorRangePositionFilter(lookback=20, max_position=0.60))
+        total_trades = int(results.get("Total Trades", 0))
+        years = max((data.index.max() - data.index.min()).days / 365.25, 1e-9)
+        trades_per_year = total_trades / years if years > 0 else 0.0
 
-        if "RangeBreakout" in strategy_name:
-            filters.append(RangeBreakoutFilter(lookback=20))
+        return {
+            "strategy_name": str(results.get("Strategy", "UnknownStrategy")),
+            "net_pnl": self._parse_money(results.get("Net PnL", 0.0)),
+            "average_trade": self._parse_money(results.get("Average Trade", 0.0)),
+            "profit_factor": float(results.get("Profit Factor", 0.0)),
+            "max_drawdown": self._parse_money(results.get("Max Drawdown", 0.0)),
+            "total_trades": total_trades,
+            "wins": int(results.get("Wins", 0)),
+            "losses": int(results.get("Losses", 0)),
+            "win_rate": self._parse_percent(results.get("Win Rate", 0.0)),
+            "avg_mae_pts": float(results.get("Average MAE (pts)", 0.0)),
+            "avg_mfe_pts": float(results.get("Average MFE (pts)", 0.0)),
+            "trades_per_year": trades_per_year,
+            "trades_df": trades_df,
+        }
 
-        if "MinimumBreakDistance" in strategy_name:
-            filters.append(
-                MinimumBreakDistanceFilter(
-                    min_break_distance=float(max(1.0, momentum_lookback))
-                )
-            )
+    @staticmethod
+    def _parse_money(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(str(value).replace("$", "").replace(",", "").strip() or 0.0)
 
-        if "ExpansionBar" in strategy_name:
-            filters.append(ExpansionBarFilter(min_expansion_multiple=1.2, lookback=20))
+    @staticmethod
+    def _parse_percent(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        return float(str(value).replace("%", "").strip() or 0.0)
 
-        if "BreakoutCloseStrength" in strategy_name:
-            filters.append(BreakoutCloseStrengthFilter(min_close_position=0.60))
-
-        if "BreakoutTrend" in strategy_name:
-            filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
-
-        return filters
-
+    # ------------------------------------------------------------------
+    # Combination sweep
+    # ------------------------------------------------------------------
     def run_filter_combination_sweep(
         self,
         data: pd.DataFrame,
         cfg: EngineConfig,
-        max_workers: int = 10,
+        max_workers: int = 1,
     ) -> pd.DataFrame:
-        from concurrent.futures import ProcessPoolExecutor
+        print("\n🧪 Running breakout filter combination sweep...")
 
         filter_classes = self.get_filter_classes()
-        combinations = generate_filter_combinations(
-            filter_classes=filter_classes,
-            min_filters=3,
-            max_filters=len(filter_classes),
-        )
 
-        print(f"\n🧪 Running {self.name} filter combination sweep...")
-        print(f"Total filter combinations: {len(combinations)}")
+        combo_class_sets: list[tuple[type, ...]] = []
+        for r in range(3, len(filter_classes) + 1):
+            combo_class_sets.extend(list(combinations(filter_classes, r)))
+
+        print(f"Total filter combinations: {len(combo_class_sets)}")
         print(f"Parallel mode: ON | max_workers={max_workers}")
 
-        tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
-        results: list[dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, result in enumerate(executor.map(self._run_combo_case, tasks), start=1):
-                print(f"  Combo {idx}/{len(combinations)} | {result['strategy_name']}")
-                results.append(result)
+        for idx, combo_classes in enumerate(combo_class_sets, start=1):
+            combo_name = "ComboBreakout_" + "_".join(cls.__name__.replace("Filter", "") for cls in combo_classes)
+            print(f"  Combo {idx}/{len(combo_class_sets)} | {combo_name}")
 
-        results_df = pd.DataFrame(results)
+            filters = self.build_filter_objects_from_classes(list(combo_classes))
+            strategy = self.build_combinable_strategy(
+                filters=filters,
+                hold_bars=6,
+                stop_distance_points=12.0,
+                strategy_name=combo_name,
+            )
 
-        if not results_df.empty:
-            results_df = results_df.sort_values(
-                by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
-                ascending=[False, False, False, False],
+            result = self._run_single_backtest(data=data, cfg=cfg, strategy=strategy)
+
+            rows.append(
+                {
+                    "strategy_name": combo_name,
+                    "filters": ",".join(cls.__name__ for cls in combo_classes),
+                    "hold_bars": 6,
+                    "stop_distance_points": 12.0,
+                    "min_avg_range": 0.0,
+                    "momentum_lookback": 0,
+                    "net_pnl": result["net_pnl"],
+                    "average_trade": result["average_trade"],
+                    "profit_factor": result["profit_factor"],
+                    "max_drawdown": result["max_drawdown"],
+                    "total_trades": result["total_trades"],
+                    "wins": result["wins"],
+                    "losses": result["losses"],
+                    "win_rate": result["win_rate"],
+                    "avg_mae_pts": result["avg_mae_pts"],
+                    "avg_mfe_pts": result["avg_mfe_pts"],
+                    "trades_per_year": result["trades_per_year"],
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.sort_values(
+                by=["profit_factor", "average_trade", "net_pnl"],
+                ascending=[False, False, False],
             ).reset_index(drop=True)
 
-        return results_df
+        return df
 
-    def _run_combo_case(
+    def run_family_filter_combination_sweep(
         self,
-        task: tuple[pd.DataFrame, EngineConfig, list[type]],
-    ) -> dict[str, Any]:
-        data, cfg, combo_classes = task
-
-        filter_objects = self.build_filter_objects_from_classes(combo_classes)
-
-        strategy = CombinableBreakoutStrategy(
-            filters=filter_objects,
-            hold_bars=8,
-            stop_distance_points=12.0,
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        max_workers: int = 1,
+    ) -> pd.DataFrame:
+        return self.run_filter_combination_sweep(
+            data=data,
+            cfg=cfg,
+            max_workers=max_workers,
         )
 
-        engine = MasterStrategyEngine(data=data, config=cfg)
-        engine.run(strategy=strategy)
-        summary = engine.results()
-
-        total_trades = int(summary["Total Trades"])
-        years_in_sample = (data.index.max() - data.index.min()).days / 365.25
-        trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
-
-        min_trades, min_trades_per_year = self.get_trade_filter_thresholds()
-        passes_filter = total_trades >= min_trades and trades_per_year >= min_trades_per_year
-
-        return {
-            "strategy_name": summary["Strategy"],
-            "filter_count": len(filter_objects),
-            "filters": ",".join([f.name for f in filter_objects]),
-            "total_trades": total_trades,
-            "trades_per_year": round(trades_per_year, 2),
-            "passes_trade_filter": passes_filter,
-            "net_pnl": float(str(summary["Net PnL"]).replace("$", "").replace(",", "")),
-            "gross_profit": float(str(summary["Gross Profit"]).replace("$", "").replace(",", "")),
-            "gross_loss": float(str(summary["Gross Loss"]).replace("$", "").replace(",", "")),
-            "average_trade": float(str(summary["Average Trade"]).replace("$", "").replace(",", "")),
-            "profit_factor": float(summary["Profit Factor"]),
-            "max_drawdown": float(str(summary["Max Drawdown"]).replace("$", "").replace(",", "")),
-            "win_rate": float(str(summary["Win Rate"]).replace("%", "")),
-            "avg_mae_pts": float(summary["Average MAE (pts)"]),
-            "avg_mfe_pts": float(summary["Average MFE (pts)"]),
-        }
-
-    def get_trade_filter_thresholds(self) -> tuple[int, float]:
-        return 150, 8.0
-
-    def get_promotion_gate_config(self) -> dict[str, Any]:
-        return {
-            "min_profit_factor": 1.00,
-            "min_average_trade": 0.0,
-            "require_positive_net_pnl": False,
-            "max_candidates": 5,
-        }
-
-    def get_promotion_thresholds(self) -> dict[str, Any]:
-        return self.get_promotion_gate_config()
-
-    def get_active_refinement_grid_for_combo(self, promoted_row: dict[str, Any]) -> dict[str, list]:
+    # ------------------------------------------------------------------
+    # Candidate refinement
+    # ------------------------------------------------------------------
+    def get_active_refinement_grid_for_combo(
+        self,
+        candidate_row: dict[str, Any],
+    ) -> dict[str, list[Any]]:
         return {
             "hold_bars": [4, 6, 8, 10],
             "stop_distance_points": [10.0, 12.0, 14.0, 16.0],
-            "min_avg_range": [6.0, 7.0, 8.0, 9.0],
-            "momentum_lookback": [10, 15, 20, 25],
+            "min_avg_range": [0.0],
+            "momentum_lookback": [0],
         }
 
-    def run_refinement_for_candidate(
+    def get_refinement_grid_for_candidate(
         self,
-        promoted_row: dict[str, Any],
-        data: pd.DataFrame,
-        cfg: EngineConfig,
-        max_workers: int = 10,
-    ) -> pd.DataFrame:
-        active_grid = self.get_active_refinement_grid_for_combo(promoted_row)
+        candidate_row: dict[str, Any],
+    ) -> dict[str, list[Any]]:
+        return self.get_active_refinement_grid_for_combo(candidate_row)
 
-        def strategy_factory(
+    def build_candidate_specific_refinement_factory(
+        self,
+        candidate_row: dict[str, Any],
+    ) -> Callable[[int, float, float, int], BaseStrategy]:
+        def factory(
             hold_bars: int,
             stop_distance_points: float,
             min_avg_range: float,
             momentum_lookback: int,
-        ):
+        ) -> BaseStrategy:
             return self.build_candidate_specific_strategy(
-                promoted_row=promoted_row,
+                candidate_row=candidate_row,
                 hold_bars=hold_bars,
                 stop_distance_points=stop_distance_points,
                 min_avg_range=min_avg_range,
                 momentum_lookback=momentum_lookback,
             )
 
-        refiner = StrategyParameterRefiner(
-            engine_class=MasterStrategyEngine,
-            data=data,
-            strategy_factory=strategy_factory,
-            config=cfg,
-        )
-
-        print("\n🎯 Running top-combo parameter refinement...")
-        refinement_df = refiner.run_refinement(
-            hold_bars=active_grid["hold_bars"],
-            stop_distance_points=active_grid["stop_distance_points"],
-            min_avg_range=active_grid["min_avg_range"],
-            momentum_lookback=active_grid["momentum_lookback"],
-            min_trades=self.get_trade_filter_thresholds()[0],
-            min_trades_per_year=self.get_trade_filter_thresholds()[1],
-            parallel=True,
-            max_workers=max_workers,
-        )
-
-        if not refinement_df.empty:
-            print(f"\n🎯 Top {self.name} Refinement Results:")
-            print(refiner.top_results(10))
-            refiner.print_summary_report(top_n=10)
-
-            plateau = PlateauAnalyzer(refinement_df)
-            plateau.print_report(top_n=10)
-
-            output_path = Path("Outputs") / f"{self.name}_top_combo_refinement_results_narrow.csv"
-            saved_path = refiner.save_results_csv(output_path)
-            print(f"\n💾 Narrow top-combo refinement saved to: {saved_path}")
-        else:
-            print("\nNo refinement results met the trade filters.")
-
-        return refinement_df
+        return factory
 
     def run_top_combo_refinement(
         self,
-        promoted_row: dict[str, Any],
         data: pd.DataFrame,
         cfg: EngineConfig,
-        max_workers: int = 10,
+        candidate_row: dict[str, Any],
+        max_workers: int = 1,
     ) -> pd.DataFrame:
-        return self.run_refinement_for_candidate(
-            promoted_row=promoted_row,
-            data=data,
-            cfg=cfg,
-            max_workers=max_workers,
+        print("\n🎯 Running top-combo parameter refinement...")
+
+        grid = self.get_active_refinement_grid_for_combo(candidate_row)
+        combos = list(
+            product(
+                grid["hold_bars"],
+                grid["stop_distance_points"],
+                grid["min_avg_range"],
+                grid["momentum_lookback"],
+            )
         )
 
-    def get_refinement_parameter_labels(self) -> dict[str, str]:
-        return {
-            "hold_bars": "hold_bars",
-            "stop_distance_points": "stop_distance_points",
-            "min_avg_range": "min_avg_range",
-            "momentum_lookback": "momentum_lookback",
-        }
+        years = max((data.index.max() - data.index.min()).days / 365.25, 1e-9)
+        thresholds = self.get_trade_filter_thresholds()
 
-    def get_family_summary_notes(
+        print(f"Total combinations: {len(combos)}")
+        print(f"Years in sample: {years:.2f}")
+        print(
+            f"Trade filters: min_trades={thresholds['min_trades']}, "
+            f"min_trades_per_year={thresholds['min_trades_per_year']:.2f}"
+        )
+        print(f"Parallel mode: ON | max_workers={max_workers}")
+
+        rows: list[dict[str, Any]] = []
+
+        for idx, (hb, stop, min_range, mom_lb) in enumerate(combos, start=1):
+            strategy = self.build_candidate_specific_strategy(
+                candidate_row=candidate_row,
+                hold_bars=hb,
+                stop_distance_points=stop,
+                min_avg_range=min_range,
+                momentum_lookback=mom_lb,
+            )
+
+            result = self._run_single_backtest(data=data, cfg=cfg, strategy=strategy)
+
+            accept = (
+                result["total_trades"] >= thresholds["min_trades"]
+                and result["trades_per_year"] >= thresholds["min_trades_per_year"]
+            )
+
+            print(
+                f"  Done {idx}/{len(combos)} | "
+                f"hb={hb}, stop={stop}, range={min_range}, mom={mom_lb} | "
+                f"PF={result['profit_factor']:.2f} | "
+                f"{'ACCEPT' if accept else 'REJECT'}"
+            )
+
+            if not accept:
+                continue
+
+            rows.append(
+                {
+                    "strategy_name": result["strategy_name"],
+                    "hold_bars": hb,
+                    "stop_distance_points": stop,
+                    "min_avg_range": min_range,
+                    "momentum_lookback": mom_lb,
+                    "net_pnl": result["net_pnl"],
+                    "average_trade": result["average_trade"],
+                    "profit_factor": result["profit_factor"],
+                    "max_drawdown": result["max_drawdown"],
+                    "total_trades": result["total_trades"],
+                    "wins": result["wins"],
+                    "losses": result["losses"],
+                    "win_rate": result["win_rate"],
+                    "average_mae_points": result["avg_mae_pts"],
+                    "average_mfe_points": result["avg_mfe_pts"],
+                    "trades_per_year": result["trades_per_year"],
+                }
+            )
+
+        df = pd.DataFrame(rows)
+        if not df.empty:
+            df = df.sort_values(
+                by=["profit_factor", "average_trade", "net_pnl"],
+                ascending=[False, False, False],
+            ).reset_index(drop=True)
+
+        print(f"\n✅ Accepted refinement sets: {len(df)}")
+        print(f"❌ Rejected refinement sets: {len(combos) - len(df)}")
+
+        if not df.empty:
+            print(f"\n🎯 Top breakout Refinement Results:")
+            print(df.head(10))
+
+        return df
+
+    def run_refinement_for_candidate(
         self,
-        promoted_df: pd.DataFrame,
-        refinement_df: pd.DataFrame,
-    ) -> str:
-        if promoted_df.empty:
-            return "No candidates passed the promotion gate."
-
-        if refinement_df.empty:
-            return "At least one candidate passed promotion, but no refinement rows met the refinement trade filters."
-
-        return "At least one candidate passed promotion and refinement was attempted."
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        candidate_row: dict[str, Any],
+        max_workers: int = 1,
+    ) -> pd.DataFrame:
+        return self.run_top_combo_refinement(
+            data=data,
+            cfg=cfg,
+            candidate_row=candidate_row,
+            max_workers=max_workers,
+        )
