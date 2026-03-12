@@ -1,189 +1,52 @@
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 import pandas as pd
 
-from modules.filters import BaseFilter
-from modules.strategies import BaseStrategy
+from modules.engine import EngineConfig, MasterStrategyEngine
+from modules.feature_builder import add_precomputed_features
+from modules.filter_combinator import generate_filter_combinations
+from modules.filters import (
+    AboveLongTermSMAFilter,
+    BelowFastSMAFilter,
+    DistanceBelowSMAFilter,
+    DownCloseFilter,
+    LowVolatilityRegimeFilter,
+    ReversalUpBarFilter,
+    TwoBarDownFilter,
+)
+from modules.optimizer import StrategyOptimizer
+from modules.plateau_analyzer import PlateauAnalyzer
+from modules.refiner import StrategyParameterRefiner
+from modules.strategies import (
+    CombinableMeanReversionStrategy,
+    MeanReversionStrategy,
+    RefinedMeanReversionStrategy,
+)
 from modules.strategy_types.base_strategy_type import BaseStrategyType
-
-
-class BelowFastSMAFilter(BaseFilter):
-    name = "BelowFastSMAFilter"
-
-    def __init__(self, fast_length: int = 20):
-        self.fast_length = fast_length
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length:
-            return False
-
-        sma_col = f"sma_{self.fast_length}"
-        if sma_col not in data.columns:
-            return False
-
-        close_price = data.iloc[i]["close"]
-        fast_sma = data.iloc[i][sma_col]
-
-        if pd.isna(close_price) or pd.isna(fast_sma):
-            return False
-
-        return close_price < fast_sma
-
-
-class DistanceBelowSMAFilter(BaseFilter):
-    name = "DistanceBelowSMAFilter"
-
-    def __init__(self, fast_length: int = 20, min_distance_points: float = 4.0):
-        self.fast_length = fast_length
-        self.min_distance_points = min_distance_points
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length:
-            return False
-
-        sma_col = f"sma_{self.fast_length}"
-        if sma_col not in data.columns:
-            return False
-
-        close_price = data.iloc[i]["close"]
-        fast_sma = data.iloc[i][sma_col]
-
-        if pd.isna(close_price) or pd.isna(fast_sma):
-            return False
-
-        return (fast_sma - close_price) >= self.min_distance_points
-
-
-class DownCloseFilter(BaseFilter):
-    name = "DownCloseFilter"
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 1:
-            return False
-
-        current_close = data.iloc[i]["close"]
-        previous_close = data.iloc[i - 1]["close"]
-
-        if pd.isna(current_close) or pd.isna(previous_close):
-            return False
-
-        return current_close < previous_close
-
-
-class TwoBarDownFilter(BaseFilter):
-    name = "TwoBarDownFilter"
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 2:
-            return False
-
-        c0 = data.iloc[i]["close"]
-        c1 = data.iloc[i - 1]["close"]
-        c2 = data.iloc[i - 2]["close"]
-
-        if pd.isna(c0) or pd.isna(c1) or pd.isna(c2):
-            return False
-
-        return c0 < c1 and c1 < c2
-
-
-class ReversalUpBarFilter(BaseFilter):
-    name = "ReversalUpBarFilter"
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 1:
-            return False
-
-        current_close = data.iloc[i]["close"]
-        current_open = data.iloc[i]["open"]
-        previous_close = data.iloc[i - 1]["close"]
-
-        if pd.isna(current_close) or pd.isna(current_open) or pd.isna(previous_close):
-            return False
-
-        return current_close > current_open and current_close > previous_close
-
-
-class LowVolatilityRegimeFilter(BaseFilter):
-    name = "LowVolatilityRegimeFilter"
-
-    def __init__(self, lookback: int = 20, max_avg_range: float = 14.0):
-        self.lookback = lookback
-        self.max_avg_range = max_avg_range
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback:
-            return False
-
-        avg_range_col = f"avg_range_{self.lookback}"
-        if avg_range_col not in data.columns:
-            return False
-
-        avg_range = data.iloc[i][avg_range_col]
-        if pd.isna(avg_range):
-            return False
-
-        return avg_range <= self.max_avg_range
-
-
-class AboveLongTermSMAFilter(BaseFilter):
-    name = "AboveLongTermSMAFilter"
-
-    def __init__(self, slow_length: int = 200):
-        self.slow_length = slow_length
-
-    def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.slow_length:
-            return False
-
-        sma_col = f"sma_{self.slow_length}"
-        if sma_col not in data.columns:
-            return False
-
-        close_price = data.iloc[i]["close"]
-        slow_sma = data.iloc[i][sma_col]
-
-        if pd.isna(close_price) or pd.isna(slow_sma):
-            return False
-
-        return close_price > slow_sma
-
-
-class CombinableMeanReversionStrategy(BaseStrategy):
-    direction = "LONG_ONLY"
-
-    def __init__(
-        self,
-        filters: list[BaseFilter],
-        hold_bars: int = 4,
-        stop_distance_points: float = 8.0,
-    ):
-        self.filters = filters
-        self.hold_bars = hold_bars
-        self.stop_distance_points = stop_distance_points
-
-        filter_names = []
-        for f in filters:
-            short_name = f.name.replace("Filter", "")
-            filter_names.append(short_name)
-
-        self.name = f"ComboMeanReversion_{'_'.join(filter_names)}"
-
-    def generate_signal(self, data: pd.DataFrame, i: int) -> int:
-        for filter_obj in self.filters:
-            if not filter_obj.passes(data, i):
-                return 0
-        return 1
 
 
 class MeanReversionStrategyType(BaseStrategyType):
     name = "mean_reversion"
 
-    min_filters_per_combo = 3
-    max_filters_per_combo = 6
+    def get_required_sma_lengths(self) -> list[int]:
+        return [20, 200]
 
-    default_hold_bars = 4
-    default_stop_distance_points = 8.0
+    def get_required_avg_range_lookbacks(self) -> list[int]:
+        return [20]
+
+    def get_required_momentum_lookbacks(self) -> list[int]:
+        return []
+
+    def add_features(self, data: pd.DataFrame) -> pd.DataFrame:
+        return add_precomputed_features(
+            data,
+            sma_lengths=self.get_required_sma_lengths(),
+            avg_range_lookbacks=self.get_required_avg_range_lookbacks(),
+            momentum_lookbacks=self.get_required_momentum_lookbacks(),
+        )
 
     def get_filter_classes(self) -> list[type]:
         return [
@@ -196,6 +59,17 @@ class MeanReversionStrategyType(BaseStrategyType):
             AboveLongTermSMAFilter,
         ]
 
+    def build_default_sanity_filters(self) -> list:
+        return [
+            BelowFastSMAFilter(fast_length=20),
+            DistanceBelowSMAFilter(fast_length=20, min_distance_points=6.0),
+            DownCloseFilter(),
+            TwoBarDownFilter(),
+            ReversalUpBarFilter(),
+            LowVolatilityRegimeFilter(lookback=20, max_avg_range=20.0),
+            AboveLongTermSMAFilter(long_length=200),
+        ]
+
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list:
         filter_objects = []
 
@@ -203,7 +77,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             if cls is BelowFastSMAFilter:
                 filter_objects.append(cls(fast_length=20))
             elif cls is DistanceBelowSMAFilter:
-                filter_objects.append(cls(fast_length=20, min_distance_points=4.0))
+                filter_objects.append(cls(fast_length=20, min_distance_points=6.0))
             elif cls is DownCloseFilter:
                 filter_objects.append(cls())
             elif cls is TwoBarDownFilter:
@@ -211,19 +85,22 @@ class MeanReversionStrategyType(BaseStrategyType):
             elif cls is ReversalUpBarFilter:
                 filter_objects.append(cls())
             elif cls is LowVolatilityRegimeFilter:
-                filter_objects.append(cls(lookback=20, max_avg_range=14.0))
+                filter_objects.append(cls(lookback=20, max_avg_range=20.0))
             elif cls is AboveLongTermSMAFilter:
-                filter_objects.append(cls(slow_length=200))
+                filter_objects.append(cls(long_length=200))
             else:
                 filter_objects.append(cls())
 
         return filter_objects
 
+    def build_default_strategy(self):
+        return MeanReversionStrategy()
+
     def build_combinable_strategy(
         self,
         filters: list,
-        hold_bars: int,
-        stop_distance_points: float,
+        hold_bars: int | None = None,
+        stop_distance_points: float | None = None,
     ):
         return CombinableMeanReversionStrategy(
             filters=filters,
@@ -231,83 +108,269 @@ class MeanReversionStrategyType(BaseStrategyType):
             stop_distance_points=stop_distance_points,
         )
 
-    def build_default_sanity_filters(self) -> list:
-        return [
-            BelowFastSMAFilter(fast_length=20),
-            DistanceBelowSMAFilter(fast_length=20, min_distance_points=4.0),
-            DownCloseFilter(),
-            TwoBarDownFilter(),
-            ReversalUpBarFilter(),
-            LowVolatilityRegimeFilter(lookback=20, max_avg_range=14.0),
-            AboveLongTermSMAFilter(slow_length=200),
-        ]
-
     def build_candidate_specific_strategy(
         self,
-        promoted_combo_classes: list[type],
+        promoted_row: dict[str, Any],
         hold_bars: int,
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
     ):
-        filter_objects = []
-
-        for cls in promoted_combo_classes:
-            if cls is BelowFastSMAFilter:
-                filter_objects.append(cls(fast_length=20))
-            elif cls is DistanceBelowSMAFilter:
-                filter_objects.append(cls(fast_length=20, min_distance_points=4.0))
-            elif cls is DownCloseFilter:
-                filter_objects.append(cls())
-            elif cls is TwoBarDownFilter:
-                filter_objects.append(cls())
-            elif cls is ReversalUpBarFilter:
-                filter_objects.append(cls())
-            elif cls is LowVolatilityRegimeFilter:
-                filter_objects.append(cls(lookback=20, max_avg_range=min_avg_range))
-            elif cls is AboveLongTermSMAFilter:
-                filter_objects.append(cls(slow_length=200))
-            else:
-                filter_objects.append(cls())
+        strategy_name = str(promoted_row.get("strategy_name", ""))
+        filters = self._rebuild_filters_from_strategy_name(
+            strategy_name=strategy_name,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
 
         return CombinableMeanReversionStrategy(
-            filters=filter_objects,
+            filters=filters,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
         )
 
-    def get_active_refinement_grid_for_combo(
+    def _rebuild_filters_from_strategy_name(
         self,
-        promoted_combo_classes: list[type],
-    ) -> dict[str, list]:
-        grid: dict[str, list] = {
-            "hold_bars": [2, 3, 4, 5, 6],
-            "stop_distance_points": [6.0, 8.0, 10.0, 12.0],
-        }
+        strategy_name: str,
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ) -> list:
+        filters: list = []
 
-        if LowVolatilityRegimeFilter in promoted_combo_classes:
-            grid["min_avg_range"] = [8.0, 10.0, 12.0, 14.0]
+        if "BelowFastSMA" in strategy_name:
+            filters.append(BelowFastSMAFilter(fast_length=20))
 
-        return grid
+        if "DistanceBelowSMA" in strategy_name:
+            filters.append(
+                DistanceBelowSMAFilter(
+                    fast_length=20,
+                    min_distance_points=float(min_avg_range),
+                )
+            )
 
-    def get_trade_filter_thresholds(self) -> dict[str, float]:
+        if "DownClose" in strategy_name:
+            filters.append(DownCloseFilter())
+
+        if "TwoBarDown" in strategy_name:
+            filters.append(TwoBarDownFilter())
+
+        if "ReversalUpBar" in strategy_name:
+            filters.append(ReversalUpBarFilter())
+
+        if "LowVolatilityRegime" in strategy_name:
+            filters.append(
+                LowVolatilityRegimeFilter(
+                    lookback=20,
+                    max_avg_range=max(20.0, float(min_avg_range) * 2.0),
+                )
+            )
+
+        if "AboveLongTermSMA" in strategy_name:
+            filters.append(AboveLongTermSMAFilter(long_length=200))
+
+        return filters
+
+    def run_filter_combination_sweep(
+        self,
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        max_workers: int = 10,
+    ) -> pd.DataFrame:
+        from concurrent.futures import ProcessPoolExecutor
+
+        filter_classes = self.get_filter_classes()
+        combinations = generate_filter_combinations(
+            filter_classes=filter_classes,
+            min_filters=3,
+            max_filters=7,
+        )
+
+        print(f"\n🧪 Running {self.name} filter combination sweep...")
+        print(f"Total filter combinations: {len(combinations)}")
+        print(f"Parallel mode: ON | max_workers={max_workers}")
+
+        tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
+        results: list[dict[str, Any]] = []
+
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            for idx, result in enumerate(executor.map(self._run_combo_case, tasks), start=1):
+                print(f"  Combo {idx}/{len(combinations)} | {result['strategy_name']}")
+                results.append(result)
+
+        results_df = pd.DataFrame(results)
+
+        if not results_df.empty:
+            results_df = results_df.sort_values(
+                by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
+                ascending=[False, False, False, False],
+            ).reset_index(drop=True)
+
+        return results_df
+
+    def _run_combo_case(self, task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> dict[str, Any]:
+        data, cfg, combo_classes = task
+
+        filter_objects = self.build_filter_objects_from_classes(combo_classes)
+
+        strategy = CombinableMeanReversionStrategy(
+            filters=filter_objects,
+            hold_bars=4,
+            stop_distance_points=8.0,
+        )
+
+        engine = MasterStrategyEngine(data=data, config=cfg)
+        engine.run(strategy=strategy)
+        summary = engine.results()
+
+        total_trades = int(summary["Total Trades"])
+        years_in_sample = (data.index.max() - data.index.min()).days / 365.25
+        trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
+
+        min_trades, min_trades_per_year = self.get_trade_filter_thresholds()
+        passes_filter = total_trades >= min_trades and trades_per_year >= min_trades_per_year
+
         return {
-            "min_trades": 150,
-            "min_trades_per_year": 8.0,
+            "strategy_name": summary["Strategy"],
+            "filter_count": len(filter_objects),
+            "filters": ",".join([f.name for f in filter_objects]),
+            "total_trades": total_trades,
+            "trades_per_year": round(trades_per_year, 2),
+            "passes_trade_filter": passes_filter,
+            "net_pnl": float(str(summary["Net PnL"]).replace("$", "").replace(",", "")),
+            "gross_profit": float(str(summary["Gross Profit"]).replace("$", "").replace(",", "")),
+            "gross_loss": float(str(summary["Gross Loss"]).replace("$", "").replace(",", "")),
+            "average_trade": float(str(summary["Average Trade"]).replace("$", "").replace(",", "")),
+            "profit_factor": float(summary["Profit Factor"]),
+            "max_drawdown": float(str(summary["Max Drawdown"]).replace("$", "").replace(",", "")),
+            "win_rate": float(str(summary["Win Rate"]).replace("%", "")),
+            "avg_mae_pts": float(summary["Average MAE (pts)"]),
+            "avg_mfe_pts": float(summary["Average MFE (pts)"]),
         }
 
-    def get_promotion_thresholds(self) -> dict[str, float | bool]:
+    def get_trade_filter_thresholds(self) -> tuple[int, float]:
+        return 20, 1.0
+
+    def get_promotion_gate_config(self) -> dict[str, Any]:
         return {
             "min_profit_factor": 1.00,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
+            "max_candidates": 5,
         }
 
-    def get_required_sma_lengths(self) -> list[int]:
-        return [20, 200]
+    def get_promotion_thresholds(self) -> dict[str, Any]:
+        return self.get_promotion_gate_config()
 
-    def get_required_avg_range_lookbacks(self) -> list[int]:
-        return [20]
+    def get_active_refinement_grid_for_combo(self, promoted_row: dict[str, Any]) -> dict[str, list]:
+        strategy_name = str(promoted_row.get("strategy_name", ""))
 
-    def get_required_momentum_lookbacks(self) -> list[int]:
-        return []
+        grid = {
+            "hold_bars": [2, 3, 4, 5, 6],
+            "stop_distance_points": [6.0, 8.0, 10.0, 12.0],
+            "min_avg_range": [0.0],
+            "momentum_lookback": [0],
+        }
+
+        if "DistanceBelowSMA" in strategy_name:
+            grid["min_avg_range"] = [4.0, 6.0, 8.0, 10.0]
+
+        return grid
+
+    def run_refinement_for_candidate(
+        self,
+        promoted_row: dict[str, Any],
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        max_workers: int = 10,
+    ) -> pd.DataFrame:
+        active_grid = self.get_active_refinement_grid_for_combo(promoted_row)
+
+        strategy_name = str(promoted_row.get("strategy_name", ""))
+
+        def strategy_factory(
+            hold_bars: int,
+            stop_distance_points: float,
+            min_avg_range: float,
+            momentum_lookback: int,
+        ):
+            return self.build_candidate_specific_strategy(
+                promoted_row=promoted_row,
+                hold_bars=hold_bars,
+                stop_distance_points=stop_distance_points,
+                min_avg_range=min_avg_range,
+                momentum_lookback=momentum_lookback,
+            )
+
+        refiner = StrategyParameterRefiner(
+            engine_class=MasterStrategyEngine,
+            data=data,
+            strategy_factory=strategy_factory,
+            config=cfg,
+        )
+
+        print("\n🎯 Running top-combo parameter refinement...")
+        refinement_df = refiner.run_refinement(
+            hold_bars=active_grid["hold_bars"],
+            stop_distance_points=active_grid["stop_distance_points"],
+            min_avg_range=active_grid["min_avg_range"],
+            momentum_lookback=active_grid["momentum_lookback"],
+            min_trades=self.get_trade_filter_thresholds()[0],
+            min_trades_per_year=self.get_trade_filter_thresholds()[1],
+            parallel=True,
+            max_workers=max_workers,
+        )
+
+        if not refinement_df.empty:
+            print(f"\n🎯 Top {self.name} Refinement Results:")
+            print(refiner.top_results(10))
+            refiner.print_summary_report(top_n=10)
+
+            plateau = PlateauAnalyzer(refinement_df)
+            plateau.print_report(top_n=10)
+
+            output_path = Path("Outputs") / f"{self.name}_top_combo_refinement_results_narrow.csv"
+            saved_path = refiner.save_results_csv(output_path)
+            print(f"\n💾 Narrow top-combo refinement saved to: {saved_path}")
+        else:
+            print("\nNo refinement results met the trade filters.")
+
+        return refinement_df
+
+    def run_top_combo_refinement(
+        self,
+        promoted_row: dict[str, Any],
+        data: pd.DataFrame,
+        cfg: EngineConfig,
+        max_workers: int = 10,
+    ) -> pd.DataFrame:
+        return self.run_refinement_for_candidate(
+            promoted_row=promoted_row,
+            data=data,
+            cfg=cfg,
+            max_workers=max_workers,
+        )
+
+    def get_refinement_parameter_labels(self) -> dict[str, str]:
+        return {
+            "hold_bars": "hold_bars",
+            "stop_distance_points": "stop_distance_points",
+            "min_avg_range": "min_avg_range",
+            "momentum_lookback": "momentum_lookback",
+        }
+
+    def get_family_summary_notes(
+        self,
+        promoted_df: pd.DataFrame,
+        refinement_df: pd.DataFrame,
+    ) -> str:
+        if promoted_df.empty:
+            return "No candidates passed the promotion gate."
+
+        if refinement_df.empty:
+            return "At least one candidate passed promotion, but no refinement rows met the refinement trade filters."
+
+        return "At least one candidate passed promotion and refinement was attempted."
