@@ -6,7 +6,7 @@ Project: Python Master Strategy Creator
 from __future__ import annotations
 
 import time
-from concurrent.futures import ProcessPoolExecutor
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +21,95 @@ from modules.refiner import StrategyParameterRefiner
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
 
+# ============================================================
+# CONFIG
+# ============================================================
+
+STRATEGY_TYPE_NAME = "mean_reversion"   # "trend", "breakout", "mean_reversion"
+
+CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
+OUTPUTS_DIR = Path("Outputs")
+
+COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
+PROMOTED_CANDIDATES_CSV_PATH = OUTPUTS_DIR / "promoted_candidates.csv"
+FAMILY_SUMMARY_CSV_PATH = OUTPUTS_DIR / "family_summary_results.csv"
+
+
+# ============================================================
+# DATACLASSES
+# ============================================================
+
+@dataclass
+class FamilyRunSummary:
+    strategy_type: str
+    dataset: str
+    rows: int
+    start: str
+    end: str
+
+    sanity_strategy_name: str
+    sanity_total_trades: int
+    sanity_profit_factor: float
+    sanity_average_trade: float
+    sanity_net_pnl: float
+
+    total_filter_combinations: int
+    promoted_candidates: int
+    promotion_status: str
+
+    best_combo_strategy_name: str
+    best_combo_profit_factor: float
+    best_combo_average_trade: float
+    best_combo_net_pnl: float
+    best_combo_total_trades: int
+
+    refinement_ran: bool
+    refinement_accepted_rows: int
+    best_refined_strategy_name: str
+    best_refined_profit_factor: float
+    best_refined_average_trade: float
+    best_refined_net_pnl: float
+    best_refined_total_trades: int
+
+    notes: str
+
+
+@dataclass
+class CandidateSpecificStrategyFactory:
+    strategy_type_name: str
+    promoted_combo_class_names: list[str]
+
+    def __call__(
+        self,
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ):
+        strategy_type = get_strategy_type(self.strategy_type_name)
+
+        all_classes = strategy_type.get_filter_classes()
+        class_map = {cls.__name__: cls for cls in all_classes}
+
+        promoted_combo_classes = [
+            class_map[name]
+            for name in self.promoted_combo_class_names
+            if name in class_map
+        ]
+
+        return strategy_type.build_candidate_specific_strategy(
+            promoted_combo_classes=promoted_combo_classes,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+
 def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
     print(f"\n=== {name} SUMMARY ===")
     print(f"Rows: {len(df):,}")
@@ -33,26 +122,57 @@ def print_data_summary(df: pd.DataFrame, name: str = "DATA") -> None:
     print(df.tail(3))
 
 
-def _parse_money(value: Any) -> float:
+def parse_money(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     return float(str(value).replace("$", "").replace(",", "").strip())
 
 
-def _parse_percent(value: Any) -> float:
+def parse_percent(value: Any) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     return float(str(value).replace("%", "").strip())
 
 
-def _build_filter_objects_from_classes(strategy_type, combo_classes: list[type]) -> list:
-    return strategy_type.build_filter_objects_from_classes(combo_classes)
+def get_years_in_sample(data: pd.DataFrame) -> float:
+    if data.empty:
+        return 0.0
+
+    start = data.index.min()
+    end = data.index.max()
+    total_days = (end - start).days
+
+    if total_days <= 0:
+        return 0.0
+
+    return total_days / 365.25
 
 
-def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, Any, list[type]]) -> dict:
-    data, cfg, strategy_type, combo_classes = task
+def class_names_from_combo(combo_classes: list[type]) -> list[str]:
+    return [cls.__name__ for cls in combo_classes]
 
-    filter_objects = _build_filter_objects_from_classes(strategy_type, combo_classes)
+
+def combo_classes_from_names(strategy_type_name: str, class_names: list[str]) -> list[type]:
+    strategy_type = get_strategy_type(strategy_type_name)
+    all_classes = strategy_type.get_filter_classes()
+    class_map = {cls.__name__: cls for cls in all_classes}
+    return [class_map[name] for name in class_names if name in class_map]
+
+
+def ensure_outputs_dir() -> None:
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+# ============================================================
+# WORKERS
+# ============================================================
+
+def run_combo_case(task: tuple[str, pd.DataFrame, EngineConfig, list[str]]) -> dict[str, Any]:
+    strategy_type_name, data, cfg, combo_class_names = task
+
+    strategy_type = get_strategy_type(strategy_type_name)
+    combo_classes = combo_classes_from_names(strategy_type_name, combo_class_names)
+    filter_objects = strategy_type.build_filter_objects_from_classes(combo_classes)
 
     strategy = strategy_type.build_combinable_strategy(
         filters=filter_objects,
@@ -64,44 +184,53 @@ def _run_combo_case(task: tuple[pd.DataFrame, EngineConfig, Any, list[type]]) ->
     engine.run(strategy=strategy)
     summary = engine.results()
 
+    years_in_sample = get_years_in_sample(data)
     total_trades = int(summary["Total Trades"])
-    years_in_sample = (data.index.max() - data.index.min()).days / 365.25
     trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
 
     trade_thresholds = strategy_type.get_trade_filter_thresholds()
-    passes_filter = (
-        total_trades >= int(trade_thresholds["min_trades"])
-        and trades_per_year >= float(trade_thresholds["min_trades_per_year"])
+    min_trades = int(trade_thresholds["min_trades"])
+    min_trades_per_year = float(trade_thresholds["min_trades_per_year"])
+
+    passes_trade_filter = (
+        total_trades >= min_trades
+        and trades_per_year >= min_trades_per_year
     )
 
     return {
         "strategy_name": str(summary["Strategy"]),
         "filter_count": len(filter_objects),
         "filters": ",".join([f.name for f in filter_objects]),
+        "combo_class_names": combo_class_names,
         "total_trades": total_trades,
         "trades_per_year": round(trades_per_year, 2),
-        "passes_trade_filter": passes_filter,
-        "net_pnl": _parse_money(summary["Net PnL"]),
-        "gross_profit": _parse_money(summary["Gross Profit"]),
-        "gross_loss": _parse_money(summary["Gross Loss"]),
-        "average_trade": _parse_money(summary["Average Trade"]),
+        "passes_trade_filter": passes_trade_filter,
+        "net_pnl": parse_money(summary["Net PnL"]),
+        "gross_profit": parse_money(summary["Gross Profit"]),
+        "gross_loss": parse_money(summary["Gross Loss"]),
+        "average_trade": parse_money(summary["Average Trade"]),
         "profit_factor": float(summary["Profit Factor"]),
-        "max_drawdown": _parse_money(summary["Max Drawdown"]),
-        "win_rate": _parse_percent(summary["Win Rate"]),
+        "max_drawdown": parse_money(summary["Max Drawdown"]),
+        "win_rate": parse_percent(summary["Win Rate"]),
         "avg_mae_pts": float(summary["Average MAE (pts)"]),
         "avg_mfe_pts": float(summary["Average MFE (pts)"]),
     }
 
 
+# ============================================================
+# CORE RUNNERS
+# ============================================================
+
 def run_single_strategy_test(
     data: pd.DataFrame,
     cfg: EngineConfig,
-    strategy_type,
-) -> None:
-    filter_objects = strategy_type.build_default_sanity_filters()
+    strategy_type_name: str,
+) -> dict[str, Any]:
+    strategy_type = get_strategy_type(strategy_type_name)
 
+    filters = strategy_type.build_default_sanity_filters()
     strategy = strategy_type.build_combinable_strategy(
-        filters=filter_objects,
+        filters=filters,
         hold_bars=strategy_type.default_hold_bars,
         stop_distance_points=strategy_type.default_stop_distance_points,
     )
@@ -123,30 +252,44 @@ def run_single_strategy_test(
     else:
         print("\nNo trades generated.")
 
+    return engine.results()
+
 
 def run_filter_combination_sweep(
     data: pd.DataFrame,
     cfg: EngineConfig,
-    strategy_type,
+    strategy_type_name: str,
     max_workers: int = 10,
 ) -> pd.DataFrame:
-    filter_classes = strategy_type.get_filter_classes()
+    strategy_type = get_strategy_type(strategy_type_name)
 
+    filter_classes = strategy_type.get_filter_classes()
     combinations = generate_filter_combinations(
         filter_classes=filter_classes,
         min_filters=strategy_type.min_filters_per_combo,
         max_filters=strategy_type.max_filters_per_combo,
     )
 
-    print(f"\n🧪 Running {strategy_type.name} filter combination sweep...")
+    print(f"\n🧪 Running {strategy_type_name} filter combination sweep...")
     print(f"Total filter combinations: {len(combinations)}")
     print(f"Parallel mode: ON | max_workers={max_workers}")
 
-    tasks = [(data, cfg, strategy_type, combo_classes) for combo_classes in combinations]
-    results: list[dict] = []
+    tasks = [
+        (
+            strategy_type_name,
+            data,
+            cfg,
+            class_names_from_combo(combo_classes),
+        )
+        for combo_classes in combinations
+    ]
+
+    results: list[dict[str, Any]] = []
+
+    from concurrent.futures import ProcessPoolExecutor
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        for idx, result in enumerate(executor.map(_run_combo_case, tasks), start=1):
+        for idx, result in enumerate(executor.map(run_combo_case, tasks), start=1):
             print(f"  Combo {idx}/{len(combinations)} | {result['strategy_name']}")
             results.append(result)
 
@@ -161,23 +304,26 @@ def run_filter_combination_sweep(
     return results_df
 
 
-def run_promotion_gate(
+def apply_promotion_gate(
     combo_results_df: pd.DataFrame,
-    strategy_type,
+    strategy_type_name: str,
 ) -> pd.DataFrame:
     if combo_results_df.empty:
-        print("\nNo combo results available for promotion gate.")
         return pd.DataFrame()
 
+    strategy_type = get_strategy_type(strategy_type_name)
     thresholds = strategy_type.get_promotion_thresholds()
 
+    min_pf = float(thresholds["min_profit_factor"])
+    min_avg_trade = float(thresholds["min_average_trade"])
+    require_positive_net_pnl = bool(thresholds["require_positive_net_pnl"])
+
     promoted_df = combo_results_df.copy()
-
     promoted_df = promoted_df[promoted_df["passes_trade_filter"] == True]
-    promoted_df = promoted_df[promoted_df["profit_factor"] >= float(thresholds["min_profit_factor"])]
-    promoted_df = promoted_df[promoted_df["average_trade"] >= float(thresholds["min_average_trade"])]
+    promoted_df = promoted_df[promoted_df["profit_factor"] >= min_pf]
+    promoted_df = promoted_df[promoted_df["average_trade"] >= min_avg_trade]
 
-    if thresholds.get("require_positive_net_pnl", False):
+    if require_positive_net_pnl:
         promoted_df = promoted_df[promoted_df["net_pnl"] > 0]
 
     promoted_df = promoted_df.sort_values(
@@ -185,214 +331,268 @@ def run_promotion_gate(
         ascending=[False, False, False],
     ).reset_index(drop=True)
 
-    print(f"\n🚦 Promotion Gate Results for strategy type: {strategy_type.name}")
-    print(f"Minimum PF required: {thresholds['min_profit_factor']:.2f}")
-    print(f"Minimum average trade required: {thresholds['min_average_trade']:.2f}")
-    print(f"Require positive net PnL: {thresholds.get('require_positive_net_pnl', False)}")
+    print(f"\n🚦 Promotion Gate Results for strategy type: {strategy_type_name}")
+    print(f"Minimum PF required: {min_pf:.2f}")
+    print(f"Minimum average trade required: {min_avg_trade:.2f}")
+    print(f"Require positive net PnL: {require_positive_net_pnl}")
     print(f"Promoted candidates: {len(promoted_df)}")
 
-    if promoted_df.empty:
+    if not promoted_df.empty:
+        print("\n✅ Promoted Candidates:")
+        display_cols = [
+            "strategy_name",
+            "profit_factor",
+            "average_trade",
+            "net_pnl",
+            "total_trades",
+            "trades_per_year",
+            "filters",
+        ]
+        existing_cols = [c for c in display_cols if c in promoted_df.columns]
+        print(promoted_df[existing_cols].head(10))
+    else:
         print("\n❌ No candidates passed the promotion gate.")
-        return promoted_df
-
-    display_cols = [
-        "strategy_name",
-        "filters",
-        "profit_factor",
-        "average_trade",
-        "net_pnl",
-        "max_drawdown",
-        "trades_per_year",
-    ]
-    display_cols = [c for c in display_cols if c in promoted_df.columns]
-
-    print("\n✅ Promoted Candidates:")
-    print(promoted_df[display_cols].head(10))
-
-    output_path = Path("Outputs") / "promoted_candidates.csv"
-    promoted_df.to_csv(output_path, index=False)
-    print(f"\n💾 Promoted candidates saved to: {output_path}")
 
     return promoted_df
-
-
-def map_promoted_row_to_combo_classes(strategy_type, promoted_row: pd.Series) -> list[type]:
-    filter_name_text = str(promoted_row["filters"])
-    selected_names = [name.strip() for name in filter_name_text.split(",") if name.strip()]
-
-    combo_classes: list[type] = []
-    for cls in strategy_type.get_filter_classes():
-        cls_name = getattr(cls, "name", cls.__name__)
-        if cls_name in selected_names:
-            combo_classes.append(cls)
-
-    return combo_classes
-
-
-def normalize_active_refinement_grid(active_grid: dict[str, list]) -> dict[str, list]:
-    normalized = {
-        "hold_bars": [0],
-        "stop_distance_points": [0.0],
-        "min_avg_range": [0.0],
-        "momentum_lookback": [0],
-    }
-    normalized.update(active_grid)
-    return normalized
-
-
-class CandidateSpecificStrategyFactory:
-    def __init__(self, strategy_type, promoted_combo_classes: list[type]):
-        self.strategy_type = strategy_type
-        self.promoted_combo_classes = promoted_combo_classes
-
-    def __call__(
-        self,
-        hold_bars: int,
-        stop_distance_points: float,
-        min_avg_range: float,
-        momentum_lookback: int,
-    ):
-        return self.strategy_type.build_candidate_specific_strategy(
-            promoted_combo_classes=self.promoted_combo_classes,
-            hold_bars=hold_bars,
-            stop_distance_points=stop_distance_points,
-            min_avg_range=min_avg_range,
-            momentum_lookback=momentum_lookback,
-        )
 
 
 def run_top_combo_refinement(
     data: pd.DataFrame,
     cfg: EngineConfig,
-    strategy_type,
-    promoted_candidates_df: pd.DataFrame,
-    max_workers: int = 10,
-    top_n: int = 3,
+    strategy_type_name: str,
+    promoted_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    if promoted_candidates_df.empty:
-        print(f"\n⛔ Skipping {strategy_type.name} refinement because no candidates were promoted.")
+    if promoted_df.empty:
+        print(f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted.")
         return pd.DataFrame()
 
-    print(f"\n🏆 Refining top {top_n} promoted candidates...")
+    best_row = promoted_df.iloc[0]
 
-    final_candidates: list[dict[str, Any]] = []
+    promoted_combo_class_names = list(best_row["combo_class_names"])
+    promoted_combo_classes = combo_classes_from_names(strategy_type_name, promoted_combo_class_names)
 
-    for rank_idx, (_, row) in enumerate(promoted_candidates_df.head(top_n).iterrows(), start=1):
-        print("\n---------------------------------------------")
-        print(f"Refining Candidate #{rank_idx}")
-        print(f"Strategy: {row['strategy_name']}")
-        print(f"Filters: {row['filters']}")
-        print(f"PF: {row['profit_factor']:.2f}")
-        print(f"Avg Trade: {row['average_trade']:.2f}")
-        print(f"Net PnL: {row['net_pnl']:.2f}")
+    print("\n🏆 Selected top promoted candidate for refinement:")
+    print(f"Strategy: {best_row['strategy_name']}")
+    print(f"Filters: {best_row['filters']}")
+    print(f"PF: {best_row['profit_factor']:.2f}")
+    print(f"Average Trade: {best_row['average_trade']:.2f}")
+    print(f"Net PnL: {best_row['net_pnl']:.2f}")
 
-        promoted_combo_classes = map_promoted_row_to_combo_classes(
-            strategy_type=strategy_type,
-            promoted_row=row,
-        )
+    strategy_type = get_strategy_type(strategy_type_name)
+    active_grid = strategy_type.get_active_refinement_grid_for_combo(promoted_combo_classes)
 
-        active_grid = strategy_type.get_active_refinement_grid_for_combo(promoted_combo_classes)
-        normalized_grid = normalize_active_refinement_grid(active_grid)
+    print("\n🧩 Active refinement dimensions for promoted combo:")
+    for key, value in active_grid.items():
+        print(f"  {key}: {value}")
 
-        print("\n🧩 Active refinement dimensions:")
-        for k, v in active_grid.items():
-            print(f"  {k}: {v}")
+    hold_bars = active_grid.get("hold_bars", [strategy_type.default_hold_bars])
+    stop_distance_points = active_grid.get(
+        "stop_distance_points",
+        [strategy_type.default_stop_distance_points],
+    )
 
-        candidate_strategy_factory = CandidateSpecificStrategyFactory(
-            strategy_type=strategy_type,
-            promoted_combo_classes=promoted_combo_classes,
-        )
+    # Only sweep active dimensions. Inactive dimensions get a single dummy placeholder.
+    min_avg_range = active_grid.get("min_avg_range", [0.0])
+    momentum_lookback = active_grid.get("momentum_lookback", [0])
 
-        refiner = StrategyParameterRefiner(
-            engine_class=MasterStrategyEngine,
-            data=data,
-            strategy_factory=candidate_strategy_factory,
-            config=cfg,
-        )
+    trade_thresholds = strategy_type.get_trade_filter_thresholds()
 
-        thresholds = strategy_type.get_trade_filter_thresholds()
+    strategy_factory = CandidateSpecificStrategyFactory(
+        strategy_type_name=strategy_type_name,
+        promoted_combo_class_names=promoted_combo_class_names,
+    )
 
-        refinement_df = refiner.run_refinement(
-            hold_bars=normalized_grid["hold_bars"],
-            stop_distance_points=normalized_grid["stop_distance_points"],
-            min_avg_range=normalized_grid["min_avg_range"],
-            momentum_lookback=normalized_grid["momentum_lookback"],
-            min_trades=int(thresholds["min_trades"]),
-            min_trades_per_year=float(thresholds["min_trades_per_year"]),
-            parallel=True,
-            max_workers=max_workers,
-        )
+    refiner = StrategyParameterRefiner(
+        engine_class=MasterStrategyEngine,
+        data=data,
+        strategy_factory=strategy_factory,
+        config=cfg,
+    )
 
-        if refinement_df.empty:
-            print("\nNo refinement results met the trade filters for this candidate.")
-            continue
+    refinement_df = refiner.run_refinement(
+        hold_bars=hold_bars,
+        stop_distance_points=stop_distance_points,
+        min_avg_range=min_avg_range,
+        momentum_lookback=momentum_lookback,
+        min_trades=int(trade_thresholds["min_trades"]),
+        min_trades_per_year=float(trade_thresholds["min_trades_per_year"]),
+        parallel=True,
+        max_workers=10,
+    )
 
-        print(f"\n🎯 Top {strategy_type.name} Refinement Results:")
+    if not refinement_df.empty:
+        print(f"\n🎯 Top {strategy_type_name} Refinement Results:")
         print(refiner.top_results(10))
-
         refiner.print_summary_report(top_n=10)
 
         plateau = PlateauAnalyzer(refinement_df)
         plateau.print_report(top_n=10)
 
-        candidate_output_path = Path("Outputs") / f"{strategy_type.name}_candidate_{rank_idx}_refinement_results.csv"
-        saved_path = refiner.save_results_csv(candidate_output_path)
-        print(f"\n💾 Candidate refinement saved to: {saved_path}")
+        refinement_output_path = OUTPUTS_DIR / f"{strategy_type_name}_top_combo_refinement_results_narrow.csv"
+        saved_path = refiner.save_results_csv(refinement_output_path)
+        print(f"\n💾 Narrow top-combo refinement saved to: {saved_path}")
+    else:
+        print("\nNo refinement results met the trade filters.")
 
-        best = refiner.top_results(1).iloc[0]
+    return refinement_df
 
-        final_candidates.append(
-            {
-                "candidate_rank": rank_idx,
-                "strategy_name": row["strategy_name"],
-                "filters": row["filters"],
-                "hold_bars": best["hold_bars"],
-                "stop_distance_points": best["stop_distance_points"],
-                "profit_factor": best["profit_factor"],
-                "average_trade": best["average_trade"],
-                "net_pnl": best["net_pnl"],
-                "max_drawdown": best["max_drawdown"],
-                "total_trades": best["total_trades"],
-            }
-        )
 
-    if not final_candidates:
-        print("\nNo refined candidates produced usable results.")
-        return pd.DataFrame()
+# ============================================================
+# FAMILY SUMMARY
+# ============================================================
 
-    final_df = pd.DataFrame(final_candidates)
+def build_family_run_summary(
+    strategy_type_name: str,
+    dataset_path: Path,
+    data: pd.DataFrame,
+    sanity_results: dict[str, Any],
+    combo_results_df: pd.DataFrame,
+    promoted_df: pd.DataFrame,
+    refinement_df: pd.DataFrame,
+) -> FamilyRunSummary:
+    if not combo_results_df.empty:
+        best_combo = combo_results_df.iloc[0]
+        best_combo_strategy_name = str(best_combo["strategy_name"])
+        best_combo_profit_factor = float(best_combo["profit_factor"])
+        best_combo_average_trade = float(best_combo["average_trade"])
+        best_combo_net_pnl = float(best_combo["net_pnl"])
+        best_combo_total_trades = int(best_combo["total_trades"])
+    else:
+        best_combo_strategy_name = "NONE"
+        best_combo_profit_factor = 0.0
+        best_combo_average_trade = 0.0
+        best_combo_net_pnl = 0.0
+        best_combo_total_trades = 0
 
-    final_df = final_df.sort_values(
-        by=["profit_factor", "average_trade", "net_pnl"],
-        ascending=[False, False, False],
-    ).reset_index(drop=True)
+    if not refinement_df.empty:
+        best_refined = refinement_df.iloc[0]
+        best_refined_strategy_name = str(best_refined["strategy_name"])
+        best_refined_profit_factor = float(best_refined["profit_factor"])
+        best_refined_average_trade = float(best_refined["average_trade"])
+        best_refined_net_pnl = float(best_refined["net_pnl"])
+        best_refined_total_trades = int(best_refined["total_trades"])
+    else:
+        best_refined_strategy_name = "NONE"
+        best_refined_profit_factor = 0.0
+        best_refined_average_trade = 0.0
+        best_refined_net_pnl = 0.0
+        best_refined_total_trades = 0
 
-    print("\n🏆 FINAL RANKED STRATEGIES")
-    print(final_df)
+    if promoted_df.empty:
+        promotion_status = "NO_PROMOTED_CANDIDATES"
+        notes = "No candidates passed the promotion gate."
+    elif refinement_df.empty:
+        promotion_status = "PROMOTED_BUT_REFINEMENT_EMPTY"
+        notes = "Promoted candidate existed, but refinement produced no accepted rows."
+    else:
+        promotion_status = "PROMOTED_AND_REFINED"
+        notes = "Candidate promoted and refinement completed successfully."
 
-    output_path = Path("Outputs") / f"{strategy_type.name}_final_strategy_ranking.csv"
-    final_df.to_csv(output_path, index=False)
+    return FamilyRunSummary(
+        strategy_type=strategy_type_name,
+        dataset=dataset_path.name,
+        rows=len(data),
+        start=str(data.index.min()),
+        end=str(data.index.max()),
 
-    print(f"\n💾 Final strategy ranking saved to: {output_path}")
+        sanity_strategy_name=str(sanity_results["Strategy"]),
+        sanity_total_trades=int(sanity_results["Total Trades"]),
+        sanity_profit_factor=float(sanity_results["Profit Factor"]),
+        sanity_average_trade=parse_money(sanity_results["Average Trade"]),
+        sanity_net_pnl=parse_money(sanity_results["Net PnL"]),
 
-    return final_df
+        total_filter_combinations=len(combo_results_df),
+        promoted_candidates=len(promoted_df),
+        promotion_status=promotion_status,
 
+        best_combo_strategy_name=best_combo_strategy_name,
+        best_combo_profit_factor=best_combo_profit_factor,
+        best_combo_average_trade=best_combo_average_trade,
+        best_combo_net_pnl=best_combo_net_pnl,
+        best_combo_total_trades=best_combo_total_trades,
+
+        refinement_ran=not promoted_df.empty,
+        refinement_accepted_rows=len(refinement_df),
+        best_refined_strategy_name=best_refined_strategy_name,
+        best_refined_profit_factor=best_refined_profit_factor,
+        best_refined_average_trade=best_refined_average_trade,
+        best_refined_net_pnl=best_refined_net_pnl,
+        best_refined_total_trades=best_refined_total_trades,
+
+        notes=notes,
+    )
+
+
+def print_family_run_summary(summary: FamilyRunSummary) -> None:
+    print("\n" + "=" * 72)
+    print("🏁 FAMILY RUN SUMMARY")
+    print("=" * 72)
+
+    print(f"Strategy Type:            {summary.strategy_type}")
+    print(f"Dataset:                  {summary.dataset}")
+    print(f"Rows:                     {summary.rows:,}")
+    print(f"Start:                    {summary.start}")
+    print(f"End:                      {summary.end}")
+
+    print("\n--- Sanity Check ---")
+    print(f"Strategy:                 {summary.sanity_strategy_name}")
+    print(f"Trades:                   {summary.sanity_total_trades}")
+    print(f"PF:                       {summary.sanity_profit_factor:.2f}")
+    print(f"Average Trade:            {summary.sanity_average_trade:.2f}")
+    print(f"Net PnL:                  {summary.sanity_net_pnl:.2f}")
+
+    print("\n--- Combination Sweep ---")
+    print(f"Total Combinations:       {summary.total_filter_combinations}")
+    print(f"Promoted Candidates:      {summary.promoted_candidates}")
+    print(f"Promotion Status:         {summary.promotion_status}")
+
+    print("\n--- Best Combo Candidate ---")
+    print(f"Strategy:                 {summary.best_combo_strategy_name}")
+    print(f"PF:                       {summary.best_combo_profit_factor:.2f}")
+    print(f"Average Trade:            {summary.best_combo_average_trade:.2f}")
+    print(f"Net PnL:                  {summary.best_combo_net_pnl:.2f}")
+    print(f"Trades:                   {summary.best_combo_total_trades}")
+
+    print("\n--- Best Refined Candidate ---")
+    print(f"Refinement Ran:           {summary.refinement_ran}")
+    print(f"Accepted Refinement Rows: {summary.refinement_accepted_rows}")
+    print(f"Strategy:                 {summary.best_refined_strategy_name}")
+    print(f"PF:                       {summary.best_refined_profit_factor:.2f}")
+    print(f"Average Trade:            {summary.best_refined_average_trade:.2f}")
+    print(f"Net PnL:                  {summary.best_refined_net_pnl:.2f}")
+    print(f"Trades:                   {summary.best_refined_total_trades}")
+
+    print("\n--- Notes ---")
+    print(summary.notes)
+    print("=" * 72)
+
+
+def save_family_run_summary(summary: FamilyRunSummary, filepath: Path) -> None:
+    ensure_outputs_dir()
+    df = pd.DataFrame([asdict(summary)])
+    df.to_csv(filepath, index=False)
+    print(f"\n💾 Family summary saved to: {filepath}")
+
+
+# ============================================================
+# MAIN
+# ============================================================
 
 if __name__ == "__main__":
     total_start = time.perf_counter()
 
-    STRATEGY_TYPE_NAME = "mean_reversion"
-    MAX_WORKERS = 10
-    TOP_N_PROMOTED_FOR_REFINEMENT = 3
+    available_strategy_types = list_strategy_types()
 
     print(f"Selected strategy type: {STRATEGY_TYPE_NAME}")
-    print(f"Available strategy types: {list_strategy_types()}")
+    print(f"Available strategy types: {available_strategy_types}")
+
+    if STRATEGY_TYPE_NAME not in available_strategy_types:
+        raise ValueError(
+            f"Unknown strategy type '{STRATEGY_TYPE_NAME}'. "
+            f"Available: {available_strategy_types}"
+        )
 
     strategy_type = get_strategy_type(STRATEGY_TYPE_NAME)
-
-    CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
-    OUTPUTS_DIR = Path("Outputs")
-    COMBO_SWEEP_CSV_PATH = OUTPUTS_DIR / "filter_combination_sweep_results.csv"
 
     print("\nLoading data from:", CSV_PATH)
     data = load_tradestation_csv(CSV_PATH, debug=True)
@@ -404,7 +604,7 @@ if __name__ == "__main__":
         symbol="ES",
     )
 
-    print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type.name}")
+    print(f"\n⚙ Adding precomputed feature columns for strategy type: {STRATEGY_TYPE_NAME}")
     data = add_precomputed_features(
         data,
         sma_lengths=strategy_type.get_required_sma_lengths(),
@@ -415,42 +615,88 @@ if __name__ == "__main__":
 
     print_data_summary(data, name="ES Data (2008+)")
 
-    run_single_strategy_test(data=data, cfg=cfg, strategy_type=strategy_type)
+    # ------------------------------------------------
+    # 1. Sanity check
+    # ------------------------------------------------
+    sanity_results = run_single_strategy_test(
+        data=data,
+        cfg=cfg,
+        strategy_type_name=STRATEGY_TYPE_NAME,
+    )
 
+    # ------------------------------------------------
+    # 2. Filter combination sweep
+    # ------------------------------------------------
     combo_start = time.perf_counter()
     combo_results_df = run_filter_combination_sweep(
         data=data,
         cfg=cfg,
-        strategy_type=strategy_type,
-        max_workers=MAX_WORKERS,
+        strategy_type_name=STRATEGY_TYPE_NAME,
+        max_workers=10,
     )
     combo_elapsed = time.perf_counter() - combo_start
 
     if not combo_results_df.empty:
-        print(f"\n📊 Top {strategy_type.name} Filter Combination Results:")
+        print(f"\n📊 Top {STRATEGY_TYPE_NAME} Filter Combination Results:")
         print(combo_results_df.head(10))
 
-        OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-        combo_results_df.to_csv(COMBO_SWEEP_CSV_PATH, index=False)
+        ensure_outputs_dir()
+
+        combo_results_to_save = combo_results_df.copy()
+        if "combo_class_names" in combo_results_to_save.columns:
+            combo_results_to_save["combo_class_names"] = combo_results_to_save["combo_class_names"].apply(
+                lambda x: "|".join(x) if isinstance(x, list) else str(x)
+            )
+
+        combo_results_to_save.to_csv(COMBO_SWEEP_CSV_PATH, index=False)
         print(f"\n💾 Filter combination sweep saved to: {COMBO_SWEEP_CSV_PATH}")
     else:
         print("\nNo filter combination results generated.")
 
     print(f"\n⏱ Filter combination sweep runtime: {combo_elapsed:.2f} seconds")
 
-    promoted_candidates_df = run_promotion_gate(
+    # ------------------------------------------------
+    # 3. Promotion gate
+    # ------------------------------------------------
+    promoted_df = apply_promotion_gate(
         combo_results_df=combo_results_df,
-        strategy_type=strategy_type,
+        strategy_type_name=STRATEGY_TYPE_NAME,
     )
 
-    run_top_combo_refinement(
+    if not promoted_df.empty:
+        promoted_to_save = promoted_df.copy()
+        if "combo_class_names" in promoted_to_save.columns:
+            promoted_to_save["combo_class_names"] = promoted_to_save["combo_class_names"].apply(
+                lambda x: "|".join(x) if isinstance(x, list) else str(x)
+            )
+        promoted_to_save.to_csv(PROMOTED_CANDIDATES_CSV_PATH, index=False)
+        print(f"\n💾 Promoted candidates saved to: {PROMOTED_CANDIDATES_CSV_PATH}")
+
+    # ------------------------------------------------
+    # 4. Refinement
+    # ------------------------------------------------
+    refinement_df = run_top_combo_refinement(
         data=data,
         cfg=cfg,
-        strategy_type=strategy_type,
-        promoted_candidates_df=promoted_candidates_df,
-        max_workers=MAX_WORKERS,
-        top_n=TOP_N_PROMOTED_FOR_REFINEMENT,
+        strategy_type_name=STRATEGY_TYPE_NAME,
+        promoted_df=promoted_df,
     )
+
+    # ------------------------------------------------
+    # 5. Family summary / scoreboard
+    # ------------------------------------------------
+    family_summary = build_family_run_summary(
+        strategy_type_name=STRATEGY_TYPE_NAME,
+        dataset_path=CSV_PATH,
+        data=data,
+        sanity_results=sanity_results,
+        combo_results_df=combo_results_df,
+        promoted_df=promoted_df,
+        refinement_df=refinement_df,
+    )
+
+    print_family_run_summary(family_summary)
+    save_family_run_summary(family_summary, FAMILY_SUMMARY_CSV_PATH)
 
     total_elapsed = time.perf_counter() - total_start
     print(f"\n🏁 Total script runtime: {total_elapsed:.2f} seconds")
