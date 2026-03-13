@@ -12,7 +12,7 @@ class EngineConfig:
     # Global Presets from Master Prompt
     initial_capital: float = 250_000.0
     risk_per_trade: float = 0.01
-    symbol: str = "ES"
+    symbol: str = "UNKNOWN"
 
     # Friction Assumptions
     commission_per_contract: float = 2.00
@@ -132,8 +132,11 @@ class MasterStrategyEngine:
         if hold_bars is None:
             hold_bars = getattr(strategy, "hold_bars", 3)
 
-        if stop_distance_points is None:
-            stop_distance_points = getattr(strategy, "stop_distance_points", 10.0)
+        # Backward compatibility + ATR Injection
+        stop_dist_val = stop_distance_points if stop_distance_points is not None else getattr(strategy, "stop_distance_points", 10.0)
+        use_atr = hasattr(strategy, "stop_distance_atr")
+        if use_atr:
+            stop_mult = getattr(strategy, "stop_distance_atr")
 
         slippage_points = self.config.slippage_ticks * (
             self.config.tick_value / self.config.dollars_per_point
@@ -187,13 +190,22 @@ class MasterStrategyEngine:
                 signal = strategy.generate_signal(self.data, i)
 
                 if signal == 1:
+                    # Calculate dynamic stop based on current ATR
+                    if use_atr:
+                        current_atr = float(bar.get("atr_20", 10.0))
+                        if pd.isna(current_atr) or current_atr <= 0:
+                            current_atr = 10.0
+                        stop_dist_pts = stop_mult * current_atr
+                    else:
+                        stop_dist_pts = stop_dist_val
+
                     contracts = self.calculate_position_size_contracts(
-                        stop_distance_points=stop_distance_points
+                        stop_distance_points=stop_dist_pts
                     )
 
                     if contracts > 0:
                         entry_price = close_price + (slippage_points / 2.0)
-                        stop_price = entry_price - stop_distance_points
+                        stop_price = entry_price - stop_dist_pts
 
                         self.position = {
                             "entry_index": i,

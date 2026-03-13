@@ -51,15 +51,18 @@ class RecoveryTriggerFilter(BaseFilter):
 
 class VolatilityFilter(BaseFilter):
     name = "VolatilityFilter"
-    def __init__(self, lookback: int = 20, min_avg_range: float = 10.0): # Bumped default to 10
+    def __init__(self, lookback: int = 20, min_atr_mult: float = 1.0): 
+        # Upgraded to ATR Multiplier!
         self.lookback = lookback
-        self.min_avg_range = min_avg_range
+        self.min_atr_mult = min_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
-        avg_range_col = f"avg_range_{self.lookback}"
-        avg_range = data.iloc[i][avg_range_col] if avg_range_col in data.columns else (data.iloc[i - self.lookback + 1 : i + 1]["high"] - data.iloc[i - self.lookback + 1 : i + 1]["low"]).mean()
-        return bool(avg_range >= self.min_avg_range)
+        if i < self.lookback * 2: return False
+        atr_col = f"atr_{self.lookback}"
+        current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
+        # Check against a longer-term average ATR to detect high vol regime
+        long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
+        return bool(current_atr >= (long_term_atr * self.min_atr_mult))
 
 class MomentumFilter(BaseFilter):
     name = "MomentumFilter"
@@ -88,15 +91,17 @@ class TwoBarUpFilter(BaseFilter):
 
 class CompressionFilter(BaseFilter):
     name = "CompressionFilter"
-    def __init__(self, lookback: int = 20, max_avg_range: float = 15.0): # Bumped to 15.0 for modern ES
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 0.8): 
+        # Upgraded! Requires current ATR to be compressed below a multiplier of historical ATR
         self.lookback = lookback
-        self.max_avg_range = max_avg_range
+        self.max_atr_mult = max_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
-        avg_range_col = f"avg_range_{self.lookback}"
-        avg_range = data.iloc[i][avg_range_col] if avg_range_col in data.columns else (data.iloc[i - self.lookback + 1 : i + 1]["high"] - data.iloc[i - self.lookback + 1 : i + 1]["low"]).mean()
-        return bool(avg_range <= self.max_avg_range)
+        if i < self.lookback * 2: return False
+        atr_col = f"atr_{self.lookback}"
+        current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
+        long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
+        return bool(current_atr <= (long_term_atr * self.max_atr_mult))
 
 class RangeBreakoutFilter(BaseFilter):
     name = "RangeBreakoutFilter"
@@ -110,27 +115,28 @@ class RangeBreakoutFilter(BaseFilter):
 
 class ExpansionBarFilter(BaseFilter):
     name = "ExpansionBarFilter"
-    def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.25): # Relaxed slightly
+    def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.25):
         self.lookback = lookback
         self.expansion_multiplier = expansion_multiplier
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         if i < self.lookback: return False
-        current_bar_range = data.iloc[i]["high"] - data.iloc[i]["low"]
-        avg_range_col = f"avg_range_{self.lookback}"
-        avg_range = data.iloc[i][avg_range_col] if avg_range_col in data.columns else (data.iloc[i - self.lookback + 1 : i + 1]["high"] - data.iloc[i - self.lookback + 1 : i + 1]["low"]).mean()
-        return bool(current_bar_range >= avg_range * self.expansion_multiplier)
+        current_tr = data.iloc[i]["true_range"] if "true_range" in data.columns else (data.iloc[i]["high"] - data.iloc[i]["low"])
+        atr_col = f"atr_{self.lookback}"
+        current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
+        return bool(current_tr >= (current_atr * self.expansion_multiplier))
 
 class BreakoutRetestFilter(BaseFilter):
     name = "BreakoutRetestFilter"
-    def __init__(self, lookback: int = 20, breakout_buffer_points: float = 0.0):
+    def __init__(self, lookback: int = 20, atr_buffer_mult: float = 0.0):
         self.lookback = lookback
-        self.breakout_buffer_points = breakout_buffer_points
+        self.atr_buffer_mult = atr_buffer_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         if i < self.lookback: return False
         prior_high = data.iloc[i - self.lookback : i]["high"].max()
-        return bool(data.iloc[i]["close"] > prior_high + self.breakout_buffer_points)
+        current_atr = data.iloc[i][f"atr_{self.lookback}"] if f"atr_{self.lookback}" in data.columns else 10.0
+        return bool(data.iloc[i]["close"] > prior_high + (current_atr * self.atr_buffer_mult))
 
 class BreakoutTrendFilter(BaseFilter):
     name = "BreakoutTrendFilter"
@@ -147,29 +153,28 @@ class BreakoutTrendFilter(BaseFilter):
 
 class BreakoutCloseStrengthFilter(BaseFilter):
     name = "BreakoutCloseStrengthFilter"
-    def __init__(self, close_position_threshold: float = 0.60): # Relaxed to top 40% of bar
+    def __init__(self, close_position_threshold: float = 0.60):
         self.close_position_threshold = close_position_threshold
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        current_high, current_low, current_close = data.iloc[i]["high"], data.iloc[i]["low"], data.iloc[i]["close"]
-        bar_range = current_high - current_low
+        c_high, c_low, c_close = data.iloc[i]["high"], data.iloc[i]["low"], data.iloc[i]["close"]
+        bar_range = c_high - c_low
         if bar_range <= 0: return False
-        return bool(((current_close - current_low) / bar_range) >= self.close_position_threshold)
+        return bool(((c_close - c_low) / bar_range) >= self.close_position_threshold)
 
 class PriorRangePositionFilter(BaseFilter):
     name = "PriorRangePositionFilter"
-    def __init__(self, lookback: int = 20, min_position_in_range: float = 0.50): # Relaxed to top half
+    def __init__(self, lookback: int = 20, min_position_in_range: float = 0.50):
         self.lookback = lookback
         self.min_position_in_range = min_position_in_range
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         if i < self.lookback or i < 1: return False
         prior_window = data.iloc[i - self.lookback : i]
-        range_low, range_high = prior_window["low"].min(), prior_window["high"].max()
-        prior_close = data.iloc[i - 1]["close"]
-        full_range = range_high - range_low
+        r_low, r_high = prior_window["low"].min(), prior_window["high"].max()
+        full_range = r_high - r_low
         if full_range <= 0: return False
-        return bool(((prior_close - range_low) / full_range) >= self.min_position_in_range)
+        return bool(((data.iloc[i - 1]["close"] - r_low) / full_range) >= self.min_position_in_range)
 
 # ============================================================
 # Mean-reversion-family filters
@@ -188,15 +193,17 @@ class BelowFastSMAFilter(BaseFilter):
 
 class DistanceBelowSMAFilter(BaseFilter):
     name = "DistanceBelowSMAFilter"
-    def __init__(self, fast_length: int = 20, min_distance_points: float = 6.0): # Default up to 6.0
+    def __init__(self, fast_length: int = 20, min_distance_atr: float = 1.0): 
+        # Upgraded to ATR Multiplier
         self.fast_length = fast_length
-        self.min_distance_points = min_distance_points
+        self.min_distance_atr = min_distance_atr
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         if i < self.fast_length: return False
         fast_col = f"sma_{self.fast_length}"
         fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
-        return bool((fast_sma - data.iloc[i]["close"]) >= self.min_distance_points)
+        current_atr = data.iloc[i]["atr_20"] if "atr_20" in data.columns else 10.0
+        return bool((fast_sma - data.iloc[i]["close"]) >= (current_atr * self.min_distance_atr))
 
 class DownCloseFilter(BaseFilter):
     name = "DownCloseFilter"
@@ -217,15 +224,17 @@ class ReversalUpBarFilter(BaseFilter):
 
 class LowVolatilityRegimeFilter(BaseFilter):
     name = "LowVolatilityRegimeFilter"
-    def __init__(self, lookback: int = 20, max_avg_range: float = 15.0): # Bumped to 15.0
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 1.2): 
+        # Upgraded to ATR compression
         self.lookback = lookback
-        self.max_avg_range = max_avg_range
+        self.max_atr_mult = max_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
-        avg_range_col = f"avg_range_{self.lookback}"
-        avg_range = data.iloc[i][avg_range_col] if avg_range_col in data.columns else (data.iloc[i - self.lookback + 1 : i + 1]["high"] - data.iloc[i - self.lookback + 1 : i + 1]["low"]).mean()
-        return bool(avg_range <= self.max_avg_range)
+        if i < self.lookback * 2: return False
+        atr_col = f"atr_{self.lookback}"
+        current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
+        long_term_atr = data["true_range"].iloc[i - (self.lookback*2) : i].mean()
+        return bool(current_atr <= (long_term_atr * self.max_atr_mult))
 
 class AboveLongTermSMAFilter(BaseFilter):
     name = "AboveLongTermSMAFilter"
