@@ -230,7 +230,7 @@ class TrendStrategyType(BaseStrategyType):
     def get_trade_filter_config(self) -> dict[str, float]:
         return self.get_trade_filter_thresholds()
 
-    def get_promotion_thresholds(self) -> dict[str, float | bool]:
+    
         return {
             "min_profit_factor": 1.00,
             "min_average_trade": 0.0,
@@ -254,10 +254,14 @@ class TrendStrategyType(BaseStrategyType):
             "momentum_lookback": [11, 12, 13, 14],
         }
 
-    def get_refinement_grid_for_candidate(self, candidate_row: dict[str, Any]) -> dict[str, list]:
-        combo_classes = self.get_filter_classes()
-        return self.get_active_refinement_grid_for_combo(combo_classes)
-
+    def get_promotion_thresholds(self) -> dict[str, float | bool]:
+        return {
+            "min_profit_factor": 1.00,
+            "min_average_trade": 0.0,
+            "require_positive_net_pnl": False,
+            "min_trades": 100,            # <--- THE CURE
+            "min_trades_per_year": 5.0,   # <--- THE CURE
+        }
     # -------------------------------------------------------------------------
     # Sweep
     # -------------------------------------------------------------------------
@@ -304,8 +308,8 @@ class TrendStrategyType(BaseStrategyType):
         if not results_df.empty:
             results_df = results_df.sort_values(
                 by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
-                ascending=[False, False, False, False],
-            ).reset_index(drop=True)
+            ascending=[False, False, False, False],
+        ).reset_index(drop=True)
 
         return results_df
 

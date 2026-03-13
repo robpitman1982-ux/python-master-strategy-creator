@@ -27,11 +27,12 @@ CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
 # "breakout"
 # "mean_reversion"
 # "all"
-STRATEGY_TYPE_NAME = "all"
+STRATEGY_TYPE_NAME = "mean_reversion"
 
 OUTPUTS_DIR = Path("Outputs")
 MAX_WORKERS_SWEEP = 10
 MAX_WORKERS_REFINEMENT = 10
+MAX_FALLBACK_CANDIDATES = 10  # Increased to 10 to ensure we catch robust edges
 
 
 # =============================================================================
@@ -83,10 +84,6 @@ def safe_get(obj: Any, attr_name: str, default: Any = None) -> Any:
 
 
 def call_first_available(obj: Any, method_names: list[str], *args, **kwargs):
-    """
-    Calls the first method name that exists on obj.
-    Raises AttributeError if none exist.
-    """
     for method_name in method_names:
         method = getattr(obj, method_name, None)
         if callable(method):
@@ -98,24 +95,15 @@ def call_first_available(obj: Any, method_names: list[str], *args, **kwargs):
 
 
 def get_required_sma_lengths(strategy_type: Any) -> list[int]:
-    return call_first_available(
-        strategy_type,
-        ["get_required_sma_lengths"],
-    )
+    return call_first_available(strategy_type, ["get_required_sma_lengths"])
 
 
 def get_required_avg_range_lookbacks(strategy_type: Any) -> list[int]:
-    return call_first_available(
-        strategy_type,
-        ["get_required_avg_range_lookbacks"],
-    )
+    return call_first_available(strategy_type, ["get_required_avg_range_lookbacks"])
 
 
 def get_required_momentum_lookbacks(strategy_type: Any) -> list[int]:
-    return call_first_available(
-        strategy_type,
-        ["get_required_momentum_lookbacks"],
-    )
+    return call_first_available(strategy_type, ["get_required_momentum_lookbacks"])
 
 
 def build_sanity_check_strategy(strategy_type: Any):
@@ -148,10 +136,7 @@ def run_family_filter_combination_sweep(
 
 
 def get_promotion_gate_config(strategy_type: Any) -> dict[str, Any]:
-    return call_first_available(
-        strategy_type,
-        ["get_promotion_gate_config"],
-    )
+    return call_first_available(strategy_type, ["get_promotion_gate_config"])
 
 
 def build_candidate_specific_refinement_factory(
@@ -202,14 +187,6 @@ def run_top_combo_refinement(
     )
 
 
-def get_strategy_display_name(strategy_type: Any) -> str:
-    return str(
-        safe_get(strategy_type, "name", None)
-        or safe_get(strategy_type, "strategy_type_name", None)
-        or strategy_type.__class__.__name__.replace("StrategyType", "").lower()
-    )
-
-
 def apply_promotion_gate(
     combo_results_df: pd.DataFrame,
     promotion_gate: dict[str, Any],
@@ -246,13 +223,25 @@ def apply_promotion_gate(
     sort_cols: list[str] = []
     ascending: list[bool] = []
 
-    for col in ["profit_factor", "average_trade", "net_pnl"]:
+    # Sort by absolute Net PnL first
+    for col in ["net_pnl", "profit_factor", "total_trades"]:
         if col in promoted.columns:
             sort_cols.append(col)
             ascending.append(False)
 
     if sort_cols:
         promoted = promoted.sort_values(by=sort_cols, ascending=ascending).reset_index(drop=True)
+
+    # -------------------------------------------------------------------------
+    # 💥 THE CLONE KILLER: Drop rows that generate mathematically identical results
+    # -------------------------------------------------------------------------
+    dedup_cols = [c for c in ["total_trades", "net_pnl", "profit_factor"] if c in promoted.columns]
+    if dedup_cols:
+        original_count = len(promoted)
+        promoted = promoted.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
+        dropped_count = original_count - len(promoted)
+        if dropped_count > 0:
+            print(f"\n🗡️ Clone Killer Active: Eliminated {dropped_count} redundant strategies.")
 
     return promoted
 
@@ -266,7 +255,8 @@ def print_promotion_gate_report(
     print(f"Minimum PF required: {promotion_gate.get('min_profit_factor', 0.0):.2f}")
     print(f"Minimum average trade required: {promotion_gate.get('min_average_trade', 0.0):.2f}")
     print(f"Require positive net PnL: {promotion_gate.get('require_positive_net_pnl', False)}")
-    print(f"Promoted candidates: {len(promoted_df)}")
+    print(f"Minimum trades required (Sweep): {promotion_gate.get('min_trades', 0)}")
+    print(f"Unique mathematically distinct candidates promoted: {len(promoted_df)}")
 
     if promoted_df.empty:
         print("\n❌ No candidates passed the promotion gate.")
@@ -283,7 +273,7 @@ def print_promotion_gate_report(
     ]
     display_cols = [c for c in display_cols if c in promoted_df.columns]
 
-    print("\n✅ Promoted Candidates:")
+    print("\n✅ Promoted Candidates (Top 10 Distinct):")
     print(promoted_df[display_cols].head(10))
 
 
@@ -292,12 +282,6 @@ def save_csv_if_not_empty(df: pd.DataFrame, filepath: Path) -> None:
         return
     filepath.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(filepath, index=False)
-
-
-def select_top_promoted_candidate(promoted_df: pd.DataFrame) -> dict[str, Any] | None:
-    if promoted_df is None or promoted_df.empty:
-        return None
-    return promoted_df.iloc[0].to_dict()
 
 
 def run_sanity_check(
@@ -463,7 +447,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     )
 
     leaderboard = leaderboard.sort_values(
-        by=["leader_pf", "leader_avg_trade", "leader_net_pnl"],
+        by=["leader_net_pnl", "leader_pf", "leader_avg_trade"],
         ascending=[False, False, False],
     ).reset_index(drop=True)
 
@@ -570,35 +554,48 @@ def run_single_family(
         print(f"\n💾 Promoted candidates saved to: {promoted_path}")
 
     # -------------------------------------------------------------------------
-    # 4. Refinement
+    # 4. Refinement (WITH FALLBACK LOOP)
     # -------------------------------------------------------------------------
     refinement_df: pd.DataFrame | None = None
 
-    top_candidate = select_top_promoted_candidate(promoted_df)
-    if top_candidate is None:
-        print(
-            f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted."
-        )
+    if promoted_df is None or promoted_df.empty:
+        print(f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted.")
     else:
-        print("\n🏆 Selected top promoted candidate for refinement:")
-        print(f"Strategy: {top_candidate.get('strategy_name', 'UNKNOWN')}")
-        print(f"Filters: {top_candidate.get('filters', 'UNKNOWN')}")
-        print(f"PF: {float(top_candidate.get('profit_factor', 0.0)):.2f}")
-        print(f"Average Trade: {float(top_candidate.get('average_trade', 0.0)):.2f}")
-        print(f"Net PnL: {float(top_candidate.get('net_pnl', 0.0)):.2f}")
+        candidates_to_test = promoted_df.head(MAX_FALLBACK_CANDIDATES).to_dict("records")
+        
+        for rank, candidate in enumerate(candidates_to_test, start=1):
+            print(f"\n{'='*50}")
+            print(f"🏆 Attempting Refinement on Promoted Candidate #{rank}")
+            print(f"{'='*50}")
+            print(f"Strategy: {candidate.get('strategy_name', 'UNKNOWN')}")
+            print(f"Filters: {candidate.get('filters', 'UNKNOWN')}")
+            print(f"PF: {float(candidate.get('profit_factor', 0.0)):.2f}")
+            print(f"Average Trade: {float(candidate.get('average_trade', 0.0)):.2f}")
+            print(f"Net PnL: {float(candidate.get('net_pnl', 0.0)):.2f}")
 
-        refinement_grid = get_refinement_grid_for_candidate(strategy_type, top_candidate)
-        print("\n🧩 Active refinement dimensions for promoted combo:")
-        for key, values in refinement_grid.items():
-            print(f"  {key}: {values}")
+            refinement_grid = get_refinement_grid_for_candidate(strategy_type, candidate)
+            print("\n🧩 Active refinement dimensions for promoted combo:")
+            for key, values in refinement_grid.items():
+                print(f"  {key}: {values}")
 
-        refinement_df = run_top_combo_refinement(
-            strategy_type=strategy_type,
-            data=data,
-            cfg=cfg,
-            candidate_row=top_candidate,
-            max_workers=max_workers_refinement,
-        )
+            current_refinement_df = run_top_combo_refinement(
+                strategy_type=strategy_type,
+                data=data,
+                cfg=cfg,
+                candidate_row=candidate,
+                max_workers=max_workers_refinement,
+            )
+
+            if current_refinement_df is not None and not current_refinement_df.empty:
+                print(f"\n✅ Refinement successful for candidate #{rank}. Stopping fallback loop!")
+                refinement_df = current_refinement_df
+                break
+            else:
+                print(f"\n❌ Refinement yielded 0 accepted rows for candidate #{rank}.")
+                if rank < len(candidates_to_test):
+                    print("Falling back to next computationally distinct candidate in the list...")
+                else:
+                    print("All fallback candidates exhausted. No refinement results passed the trade filters.")
 
     # -------------------------------------------------------------------------
     # 5. Family summary

@@ -250,6 +250,8 @@ class MeanReversionStrategyType(BaseStrategyType):
             "min_profit_factor": 1.00,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
+            "min_trades": 100,            # Set to 100 for the Sweep
+            "min_trades_per_year": 5.0,   # Adjusted for 100 trades over ~18 years
         }
 
     def get_promotion_gate_config(self) -> dict[str, float | bool]:
@@ -257,8 +259,8 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_trade_filter_thresholds(self) -> dict[str, float]:
         return {
-            "min_trades": 150,
-            "min_trades_per_year": 8.0,
+            "min_trades": 100,            # Set to 100 for the Refinement Engine
+            "min_trades_per_year": 5.0,
         }
 
     def get_trade_filter_config(self) -> dict[str, float]:
@@ -320,7 +322,7 @@ class MeanReversionStrategyType(BaseStrategyType):
         results_df = pd.DataFrame(results)
         if not results_df.empty:
             results_df = results_df.sort_values(
-                by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
+                by=["passes_trade_filter", "net_pnl", "profit_factor", "total_trades"],
                 ascending=[False, False, False, False],
             ).reset_index(drop=True)
 

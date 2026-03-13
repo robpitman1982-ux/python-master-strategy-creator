@@ -246,8 +246,10 @@ class BreakoutStrategyType(BaseStrategyType):
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
             "min_profit_factor": 1.00,
-            "min_average_trade": 0.00,
+            "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
+            "min_trades": 100,            # <--- THE CURE
+            "min_trades_per_year": 5.0,   # <--- THE CURE
         }
 
     def get_promotion_gate_config(self) -> dict[str, float | bool]:
@@ -310,8 +312,8 @@ class BreakoutStrategyType(BaseStrategyType):
         if not results_df.empty:
             results_df = results_df.sort_values(
                 by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
-                ascending=[False, False, False, False],
-            ).reset_index(drop=True)
+            ascending=[False, False, False, False],
+        ).reset_index(drop=True)
 
         return results_df
 
