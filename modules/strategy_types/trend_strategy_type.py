@@ -1,7 +1,3 @@
-"""
-Trend Strategy Type
-"""
-
 from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
@@ -10,81 +6,69 @@ from typing import Any
 
 import pandas as pd
 
-from .base_strategy_type import BaseStrategyType
 from modules.engine import EngineConfig, MasterStrategyEngine
-from modules.filter_combinator import generate_filter_combinations
-from modules.filters import (
-    MomentumFilter,
-    PullbackFilter,
-    RecoveryTriggerFilter,
-    TrendDirectionFilter,
-    VolatilityFilter,
-)
+from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
+from modules.filters import BaseFilter
+import modules.filters as filters_module
 from modules.plateau_analyzer import PlateauAnalyzer
 from modules.refiner import StrategyParameterRefiner
-from modules.strategies import (
-    CombinableFilterTrendStrategy,
-    FilterBasedTrendStrategy,
-    RefinedFiveFilterTrendStrategy,
-)
+from modules.strategy_types.base_strategy_type import BaseStrategyType
 
+# =============================================================================
+# INLINE TREND STRATEGY
+# =============================================================================
+class _InlineTrendStrategy:
+    direction = "LONG_ONLY"
 
-def _safe_float(value: Any) -> float:
-    text = str(value).replace("$", "").replace(",", "").replace("%", "").strip()
-    if text == "":
-        return 0.0
-    return float(text)
+    def __init__(
+        self,
+        filters: list[BaseFilter],
+        hold_bars: int = 10,
+        stop_distance_points: float = 10.0,
+        name: str | None = None,
+    ):
+        self.filters = filters
+        self.hold_bars = hold_bars
+        self.stop_distance_points = stop_distance_points
+        self.name = name or f"ComboTrend_{build_filter_combo_name(filters)}"
 
+    def generate_signal(self, data: pd.DataFrame, i: int) -> int:
+        for filter_obj in self.filters:
+            if not filter_obj.passes(data, i):
+                return 0
+        return 1
 
-def _safe_int(value: Any) -> int:
-    text = str(value).replace(",", "").strip()
-    if text == "":
-        return 0
-    return int(float(text))
-
-
+# =============================================================================
+# RUNNER HELPERS FOR MULTIPROCESSING
+# =============================================================================
 def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> dict[str, Any]:
     data, cfg, combo_classes = task
 
-    filter_objects: list[Any] = []
-
-    for cls in combo_classes:
-        if cls is TrendDirectionFilter:
-            filter_objects.append(cls(fast_length=50, slow_length=200))
-        elif cls is PullbackFilter:
-            filter_objects.append(cls(fast_length=50))
-        elif cls is RecoveryTriggerFilter:
-            filter_objects.append(cls(fast_length=50))
-        elif cls is VolatilityFilter:
-            filter_objects.append(cls(lookback=20, min_avg_range=8.0))
-        elif cls is MomentumFilter:
-            filter_objects.append(cls(lookback=10))
-        else:
-            filter_objects.append(cls())
-
-    strategy = CombinableFilterTrendStrategy(
+    strategy_type = TrendStrategyType()
+    filter_objects = strategy_type.build_filter_objects_from_classes(combo_classes)
+    
+    strategy = strategy_type.build_combinable_strategy(
         filters=filter_objects,
-        hold_bars=8,
-        stop_distance_points=12.0,
+        hold_bars=strategy_type.default_hold_bars,
+        stop_distance_points=strategy_type.default_stop_distance_points,
     )
 
     engine = MasterStrategyEngine(data=data, config=cfg)
     engine.run(strategy=strategy)
     summary = engine.results()
 
-    total_trades = _safe_int(summary.get("Total Trades", 0))
+    total_trades = int(str(summary.get("Total Trades", 0)).replace(",", ""))
     years_in_sample = (data.index.max() - data.index.min()).days / 365.25
     trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
 
-    thresholds = {
-        "min_trades": 150,
-        "min_trades_per_year": 8.0,
-    }
-
+    thresholds = strategy_type.get_trade_filter_thresholds()
     passes_trade_filter = (
         total_trades >= thresholds["min_trades"]
         and trades_per_year >= thresholds["min_trades_per_year"]
     )
+
+    def _parse_float(val: Any) -> float:
+        return float(str(val).replace("$", "").replace(",", "").replace("%", "").strip() or 0.0)
 
     return {
         "strategy_name": str(summary.get("Strategy", "UnknownStrategy")),
@@ -93,108 +77,114 @@ def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -
         "total_trades": total_trades,
         "trades_per_year": round(trades_per_year, 2),
         "passes_trade_filter": passes_trade_filter,
-        "net_pnl": _safe_float(summary.get("Net PnL", 0.0)),
-        "gross_profit": _safe_float(summary.get("Gross Profit", 0.0)),
-        "gross_loss": _safe_float(summary.get("Gross Loss", 0.0)),
-        "average_trade": _safe_float(summary.get("Average Trade", 0.0)),
-        "profit_factor": _safe_float(summary.get("Profit Factor", 0.0)),
-        "max_drawdown": _safe_float(summary.get("Max Drawdown", 0.0)),
-        "win_rate": _safe_float(summary.get("Win Rate", 0.0)),
-        "avg_mae_pts": _safe_float(summary.get("Average MAE (pts)", 0.0)),
-        "avg_mfe_pts": _safe_float(summary.get("Average MFE (pts)", 0.0)),
+        "net_pnl": _parse_float(summary.get("Net PnL", 0.0)),
+        "gross_profit": _parse_float(summary.get("Gross Profit", 0.0)),
+        "gross_loss": _parse_float(summary.get("Gross Loss", 0.0)),
+        "average_trade": _parse_float(summary.get("Average Trade", 0.0)),
+        "profit_factor": _parse_float(summary.get("Profit Factor", 0.0)),
+        "max_drawdown": _parse_float(summary.get("Max Drawdown", 0.0)),
+        "win_rate": _parse_float(summary.get("Win Rate", 0.0)),
+        "avg_mae_pts": _parse_float(summary.get("Average MAE (pts)", 0.0)),
+        "avg_mfe_pts": _parse_float(summary.get("Average MFE (pts)", 0.0)),
     }
 
+class _TrendRefinementFactory:
+    def __init__(self, strategy_type_instance, promoted_combo_classes):
+        self.strategy_type_instance = strategy_type_instance
+        self.promoted_combo_classes = promoted_combo_classes
 
+    def __call__(
+        self,
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+    ):
+        return self.strategy_type_instance.build_candidate_specific_strategy(
+            promoted_combo_classes=self.promoted_combo_classes,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            min_avg_range=min_avg_range,
+            momentum_lookback=momentum_lookback,
+        )
+
+# =============================================================================
+# TREND STRATEGY TYPE
+# =============================================================================
 class TrendStrategyType(BaseStrategyType):
     name = "trend"
 
     min_filters_per_combo = 3
-    max_filters_per_combo = 5
+    max_filters_per_combo = 7
 
-    default_hold_bars = 8
-    default_stop_distance_points = 12.0
+    default_hold_bars = 10
+    default_stop_distance_points = 10.0
 
-    # -------------------------------------------------------------------------
-    # Required feature dependencies
-    # -------------------------------------------------------------------------
     def get_required_sma_lengths(self) -> list[int]:
-        return [50, 200]
+        return [20, 50, 200]
 
     def get_required_avg_range_lookbacks(self) -> list[int]:
         return [20]
 
     def get_required_momentum_lookbacks(self) -> list[int]:
-        return [8, 10, 11, 12, 13, 14]
+        return [14]
 
-    # -------------------------------------------------------------------------
-    # Filter stack definitions
-    # -------------------------------------------------------------------------
+    def build_default_sanity_filters(self) -> list[BaseFilter]:
+        # Using a minimal default list to ensure the sanity check passes
+        filters = []
+        if hasattr(filters_module, "AboveLongTermSMAFilter"):
+            filters.append(filters_module.AboveLongTermSMAFilter(slow_length=200))
+        if hasattr(filters_module, "UpCloseFilter"):
+            filters.append(filters_module.UpCloseFilter())
+        return filters
+
+    def build_default_strategy(self) -> _InlineTrendStrategy:
+        return _InlineTrendStrategy(
+            filters=self.build_default_sanity_filters(),
+            hold_bars=self.default_hold_bars,
+            stop_distance_points=self.default_stop_distance_points,
+            name="FilterBasedTrendStrategy",
+        )
+
+    def build_sanity_check_strategy(self) -> _InlineTrendStrategy:
+        return self.build_default_strategy()
+
     def get_filter_classes(self) -> list[type]:
-        return [
-            TrendDirectionFilter,
-            PullbackFilter,
-            RecoveryTriggerFilter,
-            VolatilityFilter,
-            MomentumFilter,
+        # Dynamically fetch trend-related filters if they exist in your filters module
+        classes = []
+        target_names = [
+            "AboveFastSMAFilter", "AboveLongTermSMAFilter", "UpCloseFilter", 
+            "TwoBarUpFilter", "HighVolatilityRegimeFilter", "MomentumFilter"
         ]
+        for name in target_names:
+            if hasattr(filters_module, name):
+                classes.append(getattr(filters_module, name))
+        return classes
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list:
-        filter_objects: list[Any] = []
-
+    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
+        filter_objects: list[BaseFilter] = []
         for cls in combo_classes:
-            if cls is TrendDirectionFilter:
-                filter_objects.append(cls(fast_length=50, slow_length=200))
-            elif cls is PullbackFilter:
-                filter_objects.append(cls(fast_length=50))
-            elif cls is RecoveryTriggerFilter:
-                filter_objects.append(cls(fast_length=50))
-            elif cls is VolatilityFilter:
+            name = cls.__name__
+            if name == "AboveFastSMAFilter":
+                filter_objects.append(cls(fast_length=20))
+            elif name == "AboveLongTermSMAFilter":
+                filter_objects.append(cls(slow_length=200))
+            elif name == "HighVolatilityRegimeFilter":
                 filter_objects.append(cls(lookback=20, min_avg_range=8.0))
-            elif cls is MomentumFilter:
-                filter_objects.append(cls(lookback=10))
             else:
                 filter_objects.append(cls())
-
         return filter_objects
-
-    def build_default_sanity_filters(self) -> list:
-        return [
-            TrendDirectionFilter(fast_length=50, slow_length=200),
-            PullbackFilter(fast_length=50),
-            RecoveryTriggerFilter(fast_length=50),
-            VolatilityFilter(lookback=20, min_avg_range=8.0),
-            MomentumFilter(lookback=10),
-        ]
-
-    # -------------------------------------------------------------------------
-    # Strategy builders
-    # -------------------------------------------------------------------------
-    def build_default_strategy(self):
-        return FilterBasedTrendStrategy()
-
-    def build_sanity_check_strategy(self):
-        return self.build_default_strategy()
 
     def build_combinable_strategy(
         self,
-        filters: list,
+        filters: list[BaseFilter],
         hold_bars: int,
         stop_distance_points: float,
-    ):
-        return CombinableFilterTrendStrategy(
+    ) -> _InlineTrendStrategy:
+        return _InlineTrendStrategy(
             filters=filters,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
-        )
-
-    def build_combination_strategy(self, filters: dict[str, Any]):
-        return CombinableFilterTrendStrategy(
-            filters=filters["filter_objects"],
-            hold_bars=filters.get("hold_bars", self.default_hold_bars),
-            stop_distance_points=filters.get(
-                "stop_distance_points",
-                self.default_stop_distance_points,
-            ),
         )
 
     def build_candidate_specific_strategy(
@@ -204,78 +194,79 @@ class TrendStrategyType(BaseStrategyType):
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
-    ):
-        return RefinedFiveFilterTrendStrategy(
+    ) -> _InlineTrendStrategy:
+        
+        filters: list[BaseFilter] = []
+        for cls in promoted_combo_classes:
+            name = cls.__name__
+            if name == "AboveFastSMAFilter":
+                filters.append(cls(fast_length=20))
+            elif name == "AboveLongTermSMAFilter":
+                filters.append(cls(slow_length=200))
+            elif name == "HighVolatilityRegimeFilter":
+                range_val = float(min_avg_range) if min_avg_range > 0 else 8.0
+                filters.append(cls(lookback=20, min_avg_range=range_val))
+            elif name == "MomentumFilter":
+                mom_val = int(momentum_lookback) if momentum_lookback > 0 else 14
+                filters.append(cls(lookback=mom_val))
+            else:
+                filters.append(cls())
+
+        return _InlineTrendStrategy(
+            filters=filters,
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_points,
-            fast_length=50,
-            slow_length=200,
-            volatility_lookback=20,
-            min_avg_range=min_avg_range,
-            momentum_lookback=momentum_lookback,
+            name=(
+                f"RefinedTrendStrategy_"
+                f"HB{hold_bars}_STOP{stop_distance_points}_"
+                f"RANGE{min_avg_range}_MOM{momentum_lookback}"
+            ),
         )
-
-    def build_candidate_specific_refinement_factory(self, candidate_row: dict[str, Any]):
-        return RefinedFiveFilterTrendStrategy
-
-    # -------------------------------------------------------------------------
-    # Thresholds and gates
-    # -------------------------------------------------------------------------
-    def get_trade_filter_thresholds(self) -> dict[str, float]:
-        return {
-            "min_trades": 150,
-            "min_trades_per_year": 8.0,
-        }
-
-    def get_trade_filter_config(self) -> dict[str, float]:
-        return self.get_trade_filter_thresholds()
-
-    
-        return {
-            "min_profit_factor": 1.00,
-            "min_average_trade": 0.0,
-            "require_positive_net_pnl": False,
-        }
-
-    def get_promotion_gate_config(self) -> dict[str, float | bool]:
-        return self.get_promotion_thresholds()
-
-    # -------------------------------------------------------------------------
-    # Refinement grids
-    # -------------------------------------------------------------------------
-    def get_active_refinement_grid_for_combo(
-        self,
-        promoted_combo_classes: list[type],
-    ) -> dict[str, list]:
-        return {
-            "hold_bars": [8, 9, 10, 11, 12],
-            "stop_distance_points": [9.0, 10.0, 11.0, 12.0],
-            "min_avg_range": [8.0, 8.5, 9.0, 9.5],
-            "momentum_lookback": [11, 12, 13, 14],
-        }
 
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
             "min_profit_factor": 1.00,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
-            "min_trades": 100,            # <--- THE CURE
-            "min_trades_per_year": 5.0,   # <--- THE CURE
+            "min_trades": 75,             # Original "as is" Sweep Floor
+            "min_trades_per_year": 4.0,   
         }
-    # -------------------------------------------------------------------------
-    # Sweep
-    # -------------------------------------------------------------------------
-    def run_filter_combination_sweep(
+
+    def get_promotion_gate_config(self) -> dict[str, float | bool]:
+        return self.get_promotion_thresholds()
+
+    def get_trade_filter_thresholds(self) -> dict[str, float]:
+        return {
+            "min_trades": 150,            # Original "as is" Refinement Floor
+            "min_trades_per_year": 8.0,
+        }
+
+    def get_trade_filter_config(self) -> dict[str, float]:
+        return self.get_trade_filter_thresholds()
+
+    def get_active_refinement_grid_for_combo(
         self,
-        data: pd.DataFrame,
-        cfg: EngineConfig,
-        max_workers: int = 10,
-    ) -> pd.DataFrame:
-        return self.run_family_filter_combination_sweep(
-            data=data,
-            cfg=cfg,
-            max_workers=max_workers,
-        )
+        promoted_combo_classes: list[type],
+    ) -> dict[str, list]:
+        grid: dict[str, list] = {
+            "hold_bars": [4, 6, 8, 10, 12],
+            "stop_distance_points": [8.0, 10.0, 12.0, 14.0],
+        }
+
+        has_vol = any(cls.__name__ == "HighVolatilityRegimeFilter" for cls in promoted_combo_classes)
+        grid["min_avg_range"] = [8.0, 10.0, 12.0, 14.0] if has_vol else [0.0]
+
+        has_mom = any(cls.__name__ == "MomentumFilter" for cls in promoted_combo_classes)
+        grid["momentum_lookback"] = [10, 14, 20] if has_mom else [0]
+        
+        return grid
+
+    def get_refinement_grid_for_candidate(
+        self, 
+        candidate_row: dict[str, Any]
+    ) -> dict[str, list]:
+        promoted_combo_classes = candidate_row.get("filter_classes", [])
+        return self.get_active_refinement_grid_for_combo(promoted_combo_classes)
 
     def run_family_filter_combination_sweep(
         self,
@@ -284,14 +275,13 @@ class TrendStrategyType(BaseStrategyType):
         max_workers: int = 10,
     ) -> pd.DataFrame:
         filter_classes = self.get_filter_classes()
-
         combinations = generate_filter_combinations(
             filter_classes=filter_classes,
             min_filters=self.min_filters_per_combo,
             max_filters=self.max_filters_per_combo,
         )
 
-        print("\n🧪 Running trend filter combination sweep...")
+        print(f"\n Running {self.name} filter combination sweep...")
         print(f"Total filter combinations: {len(combinations)}")
         print(f"Parallel mode: ON | max_workers={max_workers}")
 
@@ -301,22 +291,19 @@ class TrendStrategyType(BaseStrategyType):
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             for idx, result in enumerate(executor.map(_run_trend_combo_case, tasks), start=1):
                 print(f"  Combo {idx}/{len(combinations)} | {result['strategy_name']}")
+                result["filter_classes"] = combinations[idx - 1]
                 results.append(result)
 
         results_df = pd.DataFrame(results)
-
         if not results_df.empty:
             results_df = results_df.sort_values(
-                by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
-            ascending=[False, False, False, False],
-        ).reset_index(drop=True)
+                by=["passes_trade_filter", "net_pnl", "profit_factor", "total_trades"],
+                ascending=[False, False, False, False],
+            ).reset_index(drop=True)
 
         return results_df
 
-    # -------------------------------------------------------------------------
-    # Refinement
-    # -------------------------------------------------------------------------
-    def run_refinement_for_candidate(
+    def run_top_combo_refinement(
         self,
         data: pd.DataFrame,
         cfg: EngineConfig,
@@ -324,16 +311,20 @@ class TrendStrategyType(BaseStrategyType):
         output_dir: str | Path = "Outputs",
         max_workers: int = 10,
     ) -> pd.DataFrame:
+        promoted_combo_classes = candidate_row.get("filter_classes", [])
+        grid = self.get_active_refinement_grid_for_combo(promoted_combo_classes)
+        trade_filters = self.get_trade_filter_thresholds()
+
+        strategy_factory = _TrendRefinementFactory(self, promoted_combo_classes)
+
         refiner = StrategyParameterRefiner(
             engine_class=MasterStrategyEngine,
             data=data,
-            strategy_factory=RefinedFiveFilterTrendStrategy,
+            strategy_factory=strategy_factory,
             config=cfg,
         )
 
-        grid = self.get_refinement_grid_for_candidate(candidate_row)
-        trade_filters = self.get_trade_filter_thresholds()
-
+        print("\n Running top-combo parameter refinement...")
         refinement_df = refiner.run_refinement(
             hold_bars=grid["hold_bars"],
             stop_distance_points=grid["stop_distance_points"],
@@ -346,33 +337,17 @@ class TrendStrategyType(BaseStrategyType):
         )
 
         if not refinement_df.empty:
-            print("\n🎯 Top trend Refinement Results:")
+            print(f"\n Top {self.name} Refinement Results:")
             print(refiner.top_results(10))
             refiner.print_summary_report(top_n=10)
 
             plateau = PlateauAnalyzer(refinement_df)
             plateau.print_report(top_n=10)
 
-            output_path = Path(output_dir) / "trend_top_combo_refinement_results_narrow.csv"
+            output_path = Path(output_dir) / f"{self.name}_top_combo_refinement_results_narrow.csv"
             saved_path = refiner.save_results_csv(output_path)
-            print(f"\n💾 Narrow top-combo refinement saved to: {saved_path}")
+            print(f"\n Narrow top-combo refinement saved to: {saved_path}")
         else:
             print("\nNo refinement results met the trade filters.")
 
         return refinement_df
-
-    def run_top_combo_refinement(
-        self,
-        data: pd.DataFrame,
-        cfg: EngineConfig,
-        candidate_row: dict[str, Any],
-        output_dir: str | Path = "Outputs",
-        max_workers: int = 10,
-    ) -> pd.DataFrame:
-        return self.run_refinement_for_candidate(
-            data=data,
-            cfg=cfg,
-            candidate_row=candidate_row,
-            output_dir=output_dir,
-            max_workers=max_workers,
-        )

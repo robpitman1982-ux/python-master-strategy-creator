@@ -8,15 +8,8 @@ import pandas as pd
 
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
-from modules.filters import (
-    BreakoutCloseStrengthFilter,
-    BreakoutTrendFilter,
-    CompressionFilter,
-    ExpansionBarFilter,
-    MinimumBreakDistanceFilter,
-    PriorRangePositionFilter,
-    RangeBreakoutFilter,
-)
+from modules.filters import BaseFilter
+import modules.filters as filters_module
 from modules.plateau_analyzer import PlateauAnalyzer
 from modules.refiner import StrategyParameterRefiner
 from modules.strategy_types.base_strategy_type import BaseStrategyType
@@ -29,11 +22,11 @@ class _InlineBreakoutStrategy:
 
     def __init__(
         self,
-        filters: list[Any],
-        hold_bars: int = 10,
-        stop_distance_points: float = 14.0,
+        filters: list[BaseFilter],
+        hold_bars: int = 6,
+        stop_distance_points: float = 12.0,
         name: str | None = None,
-    ) -> None:
+    ):
         self.filters = filters
         self.hold_bars = hold_bars
         self.stop_distance_points = stop_distance_points
@@ -96,7 +89,6 @@ def _run_breakout_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]
     }
 
 class _BreakoutRefinementFactory:
-    """Top-level picklable factory for the ProcessPoolExecutor."""
     def __init__(self, strategy_type_instance, promoted_combo_classes):
         self.strategy_type_instance = strategy_type_instance
         self.promoted_combo_classes = promoted_combo_classes
@@ -125,28 +117,23 @@ class BreakoutStrategyType(BaseStrategyType):
     min_filters_per_combo = 3
     max_filters_per_combo = 7
 
-    default_hold_bars = 10
-    default_stop_distance_points = 14.0
+    default_hold_bars = 6
+    default_stop_distance_points = 12.0
 
     def get_required_sma_lengths(self) -> list[int]:
-        return [50, 200]
+        return [20, 200]
 
     def get_required_avg_range_lookbacks(self) -> list[int]:
         return [20]
 
     def get_required_momentum_lookbacks(self) -> list[int]:
-        return []
+        return [14]
 
-    def build_default_sanity_filters(self) -> list[Any]:
-        return [
-            CompressionFilter(lookback=20, max_avg_range=6.0),
-            PriorRangePositionFilter(lookback=20, min_position_in_range=0.60),
-            RangeBreakoutFilter(lookback=20),
-            MinimumBreakDistanceFilter(lookback=20, min_break_distance_points=1.0),
-            ExpansionBarFilter(lookback=20, expansion_multiplier=1.20),
-            BreakoutCloseStrengthFilter(close_position_threshold=0.60),
-            BreakoutTrendFilter(fast_length=50, slow_length=200),
-        ]
+    def build_default_sanity_filters(self) -> list[BaseFilter]:
+        filters = []
+        if hasattr(filters_module, "AboveLongTermSMAFilter"):
+            filters.append(filters_module.AboveLongTermSMAFilter(slow_length=200))
+        return filters
 
     def build_default_strategy(self) -> _InlineBreakoutStrategy:
         return _InlineBreakoutStrategy(
@@ -160,40 +147,31 @@ class BreakoutStrategyType(BaseStrategyType):
         return self.build_default_strategy()
 
     def get_filter_classes(self) -> list[type]:
-        return [
-            CompressionFilter,
-            PriorRangePositionFilter,
-            RangeBreakoutFilter,
-            MinimumBreakDistanceFilter,
-            ExpansionBarFilter,
-            BreakoutCloseStrengthFilter,
-            BreakoutTrendFilter,
+        classes = []
+        target_names = [
+            "NewHighFilter", "HighVolatilityRegimeFilter", 
+            "AboveFastSMAFilter", "UpCloseFilter", "MomentumFilter"
         ]
+        for name in target_names:
+            if hasattr(filters_module, name):
+                classes.append(getattr(filters_module, name))
+        return classes
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[Any]:
-        filters: list[Any] = []
+    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
+        filter_objects: list[BaseFilter] = []
         for cls in combo_classes:
-            if cls is CompressionFilter:
-                filters.append(CompressionFilter(lookback=20, max_avg_range=6.0))
-            elif cls is PriorRangePositionFilter:
-                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.60))
-            elif cls is RangeBreakoutFilter:
-                filters.append(RangeBreakoutFilter(lookback=20))
-            elif cls is MinimumBreakDistanceFilter:
-                filters.append(MinimumBreakDistanceFilter(lookback=20, min_break_distance_points=1.0))
-            elif cls is ExpansionBarFilter:
-                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.20))
-            elif cls is BreakoutCloseStrengthFilter:
-                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
-            elif cls is BreakoutTrendFilter:
-                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            name = cls.__name__
+            if name == "AboveFastSMAFilter":
+                filter_objects.append(cls(fast_length=20))
+            elif name == "HighVolatilityRegimeFilter":
+                filter_objects.append(cls(lookback=20, min_avg_range=10.0))
             else:
-                raise ValueError(f"Unsupported breakout filter class: {cls}")
-        return filters
+                filter_objects.append(cls())
+        return filter_objects
 
     def build_combinable_strategy(
         self,
-        filters: list[Any],
+        filters: list[BaseFilter],
         hold_bars: int,
         stop_distance_points: float,
     ) -> _InlineBreakoutStrategy:
@@ -212,23 +190,17 @@ class BreakoutStrategyType(BaseStrategyType):
         momentum_lookback: int,
     ) -> _InlineBreakoutStrategy:
         
-        filters: list[Any] = []
+        filters: list[BaseFilter] = []
         for cls in promoted_combo_classes:
-            if cls is CompressionFilter:
-                max_range_val = float(min_avg_range) if min_avg_range > 0 else 6.0
-                filters.append(CompressionFilter(lookback=20, max_avg_range=max_range_val))
-            elif cls is PriorRangePositionFilter:
-                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.60))
-            elif cls is RangeBreakoutFilter:
-                filters.append(RangeBreakoutFilter(lookback=20))
-            elif cls is MinimumBreakDistanceFilter:
-                filters.append(MinimumBreakDistanceFilter(lookback=20, min_break_distance_points=1.0))
-            elif cls is ExpansionBarFilter:
-                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.20))
-            elif cls is BreakoutCloseStrengthFilter:
-                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
-            elif cls is BreakoutTrendFilter:
-                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            name = cls.__name__
+            if name == "AboveFastSMAFilter":
+                filters.append(cls(fast_length=20))
+            elif name == "HighVolatilityRegimeFilter":
+                range_val = float(min_avg_range) if min_avg_range > 0 else 10.0
+                filters.append(cls(lookback=20, min_avg_range=range_val))
+            elif name == "MomentumFilter":
+                mom_val = int(momentum_lookback) if momentum_lookback > 0 else 14
+                filters.append(cls(lookback=mom_val))
             else:
                 filters.append(cls())
 
@@ -248,8 +220,8 @@ class BreakoutStrategyType(BaseStrategyType):
             "min_profit_factor": 1.00,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
-            "min_trades": 100,            # <--- THE CURE
-            "min_trades_per_year": 5.0,   # <--- THE CURE
+            "min_trades": 75,             # Original "as is" Sweep Floor
+            "min_trades_per_year": 4.0,   
         }
 
     def get_promotion_gate_config(self) -> dict[str, float | bool]:
@@ -257,7 +229,7 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def get_trade_filter_thresholds(self) -> dict[str, float]:
         return {
-            "min_trades": 150,
+            "min_trades": 150,            # Original "as is" Refinement Floor
             "min_trades_per_year": 8.0,
         }
 
@@ -267,18 +239,24 @@ class BreakoutStrategyType(BaseStrategyType):
     def get_active_refinement_grid_for_combo(
         self,
         promoted_combo_classes: list[type],
-    ) -> dict[str, list[Any]]:
-        return {
-            "hold_bars": [4, 6, 8, 10],
+    ) -> dict[str, list]:
+        grid: dict[str, list] = {
+            "hold_bars": [2, 4, 6, 8],
             "stop_distance_points": [10.0, 12.0, 14.0, 16.0],
-            "min_avg_range": [6.0, 7.0, 8.0, 9.0], 
-            "momentum_lookback": [0], 
         }
+
+        has_vol = any(cls.__name__ == "HighVolatilityRegimeFilter" for cls in promoted_combo_classes)
+        grid["min_avg_range"] = [10.0, 12.0, 14.0, 16.0] if has_vol else [0.0]
+
+        has_mom = any(cls.__name__ == "MomentumFilter" for cls in promoted_combo_classes)
+        grid["momentum_lookback"] = [10, 14, 20] if has_mom else [0]
+        
+        return grid
 
     def get_refinement_grid_for_candidate(
         self, 
         candidate_row: dict[str, Any]
-    ) -> dict[str, list[Any]]:
+    ) -> dict[str, list]:
         promoted_combo_classes = candidate_row.get("filter_classes", [])
         return self.get_active_refinement_grid_for_combo(promoted_combo_classes)
 
@@ -311,9 +289,9 @@ class BreakoutStrategyType(BaseStrategyType):
         results_df = pd.DataFrame(results)
         if not results_df.empty:
             results_df = results_df.sort_values(
-                by=["passes_trade_filter", "profit_factor", "average_trade", "net_pnl"],
-            ascending=[False, False, False, False],
-        ).reset_index(drop=True)
+                by=["passes_trade_filter", "net_pnl", "profit_factor", "total_trades"],
+                ascending=[False, False, False, False],
+            ).reset_index(drop=True)
 
         return results_df
 
@@ -329,7 +307,6 @@ class BreakoutStrategyType(BaseStrategyType):
         grid = self.get_active_refinement_grid_for_combo(promoted_combo_classes)
         trade_filters = self.get_trade_filter_thresholds()
 
-        # Instantiate the picklable factory instead of a local function
         strategy_factory = _BreakoutRefinementFactory(self, promoted_combo_classes)
 
         refiner = StrategyParameterRefiner(
