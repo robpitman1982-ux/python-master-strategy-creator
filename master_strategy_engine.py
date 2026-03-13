@@ -15,6 +15,7 @@ from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
 from modules.strategy_types import get_strategy_type, list_strategy_types
+from modules.portfolio_evaluator import evaluate_portfolio  # <-- NEW EVALUATOR IMPORT
 
 
 # =============================================================================
@@ -27,12 +28,12 @@ CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
 # "breakout"
 # "mean_reversion"
 # "all"
-STRATEGY_TYPE_NAME = "mean_reversion"
+STRATEGY_TYPE_NAME = "all"
 
 OUTPUTS_DIR = Path("Outputs")
 MAX_WORKERS_SWEEP = 10
 MAX_WORKERS_REFINEMENT = 10
-MAX_FALLBACK_CANDIDATES = 10  # Increased to 10 to ensure we catch robust edges
+MAX_FALLBACK_CANDIDATES = 10  # Ensure we catch robust edges
 
 
 # =============================================================================
@@ -657,12 +658,48 @@ if __name__ == "__main__":
 
     leaderboard_df = build_family_leaderboard(family_summary_df)
     leaderboard_path = OUTPUTS_DIR / "family_leaderboard_results.csv"
+    
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
 
         print("\n🏆 FAMILY LEADERBOARD")
         print(leaderboard_df)
         print(f"\n💾 Family leaderboard saved to: {leaderboard_path}")
+
+        # =====================================================================
+        # AUTO-EVALUATOR INJECTION
+        # =====================================================================
+        print("\n" + "=" * 72)
+        print("🔬 STARTING AUTOMATED PORTFOLIO EVALUATION")
+        print("=" * 72)
+        
+        review_table, returns_df, corr_matrix = evaluate_portfolio(
+            leaderboard_csv=leaderboard_path,
+            data_csv=CSV_PATH,
+            market_name="ES",
+            timeframe="60m"
+        )
+
+        if not review_table.empty:
+            review_table_path = OUTPUTS_DIR / "portfolio_review_table.csv"
+            returns_path = OUTPUTS_DIR / "strategy_returns.csv"
+            corr_path = OUTPUTS_DIR / "correlation_matrix.csv"
+
+            review_table.to_csv(review_table_path, index=False)
+            returns_df.to_csv(returns_path, index=True)
+            corr_matrix.to_csv(corr_path, index=True)
+
+            print("\n✅ PORTFOLIO EVALUATION COMPLETE - FILES GENERATED:")
+            print(f"  1. Master Review Table: {review_table_path}")
+            print(f"  2. Daily Returns Log:   {returns_path}")
+            print(f"  3. Correlation Matrix:  {corr_path}")
+            
+            print("\n[Preview of Portfolio Review Table]")
+            preview_cols = ["strategy_family", "profit_factor", "recent_12m_pf", "weighted_pf_score", "mc_max_dd_99"]
+            preview_df = review_table[[c for c in preview_cols if c in review_table.columns]]
+            print(preview_df.to_string())
+        else:
+            print("\n❌ Portfolio Evaluation failed or returned empty results.")
 
     total_elapsed = time.perf_counter() - total_start
     print(f"\n🏁 Total script runtime: {total_elapsed:.2f} seconds")
