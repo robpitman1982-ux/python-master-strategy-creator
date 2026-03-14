@@ -9,12 +9,9 @@ import pandas as pd
 
 @dataclass
 class EngineConfig:
-    # Global Presets from Master Prompt
     initial_capital: float = 250_000.0
     risk_per_trade: float = 0.01
     symbol: str = "UNKNOWN"
-
-    # Friction Assumptions
     commission_per_contract: float = 2.00
     slippage_ticks: int = 4
     tick_value: float = 12.50
@@ -53,11 +50,7 @@ class MasterStrategyEngine:
         self.equity_curve: list[dict] = []
         self.strategy_name: str = "UnknownStrategy"
 
-    def calculate_position_size_contracts(
-        self,
-        stop_distance_points: float,
-        dollars_per_point: Optional[float] = None,
-    ) -> int:
+    def calculate_position_size_contracts(self, stop_distance_points: float, dollars_per_point: Optional[float] = None) -> int:
         if dollars_per_point is None:
             dollars_per_point = self.config.dollars_per_point
 
@@ -70,13 +63,7 @@ class MasterStrategyEngine:
 
         return max(1, contracts) if contracts > 0 else 0
 
-    def _close_position(
-        self,
-        exit_time: pd.Timestamp,
-        exit_price: float,
-        bars_held: int,
-        exit_reason: str,
-    ) -> None:
+    def _close_position(self, exit_time: pd.Timestamp, exit_price: float, bars_held: int, exit_reason: str) -> None:
         entry_price = self.position["entry_price"]
         contracts = self.position["contracts"]
 
@@ -107,19 +94,13 @@ class MasterStrategyEngine:
             return
 
         entry_price = self.position["entry_price"]
-
         adverse_excursion = bar_low - entry_price
         favorable_excursion = bar_high - entry_price
 
         self.position["mae_points"] = min(self.position["mae_points"], adverse_excursion)
         self.position["mfe_points"] = max(self.position["mfe_points"], favorable_excursion)
 
-    def run(
-        self,
-        strategy,
-        hold_bars: Optional[int] = None,
-        stop_distance_points: Optional[float] = None,
-    ) -> None:
+    def run(self, strategy, hold_bars: Optional[int] = None, stop_distance_atr: Optional[float] = None) -> None:
         if len(self.data) < 2:
             raise ValueError("Not enough data to run backtest.")
 
@@ -132,15 +113,12 @@ class MasterStrategyEngine:
         if hold_bars is None:
             hold_bars = getattr(strategy, "hold_bars", 3)
 
-        # Backward compatibility + ATR Injection
-        stop_dist_val = stop_distance_points if stop_distance_points is not None else getattr(strategy, "stop_distance_points", 10.0)
+        stop_dist_val = stop_distance_atr if stop_distance_atr is not None else getattr(strategy, "stop_distance_points", 10.0)
         use_atr = hasattr(strategy, "stop_distance_atr")
         if use_atr:
             stop_mult = getattr(strategy, "stop_distance_atr")
 
-        slippage_points = self.config.slippage_ticks * (
-            self.config.tick_value / self.config.dollars_per_point
-        )
+        slippage_points = self.config.slippage_ticks * (self.config.tick_value / self.config.dollars_per_point)
 
         for i in range(len(self.data)):
             bar = self.data.iloc[i]
@@ -149,48 +127,28 @@ class MasterStrategyEngine:
             low_price = float(bar["low"])
             high_price = float(bar["high"])
 
-            self.equity_curve.append(
-                {
-                    "datetime": timestamp,
-                    "equity": self.current_capital,
-                }
-            )
+            self.equity_curve.append({"datetime": timestamp, "equity": self.current_capital})
 
             if self.position is not None:
                 bars_held = i - self.position["entry_index"]
-
-                self._update_open_position_excursions(
-                    bar_low=low_price,
-                    bar_high=high_price,
-                )
+                self._update_open_position_excursions(bar_low=low_price, bar_high=high_price)
 
                 stop_price = self.position["stop_price"]
 
                 if low_price <= stop_price:
                     stop_exit_price = stop_price - (slippage_points / 2.0)
-                    self._close_position(
-                        exit_time=timestamp,
-                        exit_price=stop_exit_price,
-                        bars_held=bars_held,
-                        exit_reason="STOP",
-                    )
+                    self._close_position(exit_time=timestamp, exit_price=stop_exit_price, bars_held=bars_held, exit_reason="STOP")
                     continue
 
                 if bars_held >= hold_bars:
                     time_exit_price = close_price - (slippage_points / 2.0)
-                    self._close_position(
-                        exit_time=timestamp,
-                        exit_price=time_exit_price,
-                        bars_held=bars_held,
-                        exit_reason="TIME",
-                    )
+                    self._close_position(exit_time=timestamp, exit_price=time_exit_price, bars_held=bars_held, exit_reason="TIME")
                     continue
 
             if self.position is None:
                 signal = strategy.generate_signal(self.data, i)
 
                 if signal == 1:
-                    # Calculate dynamic stop based on current ATR
                     if use_atr:
                         current_atr = float(bar.get("atr_20", 10.0))
                         if pd.isna(current_atr) or current_atr <= 0:
@@ -199,84 +157,40 @@ class MasterStrategyEngine:
                     else:
                         stop_dist_pts = stop_dist_val
 
-                    contracts = self.calculate_position_size_contracts(
-                        stop_distance_points=stop_dist_pts
-                    )
+                    contracts = self.calculate_position_size_contracts(stop_distance_points=stop_dist_pts)
 
                     if contracts > 0:
                         entry_price = close_price + (slippage_points / 2.0)
                         stop_price = entry_price - stop_dist_pts
 
                         self.position = {
-                            "entry_index": i,
-                            "entry_time": timestamp,
-                            "entry_price": entry_price,
-                            "stop_price": stop_price,
-                            "contracts": contracts,
-                            "mae_points": 0.0,
-                            "mfe_points": 0.0,
+                            "entry_index": i, "entry_time": timestamp, "entry_price": entry_price,
+                            "stop_price": stop_price, "contracts": contracts, "mae_points": 0.0, "mfe_points": 0.0,
                         }
 
         if self.position is not None:
             final_bar = self.data.iloc[-1]
             final_time = self.data.index[-1]
             final_close = float(final_bar["close"])
-            final_low = float(final_bar["low"])
-            final_high = float(final_bar["high"])
             bars_held = len(self.data) - 1 - self.position["entry_index"]
 
-            self._update_open_position_excursions(
-                bar_low=final_low,
-                bar_high=final_high,
-            )
-
-            final_exit_price = final_close - (slippage_points / 2.0)
-            self._close_position(
-                exit_time=final_time,
-                exit_price=final_exit_price,
-                bars_held=bars_held,
-                exit_reason="FINAL_BAR",
-            )
+            self._update_open_position_excursions(bar_low=float(final_bar["low"]), bar_high=float(final_bar["high"]))
+            self._close_position(exit_time=final_time, exit_price=final_close - (slippage_points / 2.0), bars_held=bars_held, exit_reason="FINAL_BAR")
 
     def trades_dataframe(self) -> pd.DataFrame:
-        if not self.trades:
-            return pd.DataFrame()
-
-        return pd.DataFrame(
-            [
-                {
-                    "entry_time": t.entry_time,
-                    "exit_time": t.exit_time,
-                    "direction": t.direction,
-                    "entry_price": t.entry_price,
-                    "exit_price": t.exit_price,
-                    "contracts": t.contracts,
-                    "pnl": t.pnl,
-                    "bars_held": t.bars_held,
-                    "exit_reason": t.exit_reason,
-                    "mae_points": t.mae_points,
-                    "mfe_points": t.mfe_points,
-                }
-                for t in self.trades
-            ]
-        )
+        if not self.trades: return pd.DataFrame()
+        return pd.DataFrame([t.__dict__ for t in self.trades])
 
     def equity_curve_dataframe(self) -> pd.DataFrame:
-        if not self.equity_curve:
-            return pd.DataFrame()
-
+        if not self.equity_curve: return pd.DataFrame()
         return pd.DataFrame(self.equity_curve)
 
     def _calculate_max_drawdown(self) -> float:
         equity_df = self.equity_curve_dataframe()
-        if equity_df.empty or "equity" not in equity_df.columns:
-            return 0.0
-
+        if equity_df.empty or "equity" not in equity_df.columns: return 0.0
         running_peak = equity_df["equity"].cummax()
         drawdown = equity_df["equity"] - running_peak
-        max_drawdown = float(drawdown.min())
-
-        return max_drawdown
+        return float(drawdown.min())
 
     def results(self) -> dict:
         total_pnl = self.current_capital - self.initial_capital
@@ -290,28 +204,59 @@ class MasterStrategyEngine:
         losses = sum(1 for t in self.trades if t.pnl <= 0)
         win_rate = (wins / total_trades * 100.0) if total_trades > 0 else 0.0
         average_trade = (net_pnl / total_trades) if total_trades > 0 else 0.0
-
-        if gross_loss != 0:
-            profit_factor = gross_profit / abs(gross_loss)
-        else:
-            profit_factor = 0.0
-
+        profit_factor = gross_profit / abs(gross_loss) if gross_loss != 0 else 0.0
         max_drawdown = self._calculate_max_drawdown()
+
+        # --- ADVANCED METRICS ENGINE LOGIC (IS/OOS, Recent 12m, Quality Flag) ---
+        OOS_SPLIT_DATE = pd.to_datetime("2019-01-01")
+        if self.trades:
+            max_date = max(t.exit_time for t in self.trades)
+            recent_cutoff = max_date - pd.Timedelta(days=365)
+
+            is_trades_list = [t for t in self.trades if t.exit_time < OOS_SPLIT_DATE]
+            oos_trades_list = [t for t in self.trades if t.exit_time >= OOS_SPLIT_DATE]
+            recent_trades_list = [t for t in self.trades if t.exit_time >= recent_cutoff]
+
+            def calc_pf(t_list):
+                g_p = sum(x.pnl for x in t_list if x.pnl > 0)
+                g_l = sum(x.pnl for x in t_list if x.pnl < 0)
+                return g_p / abs(g_l) if g_l != 0 else float(g_p)
+
+            is_pf = calc_pf(is_trades_list)
+            oos_pf = calc_pf(oos_trades_list)
+            recent_pf = calc_pf(recent_trades_list)
+            is_trades_count = len(is_trades_list)
+            oos_trades_count = len(oos_trades_list)
+            recent_trades_count = len(recent_trades_list)
+        else:
+            is_pf = oos_pf = recent_pf = 0.0
+            is_trades_count = oos_trades_count = recent_trades_count = 0
+
+        # Determine Strategy Quality Flag
+        if is_trades_count + oos_trades_count == 0:
+            quality_flag = "NO_TRADES"
+        elif is_trades_count < 50 and oos_trades_count >= 50:
+            quality_flag = "LOW_IS_SAMPLE / OOS_HEAVY"
+        elif is_trades_count >= 50 and oos_trades_count < 25:
+            quality_flag = "EDGE_DECAYED_OOS"
+        elif is_pf < 1.0 and oos_pf >= 1.2:
+            quality_flag = "REGIME_DEPENDENT"
+        elif is_pf > 1.2 and oos_pf < 1.0:
+            quality_flag = "BROKEN_IN_OOS"
+        elif is_pf >= 1.15 and oos_pf >= 1.15:
+            quality_flag = "ROBUST"
+        elif is_pf >= 1.0 and oos_pf >= 1.0:
+            quality_flag = "STABLE"
+        else:
+            quality_flag = "MARGINAL"
+        # ------------------------------------------------------------------------
 
         exit_reason_counts: dict[str, int] = {}
         for trade in self.trades:
             exit_reason_counts[trade.exit_reason] = exit_reason_counts.get(trade.exit_reason, 0) + 1
 
-        average_mae = (
-            sum(t.mae_points for t in self.trades) / total_trades
-            if total_trades > 0
-            else 0.0
-        )
-        average_mfe = (
-            sum(t.mfe_points for t in self.trades) / total_trades
-            if total_trades > 0
-            else 0.0
-        )
+        average_mae = (sum(t.mae_points for t in self.trades) / total_trades if total_trades > 0 else 0.0)
+        average_mfe = (sum(t.mfe_points for t in self.trades) / total_trades if total_trades > 0 else 0.0)
 
         return {
             "Strategy": self.strategy_name,
@@ -331,4 +276,13 @@ class MasterStrategyEngine:
             "Losses": losses,
             "Win Rate": f"{win_rate:.2f}%",
             "Exit Reasons": exit_reason_counts,
+            
+            # New Advanced Outputs
+            "IS Trades": is_trades_count,
+            "OOS Trades": oos_trades_count,
+            "IS PF": f"{is_pf:.2f}",
+            "OOS PF": f"{oos_pf:.2f}",
+            "Recent 12m Trades": recent_trades_count,
+            "Recent 12m PF": f"{recent_pf:.2f}",
+            "Quality Flag": quality_flag,
         }

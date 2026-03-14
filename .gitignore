@@ -3,3 +3,5 @@ __pycache__/
 .vscode/
 Outputs/
 Data/
+paste.md
+.llm-context-history/

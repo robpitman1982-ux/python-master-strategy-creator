@@ -52,7 +52,6 @@ class RecoveryTriggerFilter(BaseFilter):
 class VolatilityFilter(BaseFilter):
     name = "VolatilityFilter"
     def __init__(self, lookback: int = 20, min_atr_mult: float = 1.0): 
-        # Upgraded to ATR Multiplier!
         self.lookback = lookback
         self.min_atr_mult = min_atr_mult
 
@@ -60,7 +59,6 @@ class VolatilityFilter(BaseFilter):
         if i < self.lookback * 2: return False
         atr_col = f"atr_{self.lookback}"
         current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
-        # Check against a longer-term average ATR to detect high vol regime
         long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
         return bool(current_atr >= (long_term_atr * self.min_atr_mult))
 
@@ -91,8 +89,7 @@ class TwoBarUpFilter(BaseFilter):
 
 class CompressionFilter(BaseFilter):
     name = "CompressionFilter"
-    def __init__(self, lookback: int = 20, max_atr_mult: float = 0.8): 
-        # Upgraded! Requires current ATR to be compressed below a multiplier of historical ATR
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 0.75): 
         self.lookback = lookback
         self.max_atr_mult = max_atr_mult
 
@@ -115,7 +112,7 @@ class RangeBreakoutFilter(BaseFilter):
 
 class ExpansionBarFilter(BaseFilter):
     name = "ExpansionBarFilter"
-    def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.25):
+    def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.50):
         self.lookback = lookback
         self.expansion_multiplier = expansion_multiplier
 
@@ -193,8 +190,7 @@ class BelowFastSMAFilter(BaseFilter):
 
 class DistanceBelowSMAFilter(BaseFilter):
     name = "DistanceBelowSMAFilter"
-    def __init__(self, fast_length: int = 20, min_distance_atr: float = 1.0): 
-        # Upgraded to ATR Multiplier
+    def __init__(self, fast_length: int = 20, min_distance_atr: float = 0.3): 
         self.fast_length = fast_length
         self.min_distance_atr = min_distance_atr
 
@@ -224,8 +220,7 @@ class ReversalUpBarFilter(BaseFilter):
 
 class LowVolatilityRegimeFilter(BaseFilter):
     name = "LowVolatilityRegimeFilter"
-    def __init__(self, lookback: int = 20, max_atr_mult: float = 1.2): 
-        # Upgraded to ATR compression
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 1.0): 
         self.lookback = lookback
         self.max_atr_mult = max_atr_mult
 
