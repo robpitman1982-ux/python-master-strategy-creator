@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import os
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import product
-from pathlib import Path
 from typing import Any, Callable
 
 import pandas as pd
+
 from modules.engine import EngineConfig
 
 _WORKER_ENGINE_CLASS = None
@@ -16,38 +17,64 @@ _WORKER_DATA = None
 _WORKER_STRATEGY_FACTORY = None
 _WORKER_CONFIG = None
 
+
 def _parse_money(value: Any) -> float:
-    if isinstance(value, (int, float)): return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
     text = str(value).replace("$", "").replace(",", "").strip()
     return float(text)
 
+
 def _parse_percent(value: Any) -> float:
-    if isinstance(value, (int, float)): return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
     text = str(value).replace("%", "").strip()
     return float(text)
 
+
 def _calculate_years_in_sample(data: pd.DataFrame) -> float:
-    if data.empty: return 0.0
+    if data.empty:
+        return 0.0
     total_days = (data.index.max() - data.index.min()).days
     return total_days / 365.25 if total_days > 0 else 0.0
 
+
 def _init_refinement_worker(engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig) -> None:
     global _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG
-    _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG = engine_class, data, strategy_factory, config
+    _WORKER_ENGINE_CLASS = engine_class
+    _WORKER_DATA = data
+    _WORKER_STRATEGY_FACTORY = strategy_factory
+    _WORKER_CONFIG = config
+
 
 def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
     strategy = _WORKER_STRATEGY_FACTORY(
-        hold_bars=task["hold_bars"], stop_distance_points=task["stop_distance_points"],
-        min_avg_range=task["min_avg_range"], momentum_lookback=task["momentum_lookback"],
+        hold_bars=task["hold_bars"],
+        stop_distance_points=task["stop_distance_points"],
+        min_avg_range=task["min_avg_range"],
+        momentum_lookback=task["momentum_lookback"],
     )
+
     engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
     engine.run(strategy=strategy)
     summary = engine.results()
-    
+
     total_trades = int(summary["Total Trades"])
     years_in_sample = float(task["years_in_sample"])
     trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
-    passes_trade_filter = (total_trades >= task["min_trades"] and trades_per_year >= task["min_trades_per_year"])
+
+    min_trades = int(task["min_trades"])
+    min_trades_per_year = float(task["min_trades_per_year"])
+
+    passes_trade_filter = (
+        total_trades >= min_trades and trades_per_year >= min_trades_per_year
+    )
+
+    reject_reason = "ACCEPT"
+    if total_trades < min_trades:
+        reject_reason = f"REJECT_LOW_TRADES({total_trades}<{min_trades})"
+    elif trades_per_year < min_trades_per_year:
+        reject_reason = f"REJECT_LOW_TRADES_PER_YEAR({trades_per_year:.2f}<{min_trades_per_year:.2f})"
 
     return {
         "strategy_name": str(summary["Strategy"]),
@@ -58,6 +85,7 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         "total_trades": total_trades,
         "trades_per_year": trades_per_year,
         "passes_trade_filter": passes_trade_filter,
+        "reject_reason": reject_reason,
         "net_pnl": _parse_money(summary["Net PnL"]),
         "gross_profit": _parse_money(summary["Gross Profit"]),
         "gross_loss": _parse_money(summary["Gross Loss"]),
@@ -76,6 +104,7 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         "quality_flag": str(summary.get("Quality Flag", "UNKNOWN")),
     }
 
+
 @dataclass
 class RefinementResult:
     strategy_name: str
@@ -86,6 +115,7 @@ class RefinementResult:
     total_trades: int
     trades_per_year: float
     passes_trade_filter: bool
+    reject_reason: str
     net_pnl: float
     gross_profit: float
     gross_loss: float
@@ -103,9 +133,13 @@ class RefinementResult:
     recent_12m_pf: float
     quality_flag: str
 
+
 class StrategyParameterRefiner:
     def __init__(self, engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig | None = None):
-        self.engine_class, self.data, self.strategy_factory, self.config = engine_class, data, strategy_factory, config or EngineConfig()
+        self.engine_class = engine_class
+        self.data = data
+        self.strategy_factory = strategy_factory
+        self.config = config or EngineConfig()
         self.results: list[RefinementResult] = []
 
     def _default_max_workers(self) -> int:
@@ -113,65 +147,152 @@ class StrategyParameterRefiner:
         return max(1, min(6, cpu_count - 2))
 
     def run_refinement(
-        self, hold_bars: list[int], stop_distance_points: list[float], min_avg_range: list[float], momentum_lookback: list[int],
-        min_trades: int = 150, min_trades_per_year: float = 8.0, parallel: bool = True, max_workers: int | None = None,
+        self,
+        hold_bars: list[int],
+        stop_distance_points: list[float],
+        min_avg_range: list[float],
+        momentum_lookback: list[int],
+        min_trades: int = 150,
+        min_trades_per_year: float = 8.0,
+        parallel: bool = True,
+        max_workers: int | None = None,
     ) -> pd.DataFrame:
         self.results = []
+
         years_in_sample = _calculate_years_in_sample(self.data)
         combinations = list(product(hold_bars, stop_distance_points, min_avg_range, momentum_lookback))
         total_runs = len(combinations)
-        accepted_count, rejected_count = 0, 0
+
+        accepted_count = 0
+        rejected_count = 0
         start_time = time.perf_counter()
-        if max_workers is None: max_workers = self._default_max_workers()
+
+        if max_workers is None:
+            max_workers = self._default_max_workers()
 
         print("\n🎯 Running top-combo parameter refinement...")
         print(f"Total combinations: {total_runs} | Years in sample: {years_in_sample:.2f}")
         print(f"Trade filters: min_trades={min_trades}, min_trades_per_year={min_trades_per_year:.2f}")
-        
-        tasks = [{"hold_bars": hb, "stop_distance_points": float(stop), "min_avg_range": float(rng), "momentum_lookback": int(mom), "years_in_sample": years_in_sample, "min_trades": min_trades, "min_trades_per_year": min_trades_per_year} for hb, stop, rng, mom in combinations]
+
+        tasks = [
+            {
+                "hold_bars": hb,
+                "stop_distance_points": float(stop),
+                "min_avg_range": float(rng),
+                "momentum_lookback": int(mom),
+                "years_in_sample": years_in_sample,
+                "min_trades": min_trades,
+                "min_trades_per_year": min_trades_per_year,
+            }
+            for hb, stop, rng, mom in combinations
+        ]
 
         if parallel and total_runs > 1:
-            with ProcessPoolExecutor(max_workers=max_workers, initializer=_init_refinement_worker, initargs=(self.engine_class, self.data, self.strategy_factory, self.config)) as executor:
+            with ProcessPoolExecutor(
+                max_workers=max_workers,
+                initializer=_init_refinement_worker,
+                initargs=(self.engine_class, self.data, self.strategy_factory, self.config),
+            ) as executor:
                 for idx, result in enumerate(executor.map(_run_refinement_case, tasks), start=1):
                     if result["passes_trade_filter"]:
                         accepted_count += 1
                         self.results.append(RefinementResult(**result))
-                    else: rejected_count += 1
-                    print(f"  Done {idx}/{total_runs} | hb={result['hold_bars']}, stop={result['stop_distance_points']}, range={result['min_avg_range']}, mom={result['momentum_lookback']} | PF={result['profit_factor']:.2f} | {'ACCEPT' if result['passes_trade_filter'] else 'REJECT'}")
+                    else:
+                        rejected_count += 1
+
+                    print(
+                        f"  Done {idx}/{total_runs} | "
+                        f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
+                        f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
+                        f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
+                        f"{result['reject_reason']}"
+                    )
         else:
             _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
             for idx, task in enumerate(tasks, start=1):
                 result = _run_refinement_case(task)
+
                 if result["passes_trade_filter"]:
                     accepted_count += 1
                     self.results.append(RefinementResult(**result))
-                else: rejected_count += 1
-                print(f"  Done {idx}/{total_runs} | hb={result['hold_bars']}, stop={result['stop_distance_points']}, range={result['min_avg_range']}, mom={result['momentum_lookback']} | PF={result['profit_factor']:.2f} | {'ACCEPT' if result['passes_trade_filter'] else 'REJECT'}")
+                else:
+                    rejected_count += 1
+
+                print(
+                    f"  Done {idx}/{total_runs} | "
+                    f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
+                    f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
+                    f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
+                    f"{result['reject_reason']}"
+                )
 
         print(f"\n✅ Accepted refinement sets: {accepted_count}")
         print(f"❌ Rejected refinement sets: {rejected_count}")
         print(f"⏱ Refinement runtime: {(time.perf_counter() - start_time):.2f} seconds")
+
         return self.results_dataframe()
 
     def results_dataframe(self) -> pd.DataFrame:
-        if not self.results: return pd.DataFrame()
-        return pd.DataFrame([r.__dict__ for r in self.results]).sort_values(by=["profit_factor", "average_trade", "net_pnl"], ascending=[False, False, False]).reset_index(drop=True)
+        if not self.results:
+            return pd.DataFrame()
+
+        return (
+            pd.DataFrame([r.__dict__ for r in self.results])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
+            .reset_index(drop=True)
+        )
 
     def display_dataframe(self) -> pd.DataFrame:
         df = self.results_dataframe()
-        if df.empty: return df
-        display_columns = ["hold_bars", "stop_distance_points", "min_avg_range", "momentum_lookback", "total_trades", "trades_per_year", "quality_flag", "is_pf", "oos_pf", "profit_factor", "average_trade", "net_pnl", "max_drawdown", "win_rate"]
+        if df.empty:
+            return df
+
+        display_columns = [
+            "hold_bars",
+            "stop_distance_points",
+            "min_avg_range",
+            "momentum_lookback",
+            "total_trades",
+            "trades_per_year",
+            "quality_flag",
+            "is_pf",
+            "oos_pf",
+            "profit_factor",
+            "average_trade",
+            "net_pnl",
+            "max_drawdown",
+            "win_rate",
+            "reject_reason",
+        ]
         out = df[[c for c in display_columns if c in df.columns]].copy()
-        for col in ["stop_distance_points", "min_avg_range", "trades_per_year", "profit_factor", "average_trade", "net_pnl", "max_drawdown", "win_rate", "is_pf", "oos_pf"]:
-            if col in out.columns: out[col] = out[col].round(2)
+
+        for col in [
+            "stop_distance_points",
+            "min_avg_range",
+            "trades_per_year",
+            "profit_factor",
+            "average_trade",
+            "net_pnl",
+            "max_drawdown",
+            "win_rate",
+            "is_pf",
+            "oos_pf",
+        ]:
+            if col in out.columns:
+                out[col] = out[col].round(2)
+
         return out
 
-    def top_results(self, n: int = 10) -> pd.DataFrame: return self.display_dataframe().head(n)
+    def top_results(self, n: int = 10) -> pd.DataFrame:
+        return self.display_dataframe().head(n)
 
     def summary_report(self, top_n: int = 10) -> dict[str, Any]:
         df = self.results_dataframe()
-        if df.empty: return {}
+        if df.empty:
+            return {}
+
         top_df = df.head(top_n)
+
         return {
             "best_pf": df.sort_values(by="profit_factor", ascending=False).iloc[0].to_dict(),
             "best_average_trade": df.sort_values(by="average_trade", ascending=False).iloc[0].to_dict(),
@@ -188,6 +309,13 @@ class StrategyParameterRefiner:
         if not report:
             print("\nNo refinement summary available.")
             return
+
         print("\n🧠 Refinement Summary Report")
-        b = report["best_pf"]
-        print(f"\nBest Profit Factor setting:\n  hold_bars={b['hold_bars']}, stop={b['stop_distance_points']}, min_avg_range={b['min_avg_range']}, momentum_lookback={b['momentum_lookback']} | Flag={b['quality_flag']} | PF={b['profit_factor']:.2f}, avg_trade={b['average_trade']:.2f}, net_pnl={b['net_pnl']:.2f}")
+        b = report["best_net_pnl"]
+        print(
+            f"\nBest Net PnL setting:\n"
+            f"  hold_bars={b['hold_bars']}, stop={b['stop_distance_points']}, "
+            f"min_avg_range={b['min_avg_range']}, momentum_lookback={b['momentum_lookback']} | "
+            f"Flag={b['quality_flag']} | PF={b['profit_factor']:.2f}, "
+            f"avg_trade={b['average_trade']:.2f}, net_pnl={b['net_pnl']:.2f}"
+        )
