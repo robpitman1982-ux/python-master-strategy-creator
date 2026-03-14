@@ -28,8 +28,8 @@ class _InlineTrendStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 10,
-        stop_distance_atr: float = 3.0,
+        hold_bars: int = 5,
+        stop_distance_atr: float = 1.5,
         name: str | None = None,
     ):
         self.filters = filters
@@ -119,10 +119,8 @@ class TrendStrategyType(BaseStrategyType):
     min_filters_per_combo = 4
     max_filters_per_combo = 6
 
-    # This is currently an ATR multiple, preserved under the old field name
-    # for compatibility with downstream CSVs and ranking tables.
-    default_hold_bars = 10
-    default_stop_distance_points = 3.0
+    default_hold_bars = 5
+    default_stop_distance_points = 1.5
 
     def get_required_sma_lengths(self) -> list[int]:
         return [50, 200]
@@ -131,15 +129,15 @@ class TrendStrategyType(BaseStrategyType):
         return [20]
 
     def get_required_momentum_lookbacks(self) -> list[int]:
-        return [10, 14, 20]
+        return [5, 10, 14]
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            TrendDirectionFilter(),
-            PullbackFilter(),
-            RecoveryTriggerFilter(),
-            VolatilityFilter(),
-            MomentumFilter(),
+            TrendDirectionFilter(fast_length=50, slow_length=200),
+            PullbackFilter(fast_length=50),
+            RecoveryTriggerFilter(fast_length=50),
+            VolatilityFilter(lookback=20, min_atr_mult=1.0),
+            MomentumFilter(lookback=10),
         ]
 
     def build_default_strategy(self) -> _InlineTrendStrategy:
@@ -165,7 +163,23 @@ class TrendStrategyType(BaseStrategyType):
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is TrendDirectionFilter:
+                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+            elif cls is PullbackFilter:
+                filters.append(PullbackFilter(fast_length=50))
+            elif cls is RecoveryTriggerFilter:
+                filters.append(RecoveryTriggerFilter(fast_length=50))
+            elif cls is VolatilityFilter:
+                filters.append(VolatilityFilter(lookback=20, min_atr_mult=1.0))
+            elif cls is MomentumFilter:
+                filters.append(MomentumFilter(lookback=10))
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -190,8 +204,14 @@ class TrendStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in classes:
-            if cls is VolatilityFilter:
-                filters.append(VolatilityFilter(min_atr_mult=min_avg_range if min_avg_range > 0 else 1.0))
+            if cls is TrendDirectionFilter:
+                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+            elif cls is PullbackFilter:
+                filters.append(PullbackFilter(fast_length=50))
+            elif cls is RecoveryTriggerFilter:
+                filters.append(RecoveryTriggerFilter(fast_length=50))
+            elif cls is VolatilityFilter:
+                filters.append(VolatilityFilter(lookback=20, min_atr_mult=min_avg_range if min_avg_range > 0 else 1.0))
             elif cls is MomentumFilter:
                 filters.append(MomentumFilter(lookback=momentum_lookback if momentum_lookback > 0 else 10))
             else:
@@ -227,12 +247,12 @@ class TrendStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [5, 10, 15, 20],
-            "stop_distance_points": [1.5, 2.0, 3.0, 4.0],
+            "hold_bars": [4, 5, 6, 8, 10, 12],
+            "stop_distance_points": [1.0, 1.25, 1.5, 2.0, 2.5],
         }
 
-        grid["min_avg_range"] = [0.8, 1.0, 1.2] if any(cls is VolatilityFilter for cls in classes) else [0.0]
-        grid["momentum_lookback"] = [10, 14] if any(cls is MomentumFilter for cls in classes) else [0]
+        grid["min_avg_range"] = [0.9, 1.0, 1.1, 1.2, 1.3] if any(cls is VolatilityFilter for cls in classes) else [0.0]
+        grid["momentum_lookback"] = [0, 5, 10, 14] if any(cls is MomentumFilter for cls in classes) else [0]
 
         return grid
 
@@ -255,9 +275,13 @@ class TrendStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_trend_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_trend_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -265,7 +289,7 @@ class TrendStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 

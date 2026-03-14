@@ -51,37 +51,26 @@ class StrategyOptimizer:
 
     @staticmethod
     def _parse_money(value: Any) -> float:
-        """
-        Converts strings like '$-200,201.50' into float.
-        """
         if isinstance(value, (int, float)):
             return float(value)
-
         text = str(value).replace("$", "").replace(",", "").strip()
         return float(text)
 
     @staticmethod
     def _parse_percent(value: Any) -> float:
-        """
-        Converts strings like '34.84%' into float.
-        """
         if isinstance(value, (int, float)):
             return float(value)
-
         text = str(value).replace("%", "").strip()
         return float(text)
 
     def _calculate_years_in_sample(self) -> float:
-        """
-        Estimate years covered by the dataset using the datetime index.
-        """
         if self.data.empty:
             return 0.0
 
         start = self.data.index.min()
         end = self.data.index.max()
-
         total_days = (end - start).days
+
         if total_days <= 0:
             return 0.0
 
@@ -94,10 +83,6 @@ class StrategyOptimizer:
         min_trades: int = 0,
         min_trades_per_year: float = 0.0,
     ) -> pd.DataFrame:
-        """
-        Runs all combinations of hold_bars and stop_distance_points.
-        Returns a dataframe of accepted optimization results only.
-        """
         self.results = []
 
         combinations = list(product(hold_bars, stop_distance_points))
@@ -113,11 +98,6 @@ class StrategyOptimizer:
         rejected_count = 0
 
         for run_number, (hb, stop_pts) in enumerate(combinations, start=1):
-            print(
-                f"  Run {run_number}/{total_runs} | "
-                f"hold_bars={hb}, stop_distance_points={stop_pts}"
-            )
-
             strategy = self.strategy_class()
             strategy.hold_bars = hb
             strategy.stop_distance_points = float(stop_pts)
@@ -127,14 +107,19 @@ class StrategyOptimizer:
 
             summary = engine.results()
             total_trades = int(summary["Total Trades"])
+            net_pnl = self._parse_money(summary["Net PnL"])
+            pf = float(summary["Profit Factor"])
 
-            trades_per_year = (
-                total_trades / years_in_sample if years_in_sample > 0 else 0.0
-            )
-
+            trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
             passes_trade_filter = (
                 total_trades >= min_trades
                 and trades_per_year >= min_trades_per_year
+            )
+
+            print(
+                f"  Run {run_number}/{total_runs} | "
+                f"hold_bars={hb}, stop_distance_points={stop_pts} | "
+                f"PF={pf:.2f} | Net={net_pnl:.2f} | trades={total_trades}"
             )
 
             if not passes_trade_filter:
@@ -153,11 +138,11 @@ class StrategyOptimizer:
                 years_in_sample=years_in_sample,
                 trades_per_year=trades_per_year,
                 passes_trade_filter=passes_trade_filter,
-                net_pnl=self._parse_money(summary["Net PnL"]),
+                net_pnl=net_pnl,
                 gross_profit=self._parse_money(summary["Gross Profit"]),
                 gross_loss=self._parse_money(summary["Gross Loss"]),
                 average_trade=self._parse_money(summary["Average Trade"]),
-                profit_factor=float(summary["Profit Factor"]),
+                profit_factor=pf,
                 max_drawdown=self._parse_money(summary["Max Drawdown"]),
                 win_rate=self._parse_percent(summary["Win Rate"]),
                 average_mae_points=float(summary["Average MAE (pts)"]),
@@ -177,7 +162,7 @@ class StrategyOptimizer:
 
         df = pd.DataFrame([r.__dict__ for r in self.results])
 
-        sort_columns = ["profit_factor", "average_trade", "net_pnl"]
+        sort_columns = ["net_pnl", "profit_factor", "average_trade"]
         existing_sort_columns = [col for col in sort_columns if col in df.columns]
 
         if existing_sort_columns:
@@ -189,9 +174,6 @@ class StrategyOptimizer:
         return df
 
     def display_dataframe(self) -> pd.DataFrame:
-        """
-        Returns a cleaner dataframe for terminal display.
-        """
         df = self.results_dataframe()
         if df.empty:
             return df
@@ -239,15 +221,11 @@ class StrategyOptimizer:
         return df.head(n)
 
     def save_results_csv(self, filepath: str | Path) -> Path:
-        """
-        Saves the full optimization results dataframe to CSV.
-        """
         df = self.results_dataframe()
         if df.empty:
             raise ValueError("No optimization results to save.")
 
         output_path = Path(filepath)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
         df.to_csv(output_path, index=False)
         return output_path

@@ -28,8 +28,8 @@ class _InlineBreakoutStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 6,
-        stop_distance_atr: float = 2.0,
+        hold_bars: int = 4,
+        stop_distance_atr: float = 1.5,
         name: str | None = None,
     ):
         self.filters = filters
@@ -119,8 +119,8 @@ class BreakoutStrategyType(BaseStrategyType):
     min_filters_per_combo = 3
     max_filters_per_combo = 5
 
-    default_hold_bars = 6
-    default_stop_distance_points = 2.0
+    default_hold_bars = 4
+    default_stop_distance_points = 1.5
 
     def get_required_sma_lengths(self) -> list[int]:
         return [50, 200]
@@ -133,10 +133,10 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            CompressionFilter(),
-            RangeBreakoutFilter(),
-            ExpansionBarFilter(),
-            BreakoutTrendFilter(),
+            CompressionFilter(lookback=20, max_atr_mult=0.85),
+            RangeBreakoutFilter(lookback=20),
+            ExpansionBarFilter(lookback=20, expansion_multiplier=1.25),
+            PriorRangePositionFilter(lookback=20, min_position_in_range=0.55),
         ]
 
     def build_default_strategy(self) -> _InlineBreakoutStrategy:
@@ -162,7 +162,27 @@ class BreakoutStrategyType(BaseStrategyType):
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is CompressionFilter:
+                filters.append(CompressionFilter(lookback=20, max_atr_mult=0.85))
+            elif cls is RangeBreakoutFilter:
+                filters.append(RangeBreakoutFilter(lookback=20))
+            elif cls is ExpansionBarFilter:
+                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.25))
+            elif cls is BreakoutRetestFilter:
+                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.0))
+            elif cls is BreakoutTrendFilter:
+                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            elif cls is BreakoutCloseStrengthFilter:
+                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
+            elif cls is PriorRangePositionFilter:
+                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -188,7 +208,19 @@ class BreakoutStrategyType(BaseStrategyType):
 
         for cls in classes:
             if cls is CompressionFilter:
-                filters.append(CompressionFilter(max_atr_mult=min_avg_range if min_avg_range > 0 else 0.8))
+                filters.append(CompressionFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 0.85))
+            elif cls is RangeBreakoutFilter:
+                filters.append(RangeBreakoutFilter(lookback=20))
+            elif cls is ExpansionBarFilter:
+                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.25))
+            elif cls is BreakoutRetestFilter:
+                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.0))
+            elif cls is BreakoutTrendFilter:
+                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            elif cls is BreakoutCloseStrengthFilter:
+                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
+            elif cls is PriorRangePositionFilter:
+                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
             else:
                 filters.append(cls())
 
@@ -222,11 +254,11 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [2, 4, 6, 8, 12],
-            "stop_distance_points": [1.0, 1.5, 2.0, 3.0],
+            "hold_bars": [2, 3, 4, 6, 8],
+            "stop_distance_points": [0.75, 1.0, 1.25, 1.5, 2.0],
         }
 
-        grid["min_avg_range"] = [0.6, 0.7, 0.8, 0.9] if any(cls is CompressionFilter for cls in classes) else [0.0]
+        grid["min_avg_range"] = [0.65, 0.75, 0.85, 0.95] if any(cls is CompressionFilter for cls in classes) else [0.0]
         grid["momentum_lookback"] = [0]
 
         return grid
@@ -250,9 +282,13 @@ class BreakoutStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -260,7 +296,7 @@ class BreakoutStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 

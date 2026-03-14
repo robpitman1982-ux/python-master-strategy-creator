@@ -28,8 +28,8 @@ class _InlineMeanReversionStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 4,
-        stop_distance_atr: float = 1.5,
+        hold_bars: int = 5,
+        stop_distance_atr: float = 1.0,
         name: str | None = None,
     ):
         self.filters = filters
@@ -119,8 +119,8 @@ class MeanReversionStrategyType(BaseStrategyType):
     min_filters_per_combo = 3
     max_filters_per_combo = 7
 
-    default_hold_bars = 4
-    default_stop_distance_points = 1.5
+    default_hold_bars = 5
+    default_stop_distance_points = 1.0
 
     def get_required_sma_lengths(self) -> list[int]:
         return [20, 200]
@@ -133,10 +133,10 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            BelowFastSMAFilter(),
-            DownCloseFilter(),
+            DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.6),
+            TwoBarDownFilter(),
             ReversalUpBarFilter(),
-            AboveLongTermSMAFilter(),
+            AboveLongTermSMAFilter(slow_length=200),
         ]
 
     def build_default_strategy(self) -> _InlineMeanReversionStrategy:
@@ -162,7 +162,27 @@ class MeanReversionStrategyType(BaseStrategyType):
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is BelowFastSMAFilter:
+                filters.append(BelowFastSMAFilter(fast_length=20))
+            elif cls is DistanceBelowSMAFilter:
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.6))
+            elif cls is DownCloseFilter:
+                filters.append(DownCloseFilter())
+            elif cls is TwoBarDownFilter:
+                filters.append(TwoBarDownFilter())
+            elif cls is ReversalUpBarFilter:
+                filters.append(ReversalUpBarFilter())
+            elif cls is LowVolatilityRegimeFilter:
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=1.05))
+            elif cls is AboveLongTermSMAFilter:
+                filters.append(AboveLongTermSMAFilter(slow_length=200))
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -187,10 +207,20 @@ class MeanReversionStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in classes:
-            if cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(min_distance_atr=min_avg_range if min_avg_range > 0 else 0.5))
+            if cls is BelowFastSMAFilter:
+                filters.append(BelowFastSMAFilter(fast_length=20))
+            elif cls is DistanceBelowSMAFilter:
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
+            elif cls is DownCloseFilter:
+                filters.append(DownCloseFilter())
+            elif cls is TwoBarDownFilter:
+                filters.append(TwoBarDownFilter())
+            elif cls is ReversalUpBarFilter:
+                filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(max_atr_mult=min_avg_range if min_avg_range > 0 else 1.0))
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.05))
+            elif cls is AboveLongTermSMAFilter:
+                filters.append(AboveLongTermSMAFilter(slow_length=200))
             else:
                 filters.append(cls())
 
@@ -224,12 +254,12 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [2, 3, 4, 5, 6, 8],
-            "stop_distance_points": [0.75, 1.0, 1.5, 2.0],
+            "hold_bars": [3, 4, 5, 6, 8, 10],
+            "stop_distance_points": [0.5, 0.75, 1.0, 1.25, 1.5],
         }
 
         grid["min_avg_range"] = (
-            [0.2, 0.4, 0.6, 0.8, 1.0]
+            [0.4, 0.6, 0.8, 1.0, 1.2]
             if any(cls in [DistanceBelowSMAFilter, LowVolatilityRegimeFilter] for cls in classes)
             else [0.0]
         )
@@ -256,9 +286,13 @@ class MeanReversionStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_mr_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_mr_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -266,7 +300,7 @@ class MeanReversionStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 

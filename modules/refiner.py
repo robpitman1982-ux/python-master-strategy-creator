@@ -39,7 +39,12 @@ def _calculate_years_in_sample(data: pd.DataFrame) -> float:
     return total_days / 365.25 if total_days > 0 else 0.0
 
 
-def _init_refinement_worker(engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig) -> None:
+def _init_refinement_worker(
+    engine_class: type,
+    data: pd.DataFrame,
+    strategy_factory: Callable[..., Any],
+    config: EngineConfig,
+) -> None:
     global _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG
     _WORKER_ENGINE_CLASS = engine_class
     _WORKER_DATA = data
@@ -135,7 +140,13 @@ class RefinementResult:
 
 
 class StrategyParameterRefiner:
-    def __init__(self, engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig | None = None):
+    def __init__(
+        self,
+        engine_class: type,
+        data: pd.DataFrame,
+        strategy_factory: Callable[..., Any],
+        config: EngineConfig | None = None,
+    ):
         self.engine_class = engine_class
         self.data = data
         self.strategy_factory = strategy_factory
@@ -204,8 +215,8 @@ class StrategyParameterRefiner:
                         f"  Done {idx}/{total_runs} | "
                         f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
                         f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
-                        f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
-                        f"{result['reject_reason']}"
+                        f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
+                        f"trades={result['total_trades']} | {result['reject_reason']}"
                     )
         else:
             _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
@@ -222,8 +233,8 @@ class StrategyParameterRefiner:
                     f"  Done {idx}/{total_runs} | "
                     f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
                     f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
-                    f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
-                    f"{result['reject_reason']}"
+                    f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
+                    f"trades={result['total_trades']} | {result['reject_reason']}"
                 )
 
         print(f"\n✅ Accepted refinement sets: {accepted_count}")
