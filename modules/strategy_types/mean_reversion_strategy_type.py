@@ -12,10 +12,13 @@ from modules.filters import (
     AboveLongTermSMAFilter,
     BaseFilter,
     BelowFastSMAFilter,
+    CloseNearLowFilter,
     DistanceBelowSMAFilter,
     DownCloseFilter,
     LowVolatilityRegimeFilter,
     ReversalUpBarFilter,
+    StretchFromLongTermSMAFilter,
+    ThreeBarDownFilter,
     TwoBarDownFilter,
 )
 from modules.refiner import StrategyParameterRefiner
@@ -29,7 +32,7 @@ class _InlineMeanReversionStrategy:
         self,
         filters: list[BaseFilter],
         hold_bars: int = 5,
-        stop_distance_atr: float = 1.0,
+        stop_distance_atr: float = 0.75,
         name: str | None = None,
     ):
         self.filters = filters
@@ -117,10 +120,10 @@ class _MRRefinementFactory:
 class MeanReversionStrategyType(BaseStrategyType):
     name = "mean_reversion"
     min_filters_per_combo = 3
-    max_filters_per_combo = 7
+    max_filters_per_combo = 6
 
     default_hold_bars = 5
-    default_stop_distance_points = 1.0
+    default_stop_distance_points = 0.75
 
     def get_required_sma_lengths(self) -> list[int]:
         return [20, 200]
@@ -133,10 +136,11 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.6),
+            DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.8),
             TwoBarDownFilter(),
             ReversalUpBarFilter(),
             AboveLongTermSMAFilter(slow_length=200),
+            CloseNearLowFilter(max_close_position=0.35),
         ]
 
     def build_default_strategy(self) -> _InlineMeanReversionStrategy:
@@ -156,9 +160,12 @@ class MeanReversionStrategyType(BaseStrategyType):
             DistanceBelowSMAFilter,
             DownCloseFilter,
             TwoBarDownFilter,
+            ThreeBarDownFilter,
             ReversalUpBarFilter,
             LowVolatilityRegimeFilter,
             AboveLongTermSMAFilter,
+            CloseNearLowFilter,
+            StretchFromLongTermSMAFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
@@ -168,17 +175,23 @@ class MeanReversionStrategyType(BaseStrategyType):
             if cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=20))
             elif cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.6))
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.8))
             elif cls is DownCloseFilter:
                 filters.append(DownCloseFilter())
             elif cls is TwoBarDownFilter:
                 filters.append(TwoBarDownFilter())
+            elif cls is ThreeBarDownFilter:
+                filters.append(ThreeBarDownFilter())
             elif cls is ReversalUpBarFilter:
                 filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=1.05))
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=1.10))
             elif cls is AboveLongTermSMAFilter:
                 filters.append(AboveLongTermSMAFilter(slow_length=200))
+            elif cls is CloseNearLowFilter:
+                filters.append(CloseNearLowFilter(max_close_position=0.35))
+            elif cls is StretchFromLongTermSMAFilter:
+                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=0.6))
             else:
                 filters.append(cls())
 
@@ -210,17 +223,23 @@ class MeanReversionStrategyType(BaseStrategyType):
             if cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=20))
             elif cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.8))
             elif cls is DownCloseFilter:
                 filters.append(DownCloseFilter())
             elif cls is TwoBarDownFilter:
                 filters.append(TwoBarDownFilter())
+            elif cls is ThreeBarDownFilter:
+                filters.append(ThreeBarDownFilter())
             elif cls is ReversalUpBarFilter:
                 filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.05))
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.10))
             elif cls is AboveLongTermSMAFilter:
                 filters.append(AboveLongTermSMAFilter(slow_length=200))
+            elif cls is CloseNearLowFilter:
+                filters.append(CloseNearLowFilter(max_close_position=0.35))
+            elif cls is StretchFromLongTermSMAFilter:
+                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
             else:
                 filters.append(cls())
 
@@ -233,7 +252,7 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
-            "min_profit_factor": 0.85,
+            "min_profit_factor": 0.80,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
             "min_trades": 60,
@@ -254,13 +273,13 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [3, 4, 5, 6, 8, 10],
-            "stop_distance_points": [0.5, 0.75, 1.0, 1.25, 1.5],
+            "hold_bars": [2, 3, 4, 5, 6, 8, 10, 12],
+            "stop_distance_points": [0.4, 0.5, 0.75, 1.0, 1.25, 1.5],
         }
 
         grid["min_avg_range"] = (
-            [0.4, 0.6, 0.8, 1.0, 1.2]
-            if any(cls in [DistanceBelowSMAFilter, LowVolatilityRegimeFilter] for cls in classes)
+            [0.4, 0.6, 0.8, 1.0, 1.2, 1.4]
+            if any(cls in [DistanceBelowSMAFilter, LowVolatilityRegimeFilter, StretchFromLongTermSMAFilter] for cls in classes)
             else [0.0]
         )
         grid["momentum_lookback"] = [0]
