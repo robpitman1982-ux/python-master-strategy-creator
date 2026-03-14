@@ -199,8 +199,12 @@ def _rebuild_strategy_from_leaderboard_row(
 ) -> tuple[pd.DataFrame, str, EngineConfig]:
     strategy_type_name = str(row["strategy_type"]).strip()
     leader_source = str(row.get("leader_source", "")).strip().lower()
+    strategy_type_inst = get_strategy_type(strategy_type_name)
 
-    combo_name = str(row.get("best_combo_strategy_name", ""))
+    combo_name = str(row.get("best_combo_strategy_name", "")).strip()
+    if combo_name in ["", "NONE"]:
+        return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
+
     combo_row = _load_combo_reference_row(outputs_dir, strategy_type_name, combo_name)
     if not combo_row:
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
@@ -209,14 +213,12 @@ def _rebuild_strategy_from_leaderboard_row(
     if not combo_classes:
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
 
-    strategy_type_inst = get_strategy_type(strategy_type_name)
-
     hold_bars = _safe_int(row.get("leader_hold_bars", 0), 0)
     stop_distance_points = _safe_float(row.get("leader_stop_distance_points", 0.0), 0.0)
     min_avg_range = _safe_float(row.get("leader_min_avg_range", 0.0), 0.0)
     momentum_lookback = _safe_int(row.get("leader_momentum_lookback", 0), 0)
 
-    # If combo leader was selected, use family defaults.
+    # If combo leader was selected, rebuild using family defaults.
     if leader_source == "combo":
         hold_bars = int(getattr(strategy_type_inst, "default_hold_bars", 3))
         stop_distance_points = float(getattr(strategy_type_inst, "default_stop_distance_points", 1.0))
@@ -281,11 +283,16 @@ def evaluate_portfolio(
 
     # Only evaluate families that actually had promoted candidates.
     leaderboard_df = leaderboard_df[leaderboard_df["promotion_status"] == "PROMOTED"].copy()
+    if leaderboard_df.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     print(f"\nEvaluating {len(leaderboard_df)} strategies from Leaderboard...")
 
     for _, row in leaderboard_df.iterrows():
-        strategy_name = str(row.get("leader_strategy_name", "UNKNOWN"))
+        strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
+        if strategy_name in ["", "NONE"]:
+            continue
+
         print(f"\n  Evaluating: {row['strategy_type']} -> {strategy_name}")
 
         try:
@@ -300,11 +307,15 @@ def evaluate_portfolio(
                 print(f"    [Warning] Skipping. Could not rebuild trades for {strategy_name}.")
                 continue
 
-            last_cfg = cfg
-
             trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
             trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
 
+            # Extra safety: skip statistically junk reconstructions if any slipped through.
+            if len(trades_df) < 1:
+                print(f"    [Warning] Skipping. No reconstructed trades for {strategy_name}.")
+                continue
+
+            last_cfg = cfg
             all_trades_list.append(trades_df)
 
             daily_returns_dict[f"{run_id}_{strategy_name}"] = (

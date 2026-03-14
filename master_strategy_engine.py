@@ -107,11 +107,11 @@ def run_top_combo_refinement(
 
 def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[str, Any]) -> pd.DataFrame:
     """
-    Sweep promotion should be looser than refinement.
+    Sweep promotion should remain looser than refinement.
 
-    Important design choice:
-    - We do NOT require positive average_trade at sweep stage anymore.
-    - We can still sort by average_trade later, but we do not kill candidates early for it.
+    Important:
+    - We do not require positive average_trade at sweep stage.
+    - We use the sweep only to identify promising candidates for deeper refinement.
     """
     if combo_results_df is None or combo_results_df.empty:
         return pd.DataFrame()
@@ -202,6 +202,19 @@ def _extract_best_refined_param(best_refined: dict[str, Any], key: str, default:
     return default if value is None or value == "" else value
 
 
+def _get_best_promoted_combo_row(promoted_df: pd.DataFrame | None) -> dict[str, Any]:
+    """
+    IMPORTANT FIX:
+    The 'best combo' for downstream leaderboard/evaluation must come from
+    the promoted set, not the raw sweep top row.
+
+    This prevents junk low-trade raw sweep rows from becoming family leaders.
+    """
+    if promoted_df is None or promoted_df.empty:
+        return {}
+    return promoted_df.iloc[0].to_dict()
+
+
 def build_family_summary_row(
     strategy_type_name: str,
     dataset_path: Path,
@@ -211,7 +224,7 @@ def build_family_summary_row(
     promoted_df: pd.DataFrame,
     refinement_df: pd.DataFrame | None,
 ) -> dict[str, Any]:
-    best_combo = combo_results_df.iloc[0].to_dict() if combo_results_df is not None and not combo_results_df.empty else {}
+    best_combo = _get_best_promoted_combo_row(promoted_df)
     best_refined = refinement_df.iloc[0].to_dict() if refinement_df is not None and not refinement_df.empty else {}
     promotion_status = "NO_PROMOTED_CANDIDATES" if promoted_df is None or promoted_df.empty else "PROMOTED"
 
@@ -274,6 +287,11 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
     print("\n--- Combination Sweep ---")
     print(f"Total Combinations:       {summary_row['total_combinations']}")
     print(f"Promoted Candidates:      {summary_row['promoted_candidates']}")
+    print("\n--- Best Promoted Combo ---")
+    print(f"Strategy:                 {summary_row['best_combo_strategy_name']}")
+    print(f"PF:                       {summary_row['best_combo_profit_factor']:.2f}")
+    print(f"Net PnL:                  {summary_row['best_combo_net_pnl']:.2f}")
+    print(f"Total Trades:             {summary_row['best_combo_total_trades']}")
     print("\n--- Best Refined Candidate ---")
     print(f"Strategy:                 {summary_row['best_refined_strategy_name']}")
     print(f"Quality Flag:             {summary_row['best_refined_quality_flag']}")
@@ -285,13 +303,13 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
 
 def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
     """
-    Choose between combo and refined.
+    Choose between best promoted combo and best refined row.
 
-    Rule:
-    - If no refinement ran, combo wins.
-    - If refinement ran, refined only wins if it improves net_pnl.
-    - If net_pnl is tied, require PF >= combo PF.
-    Otherwise keep combo.
+    Rules:
+    - If no promoted combo exists, family should not really survive.
+    - If no refinement ran, promoted combo wins.
+    - If refinement ran, refined wins only if it improves net pnl.
+    - If net pnl ties, refined needs PF >= combo PF.
     """
 
     combo = {
@@ -313,6 +331,9 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_min_avg_range": 0.0,
         "leader_momentum_lookback": 0,
     }
+
+    if str(combo["leader_strategy_name"]).strip() in ["", "NONE"]:
+        return combo
 
     if not bool(row.get("refinement_ran", False)):
         return combo
@@ -337,6 +358,9 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_momentum_lookback": row.get("best_refined_momentum_lookback", 0),
     }
 
+    if str(refined["leader_strategy_name"]).strip() in ["", "NONE"]:
+        return combo
+
     combo_net = float(combo["leader_net_pnl"] or 0.0)
     refined_net = float(refined["leader_net_pnl"] or 0.0)
     combo_pf = float(combo["leader_pf"] or 0.0)
@@ -356,6 +380,11 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
 
     leaderboard = summary_df.copy()
+
+    # Keep only families with actual promoted candidates.
+    leaderboard = leaderboard[leaderboard["promotion_status"] == "PROMOTED"].copy()
+    if leaderboard.empty:
+        return pd.DataFrame()
 
     leader_rows = leaderboard.apply(_choose_family_leader, axis=1, result_type="expand")
     leaderboard = pd.concat([leaderboard, leader_rows], axis=1)
@@ -536,7 +565,7 @@ if __name__ == "__main__":
 
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
-        print("\n🏆 LEADERBOARD 3.0 (Saved to family_leaderboard_results.csv)")
+        print("\n🏆 LEADERBOARD 3.1 (Saved to family_leaderboard_results.csv)")
 
         preview_cols = [
             "strategy_type",
