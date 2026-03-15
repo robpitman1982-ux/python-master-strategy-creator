@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from modules.portfolio_evaluator import evaluate_portfolio
 
 # Input paths
@@ -16,26 +17,25 @@ if __name__ == "__main__":
     print("Starting Portfolio Evaluation Phase...")
 
     Path("Outputs").mkdir(parents=True, exist_ok=True)
-    
-    # Automatically extract Market Symbol and Timeframe from filename (e.g. "ES_60m...")
+
     filename_parts = DATA_PATH.stem.split("_")
-    MARKET_SYMBOL = filename_parts[0] if len(filename_parts) > 0 else "UNKNOWN"
-    TIMEFRAME = filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN"
-    
-    print(f"Detecting target: Market={MARKET_SYMBOL}, Timeframe={TIMEFRAME}")
+    market_symbol = filename_parts[0] if len(filename_parts) > 0 else "UNKNOWN"
+    timeframe = filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN"
+
+    print(f"Detecting target: Market={market_symbol}, Timeframe={timeframe}")
 
     review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
         leaderboard_csv=LEADERBOARD_PATH,
         data_csv=DATA_PATH,
-        market_name=MARKET_SYMBOL,
-        timeframe=TIMEFRAME,
+        market_name=market_symbol,
+        timeframe=timeframe,
     )
 
     if not review_table.empty:
         review_table.to_csv(REVIEW_TABLE_PATH, index=False)
         returns_df.to_csv(RETURNS_PATH, index=True)
         corr_matrix.to_csv(CORRELATION_PATH, index=True)
-        
+
         if not yearly_df.empty:
             yearly_df.to_csv(YEARLY_STATS_PATH, index=False)
 
@@ -49,11 +49,20 @@ if __name__ == "__main__":
 
         print("\n[Preview of Portfolio Review Table]")
         preview_cols = [
-            "strategy_family", "quality_flag", "is_trades", "oos_trades",
-            "is_pf_pre_2019", "oos_pf_post_2019",
-            "mc_max_dd_99", "shock_drop_10pct_pnl"
+            "strategy_family",
+            "strategy_name",
+            "quality_flag",
+            "is_trades",
+            "oos_trades",
+            "is_pf_pre_2019",
+            "oos_pf_post_2019",
+            "mc_max_dd_99",
+            "shock_drop_10pct_pnl",
         ]
         preview_df = review_table[[c for c in preview_cols if c in review_table.columns]]
         print(preview_df.to_string(index=False))
     else:
-        print("\n❌ No valid strategies found to evaluate. Ensure your leaderboard has promoted candidates.")
+        print("\n❌ No valid strategies found to evaluate.")
+        print("This usually means either:")
+        print("- the leaderboard is empty, or")
+        print("- no rows passed accepted_final=True.")

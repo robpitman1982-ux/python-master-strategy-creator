@@ -17,6 +17,10 @@ from modules.feature_builder import add_precomputed_features
 from modules.portfolio_evaluator import evaluate_portfolio
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
+# =============================================================================
+# USER SETTINGS
+# =============================================================================
+
 CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
 STRATEGY_TYPE_NAME = "all"
 OUTPUTS_DIR = Path("Outputs")
@@ -25,6 +29,16 @@ MAX_WORKERS_SWEEP = 10
 MAX_WORKERS_REFINEMENT = 10
 MAX_CANDIDATES_TO_REFINE = 3
 
+# Final leaderboard acceptance gate
+FINAL_MIN_NET_PNL = 0.0
+FINAL_MIN_PF = 1.00
+FINAL_MIN_OOS_PF = 1.00
+FINAL_MIN_TOTAL_TRADES = 60
+
+
+# =============================================================================
+# GENERIC HELPERS
+# =============================================================================
 
 def parse_money(value: Any) -> float:
     if isinstance(value, (int, float)):
@@ -105,13 +119,17 @@ def run_top_combo_refinement(
     )
 
 
+# =============================================================================
+# PROMOTION GATE
+# =============================================================================
+
 def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[str, Any]) -> pd.DataFrame:
     """
-    Sweep promotion should remain looser than refinement.
+    Sweep promotion is intentionally looser than final leaderboard acceptance.
 
-    Important:
-    - We do not require positive average_trade at sweep stage.
-    - We use the sweep only to identify promising candidates for deeper refinement.
+    Sweep goal:
+    - let promising candidates through
+    - do not kill things too early just because avg trade is temporarily weak
     """
     if combo_results_df is None or combo_results_df.empty:
         return pd.DataFrame()
@@ -142,9 +160,8 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
     if sort_cols:
         promoted = promoted.sort_values(by=sort_cols, ascending=[False] * len(sort_cols)).reset_index(drop=True)
 
-    dedup_cols = [c for c in ["strategy_name"] if c in promoted.columns]
-    if dedup_cols:
-        promoted = promoted.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
+    if "strategy_name" in promoted.columns:
+        promoted = promoted.drop_duplicates(subset=["strategy_name"]).reset_index(drop=True)
 
     return promoted
 
@@ -169,6 +186,7 @@ def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[st
         ]
         if c in promoted_df.columns
     ]
+
     print(f"\n✅ Promoted Candidates ({len(promoted_df)} Distinct):")
     print(promoted_df[display_cols].head(10).to_string(index=False))
 
@@ -179,6 +197,10 @@ def save_csv_if_not_empty(df: pd.DataFrame, filepath: Path) -> None:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(filepath, index=False)
 
+
+# =============================================================================
+# SANITY CHECK
+# =============================================================================
 
 def run_sanity_check(strategy_type: Any, data: pd.DataFrame, cfg: EngineConfig) -> dict[str, Any]:
     strategy = build_sanity_check_strategy(strategy_type)
@@ -197,22 +219,13 @@ def run_sanity_check(strategy_type: Any, data: pd.DataFrame, cfg: EngineConfig) 
     }
 
 
+# =============================================================================
+# FAMILY SUMMARY
+# =============================================================================
+
 def _extract_best_refined_param(best_refined: dict[str, Any], key: str, default: Any) -> Any:
     value = best_refined.get(key, default)
     return default if value is None or value == "" else value
-
-
-def _get_best_promoted_combo_row(promoted_df: pd.DataFrame | None) -> dict[str, Any]:
-    """
-    IMPORTANT FIX:
-    The 'best combo' for downstream leaderboard/evaluation must come from
-    the promoted set, not the raw sweep top row.
-
-    This prevents junk low-trade raw sweep rows from becoming family leaders.
-    """
-    if promoted_df is None or promoted_df.empty:
-        return {}
-    return promoted_df.iloc[0].to_dict()
 
 
 def build_family_summary_row(
@@ -224,7 +237,7 @@ def build_family_summary_row(
     promoted_df: pd.DataFrame,
     refinement_df: pd.DataFrame | None,
 ) -> dict[str, Any]:
-    best_combo = _get_best_promoted_combo_row(promoted_df)
+    best_combo = combo_results_df.iloc[0].to_dict() if combo_results_df is not None and not combo_results_df.empty else {}
     best_refined = refinement_df.iloc[0].to_dict() if refinement_df is not None and not refinement_df.empty else {}
     promotion_status = "NO_PROMOTED_CANDIDATES" if promoted_df is None or promoted_df.empty else "PROMOTED"
 
@@ -284,14 +297,17 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
     print(f"Rows:                     {summary_row['rows']:,}")
     print(f"Start:                    {summary_row['start']}")
     print(f"End:                      {summary_row['end']}")
+
     print("\n--- Combination Sweep ---")
     print(f"Total Combinations:       {summary_row['total_combinations']}")
     print(f"Promoted Candidates:      {summary_row['promoted_candidates']}")
+
     print("\n--- Best Promoted Combo ---")
     print(f"Strategy:                 {summary_row['best_combo_strategy_name']}")
     print(f"PF:                       {summary_row['best_combo_profit_factor']:.2f}")
     print(f"Net PnL:                  {summary_row['best_combo_net_pnl']:.2f}")
     print(f"Total Trades:             {summary_row['best_combo_total_trades']}")
+
     print("\n--- Best Refined Candidate ---")
     print(f"Strategy:                 {summary_row['best_refined_strategy_name']}")
     print(f"Quality Flag:             {summary_row['best_refined_quality_flag']}")
@@ -301,17 +317,17 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
     print("=" * 72)
 
 
+# =============================================================================
+# LEADERBOARD SELECTION
+# =============================================================================
+
 def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
     """
-    Choose between best promoted combo and best refined row.
-
-    Rules:
-    - If no promoted combo exists, family should not really survive.
-    - If no refinement ran, promoted combo wins.
-    - If refinement ran, refined wins only if it improves net pnl.
-    - If net pnl ties, refined needs PF >= combo PF.
+    Rule:
+    - if no refinement ran -> combo wins
+    - if refinement ran -> refined wins only if net pnl improves
+    - if tied on net pnl -> refined must have PF >= combo PF
     """
-
     combo = {
         "leader_source": "combo",
         "leader_strategy_name": row.get("best_combo_strategy_name", "NONE"),
@@ -331,9 +347,6 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_min_avg_range": 0.0,
         "leader_momentum_lookback": 0,
     }
-
-    if str(combo["leader_strategy_name"]).strip() in ["", "NONE"]:
-        return combo
 
     if not bool(row.get("refinement_ran", False)):
         return combo
@@ -358,9 +371,6 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_momentum_lookback": row.get("best_refined_momentum_lookback", 0),
     }
 
-    if str(refined["leader_strategy_name"]).strip() in ["", "NONE"]:
-        return combo
-
     combo_net = float(combo["leader_net_pnl"] or 0.0)
     refined_net = float(refined["leader_net_pnl"] or 0.0)
     combo_pf = float(combo["leader_pf"] or 0.0)
@@ -375,23 +385,36 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
     return combo
 
 
+def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
+    leader_net = float(row.get("leader_net_pnl", 0.0) or 0.0)
+    leader_pf = float(row.get("leader_pf", 0.0) or 0.0)
+    oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
+    leader_trades = int(row.get("leader_trades", 0) or 0)
+
+    if leader_net <= FINAL_MIN_NET_PNL:
+        return False
+    if leader_pf < FINAL_MIN_PF:
+        return False
+    if oos_pf < FINAL_MIN_OOS_PF:
+        return False
+    if leader_trades < FINAL_MIN_TOTAL_TRADES:
+        return False
+    return True
+
+
 def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
 
     leaderboard = summary_df.copy()
-
-    # Keep only families with actual promoted candidates.
-    leaderboard = leaderboard[leaderboard["promotion_status"] == "PROMOTED"].copy()
-    if leaderboard.empty:
-        return pd.DataFrame()
-
     leader_rows = leaderboard.apply(_choose_family_leader, axis=1, result_type="expand")
     leaderboard = pd.concat([leaderboard, leader_rows], axis=1)
 
+    leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
+
     leaderboard = leaderboard.sort_values(
-        by=["leader_net_pnl", "leader_pf", "leader_avg_trade"],
-        ascending=[False, False, False],
+        by=["accepted_final", "leader_net_pnl", "leader_pf", "leader_avg_trade"],
+        ascending=[False, False, False, False],
     ).reset_index(drop=True)
 
     keep_cols = [
@@ -401,6 +424,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "promoted_candidates",
         "leader_source",
         "leader_strategy_name",
+        "accepted_final",
         "quality_flag",
         "is_trades",
         "oos_trades",
@@ -424,6 +448,10 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
 
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()
 
+
+# =============================================================================
+# FAMILY RUN
+# =============================================================================
 
 def run_single_family(
     strategy_type_name: str,
@@ -530,6 +558,10 @@ def run_single_family(
     return family_summary_row
 
 
+# =============================================================================
+# MAIN
+# =============================================================================
+
 if __name__ == "__main__":
     total_start = time.perf_counter()
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -565,12 +597,13 @@ if __name__ == "__main__":
 
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
-        print("\n🏆 LEADERBOARD 3.1 (Saved to family_leaderboard_results.csv)")
 
+        print("\n🏆 LEADERBOARD 3.1 (Saved to family_leaderboard_results.csv)")
         preview_cols = [
             "strategy_type",
             "leader_source",
             "leader_strategy_name",
+            "accepted_final",
             "quality_flag",
             "is_trades",
             "oos_trades",
@@ -612,5 +645,7 @@ if __name__ == "__main__":
             ]
             print("\n[Final Strategy Review Table]")
             print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
+        else:
+            print("\n⚠ No strategies passed final leaderboard acceptance gate for evaluation.")
 
     print(f"\n🏁 Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
