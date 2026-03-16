@@ -93,6 +93,7 @@ def _run_mr_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> d
         "recent_12m_trades": int(summary.get("Recent 12m Trades", 0)),
         "recent_12m_pf": _pf(summary.get("Recent 12m PF", 0.0)),
         "quality_flag": str(summary.get("Quality Flag", "UNKNOWN")),
+        "quality_score": _pf(summary.get("Quality Score", 0.0)),
     }
 
 

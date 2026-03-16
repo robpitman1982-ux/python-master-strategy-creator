@@ -107,6 +107,7 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         "recent_12m_trades": int(summary.get("Recent 12m Trades", 0)),
         "recent_12m_pf": float(summary.get("Recent 12m PF", 0.0)),
         "quality_flag": str(summary.get("Quality Flag", "UNKNOWN")),
+        "quality_score": _parse_money(summary.get("Quality Score", "0.0")),
     }
 
 
@@ -137,6 +138,7 @@ class RefinementResult:
     recent_12m_trades: int
     recent_12m_pf: float
     quality_flag: str
+    quality_score: float
 
 
 class StrategyParameterRefiner:

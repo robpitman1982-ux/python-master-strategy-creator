@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -276,6 +277,45 @@ class MasterStrategyEngine:
         return float(drawdown.min())
 
     @staticmethod
+    def calculate_quality_score(
+        is_pf: float,
+        oos_pf: float,
+        recent_pf: float,
+        total_trades: int,
+        is_trades: int,
+        oos_trades: int,
+    ) -> float:
+        """
+        Continuous quality score from 0.0 to 1.0.
+        Rewards IS and OOS profit factors both above 1.0, balance between
+        IS and OOS, higher trade counts, and strong recent performance.
+        """
+        avg_pf = (is_pf + oos_pf) / 2.0
+        pf_strength = max(0.0, min(1.0, (avg_pf - 0.8) / 1.2))
+
+        if max(is_pf, oos_pf) > 0:
+            pf_ratio = min(is_pf, oos_pf) / max(is_pf, oos_pf)
+        else:
+            pf_ratio = 0.0
+        balance_score = pf_ratio
+
+        trade_confidence = min(1.0, math.log1p(total_trades) / math.log1p(300))
+
+        recent_score = max(0.0, min(1.0, (recent_pf - 0.5) / 2.0))
+
+        oos_penalty = 1.0 if oos_trades >= 10 else 0.3
+
+        score = (
+            pf_strength * 0.30
+            + balance_score * 0.25
+            + trade_confidence * 0.20
+            + recent_score * 0.15
+            + oos_penalty * 0.10
+        )
+
+        return round(max(0.0, min(1.0, score)), 4)
+
+    @staticmethod
     def _calc_pf_from_trade_list(trade_list: list[Trade]) -> float:
         gross_profit = sum(t.pnl for t in trade_list if t.pnl > 0)
         gross_loss = abs(sum(t.pnl for t in trade_list if t.pnl < 0))
@@ -332,10 +372,13 @@ class MasterStrategyEngine:
             is_pf = oos_pf = recent_pf = 0.0
             is_trades_count = oos_trades_count = recent_trades_count = 0
 
+        # --- Quality flag with borderline detection ---
+        BOUNDARY_BUFFER = 0.05
+
         if is_trades_count + oos_trades_count == 0:
             quality_flag = "NO_TRADES"
         elif is_trades_count < 50 and oos_trades_count >= 50:
-            quality_flag = "LOW_IS_SAMPLE / OOS_HEAVY"
+            quality_flag = "LOW_IS_SAMPLE"
         elif is_trades_count >= 50 and oos_trades_count < 25:
             quality_flag = "EDGE_DECAYED_OOS"
         elif is_pf < 1.0 and oos_pf >= 1.2:
@@ -348,6 +391,25 @@ class MasterStrategyEngine:
             quality_flag = "STABLE"
         else:
             quality_flag = "MARGINAL"
+
+        if quality_flag in ("ROBUST", "STABLE", "MARGINAL"):
+            thresholds = [1.0, 1.15, 1.2]
+            near_boundary = any(
+                abs(pf - t) < BOUNDARY_BUFFER
+                for pf in (is_pf, oos_pf)
+                for t in thresholds
+            )
+            if near_boundary:
+                quality_flag += "_BORDERLINE"
+
+        quality_score = self.calculate_quality_score(
+            is_pf=is_pf,
+            oos_pf=oos_pf,
+            recent_pf=recent_pf,
+            total_trades=total_trades,
+            is_trades=is_trades_count,
+            oos_trades=oos_trades_count,
+        )
 
         exit_reason_counts: dict[str, int] = {}
         for trade in self.trades:
@@ -385,4 +447,5 @@ class MasterStrategyEngine:
             "Recent 12m Trades": recent_trades_count,
             "Recent 12m PF": f"{recent_pf:.2f}",
             "Quality Flag": quality_flag,
+            "Quality Score": f"{quality_score:.4f}",
         }
