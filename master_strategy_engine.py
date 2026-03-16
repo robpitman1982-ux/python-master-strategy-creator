@@ -699,43 +699,39 @@ def run_single_family(
 # MAIN
 # =============================================================================
 
-if __name__ == "__main__":
-    total_start = time.perf_counter()
-    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
-
-    filename_parts = CSV_PATH.stem.split("_")
-    market_symbol = filename_parts[0] if len(filename_parts) > 0 else "UNKNOWN"
-    timeframe = filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN"
-
-    print(f"\n🎯 ENGINE CONFIGURATION AUTO-DETECTED:")
-    print(f"   Market Symbol: {market_symbol}")
-    print(f"   Timeframe:     {timeframe}\n")
+def _run_dataset(
+    ds_path: Path,
+    ds_market: str,
+    ds_timeframe: str,
+    ds_output_dir: Path,
+) -> None:
+    """Run the full pipeline for a single dataset and save results to ds_output_dir."""
+    ds_output_dir.mkdir(parents=True, exist_ok=True)
 
     family_names = list_strategy_types() if STRATEGY_TYPE_NAME == "all" else [STRATEGY_TYPE_NAME]
-    all_family_summaries: list[dict[str, Any]] = []
+    dataset_summaries: list[dict[str, Any]] = []
 
     for family_name in family_names:
         summary_row = run_single_family(
             strategy_type_name=family_name,
-            dataset_path=CSV_PATH,
-            outputs_dir=OUTPUTS_DIR,
+            dataset_path=ds_path,
+            outputs_dir=ds_output_dir,
             max_workers_sweep=MAX_WORKERS_SWEEP,
             max_workers_refinement=MAX_WORKERS_REFINEMENT,
-            market_symbol=market_symbol,
+            market_symbol=ds_market,
         )
-        all_family_summaries.append(summary_row)
+        dataset_summaries.append(summary_row)
 
-    family_summary_df = pd.DataFrame(all_family_summaries)
-    family_summary_path = OUTPUTS_DIR / "family_summary_results.csv"
-    family_summary_df.to_csv(family_summary_path, index=False)
+    family_summary_df = pd.DataFrame(dataset_summaries)
+    family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)
 
     leaderboard_df = build_family_leaderboard(family_summary_df)
-    leaderboard_path = OUTPUTS_DIR / "family_leaderboard_results.csv"
+    leaderboard_path = ds_output_dir / "family_leaderboard_results.csv"
 
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
 
-        print("\n🏆 LEADERBOARD 3.2 (Saved to family_leaderboard_results.csv)")
+        print(f"\n🏆 LEADERBOARD — {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
         preview_cols = [
             "strategy_type",
             "leader_source",
@@ -757,18 +753,18 @@ if __name__ == "__main__":
 
         review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
             leaderboard_csv=leaderboard_path,
-            data_csv=CSV_PATH,
-            market_name=market_symbol,
-            timeframe=timeframe,
+            data_csv=ds_path,
+            market_name=ds_market,
+            timeframe=ds_timeframe,
             oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
         )
 
         if not review_table.empty:
-            review_table.to_csv(OUTPUTS_DIR / "portfolio_review_table.csv", index=False)
-            returns_df.to_csv(OUTPUTS_DIR / "strategy_returns.csv", index=True)
-            corr_matrix.to_csv(OUTPUTS_DIR / "correlation_matrix.csv", index=True)
+            review_table.to_csv(ds_output_dir / "portfolio_review_table.csv", index=False)
+            returns_df.to_csv(ds_output_dir / "strategy_returns.csv", index=True)
+            corr_matrix.to_csv(ds_output_dir / "correlation_matrix.csv", index=True)
             if not yearly_df.empty:
-                yearly_df.to_csv(OUTPUTS_DIR / "yearly_stats_breakdown.csv", index=False)
+                yearly_df.to_csv(ds_output_dir / "yearly_stats_breakdown.csv", index=False)
 
             print("\n✅ PORTFOLIO EVALUATION COMPLETE.")
             preview_cols = [
@@ -785,5 +781,47 @@ if __name__ == "__main__":
             print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
         else:
             print("\n⚠ No strategies passed final leaderboard acceptance gate for evaluation.")
+
+
+if __name__ == "__main__":
+    total_start = time.perf_counter()
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    datasets = get_nested(_cfg, "datasets", default=[])
+    if not datasets:
+        # Fallback: single dataset from CSV_PATH
+        filename_parts = CSV_PATH.stem.split("_")
+        datasets = [
+            {
+                "path": str(CSV_PATH),
+                "market": filename_parts[0] if filename_parts else "UNKNOWN",
+                "timeframe": filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN",
+            }
+        ]
+
+    all_run_summaries: list[dict[str, Any]] = []
+
+    for ds_idx, ds in enumerate(datasets):
+        ds_path = Path(ds.get("path", str(CSV_PATH)))
+        ds_market = ds.get("market", "UNKNOWN")
+        ds_timeframe = ds.get("timeframe", "UNKNOWN")
+
+        print(f"\n{'=' * 72}")
+        print(f"📂 DATASET {ds_idx + 1}/{len(datasets)}: {ds_market} {ds_timeframe}")
+        print(f"   Path: {ds_path}")
+        print(f"{'=' * 72}")
+
+        ds_output_dir = OUTPUTS_DIR / f"{ds_market}_{ds_timeframe}"
+
+        _run_dataset(
+            ds_path=ds_path,
+            ds_market=ds_market,
+            ds_timeframe=ds_timeframe,
+            ds_output_dir=ds_output_dir,
+        )
+
+    if len(datasets) > 1:
+        print(f"\n{'=' * 72}")
+        print(f"📊 All {len(datasets)} datasets complete.")
 
     print(f"\n🏁 Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
