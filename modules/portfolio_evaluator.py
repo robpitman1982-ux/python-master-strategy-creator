@@ -218,7 +218,6 @@ def _rebuild_strategy_from_leaderboard_row(
     min_avg_range = _safe_float(row.get("leader_min_avg_range", 0.0), 0.0)
     momentum_lookback = _safe_int(row.get("leader_momentum_lookback", 0), 0)
 
-    # If combo leader was selected, rebuild using family defaults.
     if leader_source == "combo":
         hold_bars = int(getattr(strategy_type_inst, "default_hold_bars", 3))
         stop_distance_points = float(getattr(strategy_type_inst, "default_stop_distance_points", 1.0))
@@ -281,12 +280,20 @@ def evaluate_portfolio(
 
     last_cfg = EngineConfig(symbol=market_name)
 
-    # Only evaluate families that actually had promoted candidates.
-    leaderboard_df = leaderboard_df[leaderboard_df["promotion_status"] == "PROMOTED"].copy()
-    if leaderboard_df.empty:
+    # -------------------------------------------------------------------------
+    # CRITICAL FIX:
+    # Only evaluate final accepted rows.
+    # -------------------------------------------------------------------------
+    if "accepted_final" not in leaderboard_df.columns:
+        print("\n⚠ Leaderboard has no accepted_final column. Nothing to evaluate.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    print(f"\nEvaluating {len(leaderboard_df)} strategies from Leaderboard...")
+    leaderboard_df = leaderboard_df[leaderboard_df["accepted_final"] == True].copy()
+    if leaderboard_df.empty:
+        print("\n⚠ No leaderboard rows passed accepted_final == True.")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    print(f"\nEvaluating {len(leaderboard_df)} final accepted strategies from Leaderboard...")
 
     for _, row in leaderboard_df.iterrows():
         strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
@@ -310,7 +317,6 @@ def evaluate_portfolio(
             trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
             trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
 
-            # Extra safety: skip statistically junk reconstructions if any slipped through.
             if len(trades_df) < 1:
                 print(f"    [Warning] Skipping. No reconstructed trades for {strategy_name}.")
                 continue
@@ -375,7 +381,7 @@ def evaluate_portfolio(
             print(f"    [Warning] Could not reconstruct trade history: {e}")
 
     if len(all_trades_list) > 1:
-        print("\n  Evaluating: COMBINED PORTFOLIO (All Winning Strategies Merged)")
+        print("\n  Evaluating: COMBINED PORTFOLIO (All Final Accepted Strategies Merged)")
         combo_df = pd.concat(all_trades_list, ignore_index=True)
         combo_df = combo_df.sort_values("exit_time").reset_index(drop=True)
 

@@ -22,6 +22,10 @@ from modules.feature_builder import add_precomputed_features
 from modules.portfolio_evaluator import evaluate_portfolio
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
+# =============================================================================
+# USER SETTINGS
+# =============================================================================
+
 CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
 STRATEGY_TYPE_NAME = "all"
 OUTPUTS_DIR = Path("Outputs")
@@ -30,6 +34,16 @@ MAX_WORKERS_SWEEP = 10
 MAX_WORKERS_REFINEMENT = 10
 MAX_CANDIDATES_TO_REFINE = 3
 
+# Final leaderboard acceptance gate
+FINAL_MIN_NET_PNL = 0.0
+FINAL_MIN_PF = 1.00
+FINAL_MIN_OOS_PF = 1.00
+FINAL_MIN_TOTAL_TRADES = 60
+
+
+# =============================================================================
+# GENERIC HELPERS
+# =============================================================================
 
 def parse_money(value: Any) -> float:
     if isinstance(value, (int, float)):
@@ -110,13 +124,17 @@ def run_top_combo_refinement(
     )
 
 
+# =============================================================================
+# PROMOTION GATE
+# =============================================================================
+
 def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[str, Any]) -> pd.DataFrame:
     """
-    Sweep promotion should be looser than refinement.
+    Sweep promotion is intentionally looser than final leaderboard acceptance.
 
-    Important design choice:
-    - We do NOT require positive average_trade at sweep stage anymore.
-    - We can still sort by average_trade later, but we do not kill candidates early for it.
+    Sweep goal:
+    - let promising candidates through
+    - do not kill things too early just because avg trade is temporarily weak
     """
     if combo_results_df is None or combo_results_df.empty:
         return pd.DataFrame()
@@ -147,9 +165,8 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
     if sort_cols:
         promoted = promoted.sort_values(by=sort_cols, ascending=[False] * len(sort_cols)).reset_index(drop=True)
 
-    dedup_cols = [c for c in ["strategy_name"] if c in promoted.columns]
-    if dedup_cols:
-        promoted = promoted.drop_duplicates(subset=dedup_cols).reset_index(drop=True)
+    if "strategy_name" in promoted.columns:
+        promoted = promoted.drop_duplicates(subset=["strategy_name"]).reset_index(drop=True)
 
     return promoted
 
@@ -174,6 +191,7 @@ def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[st
         ]
         if c in promoted_df.columns
     ]
+
     print(f"\n✅ Promoted Candidates ({len(promoted_df)} Distinct):")
     print(promoted_df[display_cols].head(10).to_string(index=False))
 
@@ -184,6 +202,10 @@ def save_csv_if_not_empty(df: pd.DataFrame, filepath: Path) -> None:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(filepath, index=False)
 
+
+# =============================================================================
+# SANITY CHECK
+# =============================================================================
 
 def run_sanity_check(strategy_type: Any, data: pd.DataFrame, cfg: EngineConfig) -> dict[str, Any]:
     strategy = build_sanity_check_strategy(strategy_type)
@@ -201,6 +223,10 @@ def run_sanity_check(strategy_type: Any, data: pd.DataFrame, cfg: EngineConfig) 
         "net_pnl": parse_money(results.get("Net PnL", 0.0)),
     }
 
+
+# =============================================================================
+# FAMILY SUMMARY
+# =============================================================================
 
 def _extract_best_refined_param(best_refined: dict[str, Any], key: str, default: Any) -> Any:
     value = best_refined.get(key, default)
@@ -276,9 +302,17 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
     print(f"Rows:                     {summary_row['rows']:,}")
     print(f"Start:                    {summary_row['start']}")
     print(f"End:                      {summary_row['end']}")
+
     print("\n--- Combination Sweep ---")
     print(f"Total Combinations:       {summary_row['total_combinations']}")
     print(f"Promoted Candidates:      {summary_row['promoted_candidates']}")
+
+    print("\n--- Best Promoted Combo ---")
+    print(f"Strategy:                 {summary_row['best_combo_strategy_name']}")
+    print(f"PF:                       {summary_row['best_combo_profit_factor']:.2f}")
+    print(f"Net PnL:                  {summary_row['best_combo_net_pnl']:.2f}")
+    print(f"Total Trades:             {summary_row['best_combo_total_trades']}")
+
     print("\n--- Best Refined Candidate ---")
     print(f"Strategy:                 {summary_row['best_refined_strategy_name']}")
     print(f"Quality Flag:             {summary_row['best_refined_quality_flag']}")
@@ -288,17 +322,17 @@ def print_family_summary(summary_row: dict[str, Any]) -> None:
     print("=" * 72)
 
 
+# =============================================================================
+# LEADERBOARD SELECTION
+# =============================================================================
+
 def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
     """
-    Choose between combo and refined.
-
     Rule:
-    - If no refinement ran, combo wins.
-    - If refinement ran, refined only wins if it improves net_pnl.
-    - If net_pnl is tied, require PF >= combo PF.
-    Otherwise keep combo.
+    - if no refinement ran -> combo wins
+    - if refinement ran -> refined wins only if net pnl improves
+    - if tied on net pnl -> refined must have PF >= combo PF
     """
-
     combo = {
         "leader_source": "combo",
         "leader_strategy_name": row.get("best_combo_strategy_name", "NONE"),
@@ -356,18 +390,36 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
     return combo
 
 
+def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
+    leader_net = float(row.get("leader_net_pnl", 0.0) or 0.0)
+    leader_pf = float(row.get("leader_pf", 0.0) or 0.0)
+    oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
+    leader_trades = int(row.get("leader_trades", 0) or 0)
+
+    if leader_net <= FINAL_MIN_NET_PNL:
+        return False
+    if leader_pf < FINAL_MIN_PF:
+        return False
+    if oos_pf < FINAL_MIN_OOS_PF:
+        return False
+    if leader_trades < FINAL_MIN_TOTAL_TRADES:
+        return False
+    return True
+
+
 def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
 
     leaderboard = summary_df.copy()
-
     leader_rows = leaderboard.apply(_choose_family_leader, axis=1, result_type="expand")
     leaderboard = pd.concat([leaderboard, leader_rows], axis=1)
 
+    leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
+
     leaderboard = leaderboard.sort_values(
-        by=["leader_net_pnl", "leader_pf", "leader_avg_trade"],
-        ascending=[False, False, False],
+        by=["accepted_final", "leader_net_pnl", "leader_pf", "leader_avg_trade"],
+        ascending=[False, False, False, False],
     ).reset_index(drop=True)
 
     keep_cols = [
@@ -377,6 +429,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "promoted_candidates",
         "leader_source",
         "leader_strategy_name",
+        "accepted_final",
         "quality_flag",
         "is_trades",
         "oos_trades",
@@ -400,6 +453,10 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
 
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()
 
+
+# =============================================================================
+# FAMILY RUN
+# =============================================================================
 
 def run_single_family(
     strategy_type_name: str,
@@ -506,6 +563,10 @@ def run_single_family(
     return family_summary_row
 
 
+# =============================================================================
+# MAIN
+# =============================================================================
+
 if __name__ == "__main__":
     total_start = time.perf_counter()
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -541,12 +602,13 @@ if __name__ == "__main__":
 
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
-        print("\n🏆 LEADERBOARD 3.0 (Saved to family_leaderboard_results.csv)")
 
+        print("\n🏆 LEADERBOARD 3.1 (Saved to family_leaderboard_results.csv)")
         preview_cols = [
             "strategy_type",
             "leader_source",
             "leader_strategy_name",
+            "accepted_final",
             "quality_flag",
             "is_trades",
             "oos_trades",
@@ -588,14 +650,18 @@ if __name__ == "__main__":
             ]
             print("\n[Final Strategy Review Table]")
             print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
+        else:
+            print("\n⚠ No strategies passed final leaderboard acceptance gate for evaluation.")
 
     print(f"\n🏁 Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
+
 
 ==================================================
 FILE: .\run_evaluator.py
 ==================================================
 
 from pathlib import Path
+
 from modules.portfolio_evaluator import evaluate_portfolio
 
 # Input paths
@@ -613,26 +679,25 @@ if __name__ == "__main__":
     print("Starting Portfolio Evaluation Phase...")
 
     Path("Outputs").mkdir(parents=True, exist_ok=True)
-    
-    # Automatically extract Market Symbol and Timeframe from filename (e.g. "ES_60m...")
+
     filename_parts = DATA_PATH.stem.split("_")
-    MARKET_SYMBOL = filename_parts[0] if len(filename_parts) > 0 else "UNKNOWN"
-    TIMEFRAME = filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN"
-    
-    print(f"Detecting target: Market={MARKET_SYMBOL}, Timeframe={TIMEFRAME}")
+    market_symbol = filename_parts[0] if len(filename_parts) > 0 else "UNKNOWN"
+    timeframe = filename_parts[1] if len(filename_parts) > 1 else "UNKNOWN"
+
+    print(f"Detecting target: Market={market_symbol}, Timeframe={timeframe}")
 
     review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
         leaderboard_csv=LEADERBOARD_PATH,
         data_csv=DATA_PATH,
-        market_name=MARKET_SYMBOL,
-        timeframe=TIMEFRAME,
+        market_name=market_symbol,
+        timeframe=timeframe,
     )
 
     if not review_table.empty:
         review_table.to_csv(REVIEW_TABLE_PATH, index=False)
         returns_df.to_csv(RETURNS_PATH, index=True)
         corr_matrix.to_csv(CORRELATION_PATH, index=True)
-        
+
         if not yearly_df.empty:
             yearly_df.to_csv(YEARLY_STATS_PATH, index=False)
 
@@ -646,14 +711,24 @@ if __name__ == "__main__":
 
         print("\n[Preview of Portfolio Review Table]")
         preview_cols = [
-            "strategy_family", "quality_flag", "is_trades", "oos_trades",
-            "is_pf_pre_2019", "oos_pf_post_2019",
-            "mc_max_dd_99", "shock_drop_10pct_pnl"
+            "strategy_family",
+            "strategy_name",
+            "quality_flag",
+            "is_trades",
+            "oos_trades",
+            "is_pf_pre_2019",
+            "oos_pf_post_2019",
+            "mc_max_dd_99",
+            "shock_drop_10pct_pnl",
         ]
         preview_df = review_table[[c for c in preview_cols if c in review_table.columns]]
         print(preview_df.to_string(index=False))
     else:
-        print("\n❌ No valid strategies found to evaluate. Ensure your leaderboard has promoted candidates.")
+        print("\n❌ No valid strategies found to evaluate.")
+        print("This usually means either:")
+        print("- the leaderboard is empty, or")
+        print("- no rows passed accepted_final=True.")
+
 
 ==================================================
 FILE: .\modules\data_loader.py
@@ -1224,14 +1299,17 @@ FILE: .\modules\filters.py
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+
 import pandas as pd
-import numpy as np
+
 
 class BaseFilter(ABC):
     name: str = "BaseFilter"
+
     @abstractmethod
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         raise NotImplementedError
+
 
 # ============================================================
 # Trend-family filters
@@ -1239,72 +1317,172 @@ class BaseFilter(ABC):
 
 class TrendDirectionFilter(BaseFilter):
     name = "TrendDirectionFilter"
+
     def __init__(self, fast_length: int = 50, slow_length: int = 200):
         self.fast_length = fast_length
         self.slow_length = slow_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < max(self.fast_length, self.slow_length): return False
-        fast_col, slow_col = f"sma_{self.fast_length}", f"sma_{self.slow_length}"
-        fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
-        slow_sma = data.iloc[i][slow_col] if slow_col in data.columns else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        if i < max(self.fast_length, self.slow_length):
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
+        slow_sma = (
+            data.iloc[i][slow_col]
+            if slow_col in data.columns
+            else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        )
         return bool(fast_sma > slow_sma)
+
 
 class PullbackFilter(BaseFilter):
     name = "PullbackFilter"
+
     def __init__(self, fast_length: int = 50):
         self.fast_length = fast_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length: return False
+        if i < self.fast_length:
+            return False
+
         fast_col = f"sma_{self.fast_length}"
-        prev_fast_sma = data.iloc[i - 1][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length : i].mean()
+        prev_fast_sma = (
+            data.iloc[i - 1][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length : i].mean()
+        )
         return bool(data.iloc[i]["prev_close"] <= prev_fast_sma)
+
 
 class RecoveryTriggerFilter(BaseFilter):
     name = "RecoveryTriggerFilter"
+
     def __init__(self, fast_length: int = 50):
         self.fast_length = fast_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length: return False
+        if i < self.fast_length:
+            return False
+
         fast_col = f"sma_{self.fast_length}"
-        fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
         return bool(data.iloc[i]["close"] > fast_sma)
+
 
 class VolatilityFilter(BaseFilter):
     name = "VolatilityFilter"
-    def __init__(self, lookback: int = 20, min_atr_mult: float = 1.0): 
+
+    def __init__(self, lookback: int = 20, min_atr_mult: float = 1.0):
         self.lookback = lookback
         self.min_atr_mult = min_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback * 2: return False
+        if i < self.lookback * 2:
+            return False
+
         atr_col = f"atr_{self.lookback}"
         current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
         long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
+
         return bool(current_atr >= (long_term_atr * self.min_atr_mult))
+
 
 class MomentumFilter(BaseFilter):
     name = "MomentumFilter"
+
     def __init__(self, lookback: int = 10):
         self.lookback = lookback
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
+        if i < self.lookback:
+            return False
         return bool(data.iloc[i]["close"] > data.iloc[i - self.lookback]["close"])
+
 
 class UpCloseFilter(BaseFilter):
     name = "UpCloseFilter"
+
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 1: return False
+        if i < 1:
+            return False
         return bool(data.iloc[i]["close"] > data.iloc[i - 1]["close"])
+
 
 class TwoBarUpFilter(BaseFilter):
     name = "TwoBarUpFilter"
+
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 2: return False
-        return bool(data.iloc[i]["close"] > data.iloc[i - 1]["close"] and data.iloc[i - 1]["close"] > data.iloc[i - 2]["close"])
+        if i < 2:
+            return False
+        return bool(
+            data.iloc[i]["close"] > data.iloc[i - 1]["close"]
+            and data.iloc[i - 1]["close"] > data.iloc[i - 2]["close"]
+        )
+
+
+class TrendSlopeFilter(BaseFilter):
+    name = "TrendSlopeFilter"
+
+    def __init__(self, fast_length: int = 50, slope_bars: int = 5):
+        self.fast_length = fast_length
+        self.slope_bars = slope_bars
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        min_bars = max(self.fast_length, self.slope_bars + self.fast_length)
+        if i < min_bars:
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+        if fast_col in data.columns:
+            current_fast = data.iloc[i][fast_col]
+            past_fast = data.iloc[i - self.slope_bars][fast_col]
+        else:
+            current_fast = data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+            past_fast = data["close"].iloc[
+                i - self.slope_bars - self.fast_length + 1 : i - self.slope_bars + 1
+            ].mean()
+
+        return bool(current_fast > past_fast)
+
+
+class CloseAboveFastSMAFilter(BaseFilter):
+    name = "CloseAboveFastSMAFilter"
+
+    def __init__(self, fast_length: int = 50):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
+        return bool(data.iloc[i]["close"] > fast_sma)
+
+
+class HigherLowFilter(BaseFilter):
+    name = "HigherLowFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 2:
+            return False
+        return bool(data.iloc[i]["low"] > data.iloc[i - 1]["low"])
+
 
 # ============================================================
 # Breakout-family filters
@@ -1312,89 +1490,206 @@ class TwoBarUpFilter(BaseFilter):
 
 class CompressionFilter(BaseFilter):
     name = "CompressionFilter"
-    def __init__(self, lookback: int = 20, max_atr_mult: float = 0.75): 
+
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 0.75):
         self.lookback = lookback
         self.max_atr_mult = max_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback * 2: return False
+        if i < self.lookback * 2:
+            return False
+
         atr_col = f"atr_{self.lookback}"
         current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
         long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
+
         return bool(current_atr <= (long_term_atr * self.max_atr_mult))
+
 
 class RangeBreakoutFilter(BaseFilter):
     name = "RangeBreakoutFilter"
+
     def __init__(self, lookback: int = 20):
         self.lookback = lookback
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
+        if i < self.lookback:
+            return False
+
         prior_high = data.iloc[i - self.lookback : i]["high"].max()
         return bool(data.iloc[i]["close"] > prior_high)
 
+
 class ExpansionBarFilter(BaseFilter):
     name = "ExpansionBarFilter"
+
     def __init__(self, lookback: int = 20, expansion_multiplier: float = 1.50):
         self.lookback = lookback
         self.expansion_multiplier = expansion_multiplier
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
-        current_tr = data.iloc[i]["true_range"] if "true_range" in data.columns else (data.iloc[i]["high"] - data.iloc[i]["low"])
+        if i < self.lookback:
+            return False
+
+        current_tr = (
+            data.iloc[i]["true_range"]
+            if "true_range" in data.columns
+            else (data.iloc[i]["high"] - data.iloc[i]["low"])
+        )
         atr_col = f"atr_{self.lookback}"
         current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
+
         return bool(current_tr >= (current_atr * self.expansion_multiplier))
+
 
 class BreakoutRetestFilter(BaseFilter):
     name = "BreakoutRetestFilter"
+
     def __init__(self, lookback: int = 20, atr_buffer_mult: float = 0.0):
         self.lookback = lookback
         self.atr_buffer_mult = atr_buffer_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback: return False
+        if i < self.lookback:
+            return False
+
         prior_high = data.iloc[i - self.lookback : i]["high"].max()
-        current_atr = data.iloc[i][f"atr_{self.lookback}"] if f"atr_{self.lookback}" in data.columns else 10.0
+        current_atr = (
+            data.iloc[i][f"atr_{self.lookback}"]
+            if f"atr_{self.lookback}" in data.columns
+            else 10.0
+        )
+
         return bool(data.iloc[i]["close"] > prior_high + (current_atr * self.atr_buffer_mult))
+
 
 class BreakoutTrendFilter(BaseFilter):
     name = "BreakoutTrendFilter"
+
     def __init__(self, fast_length: int = 50, slow_length: int = 200):
         self.fast_length = fast_length
         self.slow_length = slow_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < max(self.fast_length, self.slow_length): return False
-        fast_col, slow_col = f"sma_{self.fast_length}", f"sma_{self.slow_length}"
-        fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
-        slow_sma = data.iloc[i][slow_col] if slow_col in data.columns else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        if i < max(self.fast_length, self.slow_length):
+            return False
+
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
+        slow_sma = (
+            data.iloc[i][slow_col]
+            if slow_col in data.columns
+            else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        )
+
         return bool(fast_sma > slow_sma)
+
 
 class BreakoutCloseStrengthFilter(BaseFilter):
     name = "BreakoutCloseStrengthFilter"
+
     def __init__(self, close_position_threshold: float = 0.60):
         self.close_position_threshold = close_position_threshold
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        c_high, c_low, c_close = data.iloc[i]["high"], data.iloc[i]["low"], data.iloc[i]["close"]
+        c_high = data.iloc[i]["high"]
+        c_low = data.iloc[i]["low"]
+        c_close = data.iloc[i]["close"]
+
         bar_range = c_high - c_low
-        if bar_range <= 0: return False
+        if bar_range <= 0:
+            return False
+
         return bool(((c_close - c_low) / bar_range) >= self.close_position_threshold)
+
 
 class PriorRangePositionFilter(BaseFilter):
     name = "PriorRangePositionFilter"
+
     def __init__(self, lookback: int = 20, min_position_in_range: float = 0.50):
         self.lookback = lookback
         self.min_position_in_range = min_position_in_range
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback or i < 1: return False
+        if i < self.lookback or i < 1:
+            return False
+
         prior_window = data.iloc[i - self.lookback : i]
-        r_low, r_high = prior_window["low"].min(), prior_window["high"].max()
+        r_low = prior_window["low"].min()
+        r_high = prior_window["high"].max()
         full_range = r_high - r_low
-        if full_range <= 0: return False
+
+        if full_range <= 0:
+            return False
+
         return bool(((data.iloc[i - 1]["close"] - r_low) / full_range) >= self.min_position_in_range)
+
+
+class BreakoutDistanceFilter(BaseFilter):
+    name = "BreakoutDistanceFilter"
+
+    def __init__(self, lookback: int = 20, min_breakout_atr: float = 0.10):
+        self.lookback = lookback
+        self.min_breakout_atr = min_breakout_atr
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        prior_high = data.iloc[i - self.lookback : i]["high"].max()
+        current_atr = (
+            data.iloc[i][f"atr_{self.lookback}"]
+            if f"atr_{self.lookback}" in data.columns
+            else 10.0
+        )
+        breakout_distance = data.iloc[i]["close"] - prior_high
+
+        return bool(breakout_distance >= (current_atr * self.min_breakout_atr))
+
+
+class RisingBaseFilter(BaseFilter):
+    name = "RisingBaseFilter"
+
+    def __init__(self, lookback: int = 5):
+        self.lookback = lookback
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback + 1:
+            return False
+
+        recent_lows = data.iloc[i - self.lookback : i]["low"]
+        first_half = recent_lows.iloc[: max(1, len(recent_lows) // 2)]
+        second_half = recent_lows.iloc[max(1, len(recent_lows) // 2) :]
+
+        if first_half.empty or second_half.empty:
+            return False
+
+        return bool(second_half.min() >= first_half.min())
+
+
+class TightRangeFilter(BaseFilter):
+    name = "TightRangeFilter"
+
+    def __init__(self, lookback: int = 20, max_bar_range_mult: float = 0.85):
+        self.lookback = lookback
+        self.max_bar_range_mult = max_bar_range_mult
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+
+        avg_range_col = f"avg_range_{self.lookback}"
+        avg_range = data.iloc[i][avg_range_col] if avg_range_col in data.columns else data["bar_range"].iloc[i - self.lookback : i].mean()
+        current_range = data.iloc[i]["bar_range"] if "bar_range" in data.columns else (data.iloc[i]["high"] - data.iloc[i]["low"])
+
+        return bool(current_range <= (avg_range * self.max_bar_range_mult))
+
 
 # ============================================================
 # Mean-reversion-family filters
@@ -1402,68 +1697,164 @@ class PriorRangePositionFilter(BaseFilter):
 
 class BelowFastSMAFilter(BaseFilter):
     name = "BelowFastSMAFilter"
+
     def __init__(self, fast_length: int = 20):
         self.fast_length = fast_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length: return False
+        if i < self.fast_length:
+            return False
+
         fast_col = f"sma_{self.fast_length}"
-        fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
         return bool(data.iloc[i]["close"] < fast_sma)
+
 
 class DistanceBelowSMAFilter(BaseFilter):
     name = "DistanceBelowSMAFilter"
-    def __init__(self, fast_length: int = 20, min_distance_atr: float = 0.3): 
+
+    def __init__(self, fast_length: int = 20, min_distance_atr: float = 0.3):
         self.fast_length = fast_length
         self.min_distance_atr = min_distance_atr
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.fast_length: return False
+        if i < self.fast_length:
+            return False
+
         fast_col = f"sma_{self.fast_length}"
-        fast_sma = data.iloc[i][fast_col] if fast_col in data.columns else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        fast_sma = (
+            data.iloc[i][fast_col]
+            if fast_col in data.columns
+            else data["close"].iloc[i - self.fast_length + 1 : i + 1].mean()
+        )
         current_atr = data.iloc[i]["atr_20"] if "atr_20" in data.columns else 10.0
+
         return bool((fast_sma - data.iloc[i]["close"]) >= (current_atr * self.min_distance_atr))
+
 
 class DownCloseFilter(BaseFilter):
     name = "DownCloseFilter"
+
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 1: return False
+        if i < 1:
+            return False
         return bool(data.iloc[i]["close"] < data.iloc[i - 1]["close"])
+
 
 class TwoBarDownFilter(BaseFilter):
     name = "TwoBarDownFilter"
+
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < 2: return False
-        return bool(data.iloc[i]["close"] < data.iloc[i - 1]["close"] and data.iloc[i - 1]["close"] < data.iloc[i - 2]["close"])
+        if i < 2:
+            return False
+        return bool(
+            data.iloc[i]["close"] < data.iloc[i - 1]["close"]
+            and data.iloc[i - 1]["close"] < data.iloc[i - 2]["close"]
+        )
+
 
 class ReversalUpBarFilter(BaseFilter):
     name = "ReversalUpBarFilter"
+
     def passes(self, data: pd.DataFrame, i: int) -> bool:
         return bool(data.iloc[i]["close"] > data.iloc[i]["open"])
 
+
 class LowVolatilityRegimeFilter(BaseFilter):
     name = "LowVolatilityRegimeFilter"
-    def __init__(self, lookback: int = 20, max_atr_mult: float = 1.0): 
+
+    def __init__(self, lookback: int = 20, max_atr_mult: float = 1.0):
         self.lookback = lookback
         self.max_atr_mult = max_atr_mult
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.lookback * 2: return False
+        if i < self.lookback * 2:
+            return False
+
         atr_col = f"atr_{self.lookback}"
         current_atr = data.iloc[i][atr_col] if atr_col in data.columns else 10.0
-        long_term_atr = data["true_range"].iloc[i - (self.lookback*2) : i].mean()
+        long_term_atr = data["true_range"].iloc[i - (self.lookback * 2) : i].mean()
+
         return bool(current_atr <= (long_term_atr * self.max_atr_mult))
+
 
 class AboveLongTermSMAFilter(BaseFilter):
     name = "AboveLongTermSMAFilter"
+
     def __init__(self, slow_length: int = 200):
         self.slow_length = slow_length
 
     def passes(self, data: pd.DataFrame, i: int) -> bool:
-        if i < self.slow_length: return False
+        if i < self.slow_length:
+            return False
+
         slow_col = f"sma_{self.slow_length}"
-        slow_sma = data.iloc[i][slow_col] if slow_col in data.columns else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        slow_sma = (
+            data.iloc[i][slow_col]
+            if slow_col in data.columns
+            else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        )
         return bool(data.iloc[i]["close"] > slow_sma)
+
+
+class ThreeBarDownFilter(BaseFilter):
+    name = "ThreeBarDownFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 3:
+            return False
+
+        return bool(
+            data.iloc[i]["close"] < data.iloc[i - 1]["close"]
+            and data.iloc[i - 1]["close"] < data.iloc[i - 2]["close"]
+            and data.iloc[i - 2]["close"] < data.iloc[i - 3]["close"]
+        )
+
+
+class CloseNearLowFilter(BaseFilter):
+    name = "CloseNearLowFilter"
+
+    def __init__(self, max_close_position: float = 0.35):
+        self.max_close_position = max_close_position
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        high_ = data.iloc[i]["high"]
+        low_ = data.iloc[i]["low"]
+        close_ = data.iloc[i]["close"]
+
+        bar_range = high_ - low_
+        if bar_range <= 0:
+            return False
+
+        close_position = (close_ - low_) / bar_range
+        return bool(close_position <= self.max_close_position)
+
+
+class StretchFromLongTermSMAFilter(BaseFilter):
+    name = "StretchFromLongTermSMAFilter"
+
+    def __init__(self, slow_length: int = 200, min_distance_atr: float = 0.5):
+        self.slow_length = slow_length
+        self.min_distance_atr = min_distance_atr
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.slow_length:
+            return False
+
+        slow_col = f"sma_{self.slow_length}"
+        slow_sma = (
+            data.iloc[i][slow_col]
+            if slow_col in data.columns
+            else data["close"].iloc[i - self.slow_length + 1 : i + 1].mean()
+        )
+        current_atr = data.iloc[i]["atr_20"] if "atr_20" in data.columns else 10.0
+        distance = slow_sma - data.iloc[i]["close"]
+
+        return bool(distance >= (current_atr * self.min_distance_atr))
 
 ==================================================
 FILE: .\modules\filter_combinator.py
@@ -1637,37 +2028,26 @@ class StrategyOptimizer:
 
     @staticmethod
     def _parse_money(value: Any) -> float:
-        """
-        Converts strings like '$-200,201.50' into float.
-        """
         if isinstance(value, (int, float)):
             return float(value)
-
         text = str(value).replace("$", "").replace(",", "").strip()
         return float(text)
 
     @staticmethod
     def _parse_percent(value: Any) -> float:
-        """
-        Converts strings like '34.84%' into float.
-        """
         if isinstance(value, (int, float)):
             return float(value)
-
         text = str(value).replace("%", "").strip()
         return float(text)
 
     def _calculate_years_in_sample(self) -> float:
-        """
-        Estimate years covered by the dataset using the datetime index.
-        """
         if self.data.empty:
             return 0.0
 
         start = self.data.index.min()
         end = self.data.index.max()
-
         total_days = (end - start).days
+
         if total_days <= 0:
             return 0.0
 
@@ -1680,10 +2060,6 @@ class StrategyOptimizer:
         min_trades: int = 0,
         min_trades_per_year: float = 0.0,
     ) -> pd.DataFrame:
-        """
-        Runs all combinations of hold_bars and stop_distance_points.
-        Returns a dataframe of accepted optimization results only.
-        """
         self.results = []
 
         combinations = list(product(hold_bars, stop_distance_points))
@@ -1699,11 +2075,6 @@ class StrategyOptimizer:
         rejected_count = 0
 
         for run_number, (hb, stop_pts) in enumerate(combinations, start=1):
-            print(
-                f"  Run {run_number}/{total_runs} | "
-                f"hold_bars={hb}, stop_distance_points={stop_pts}"
-            )
-
             strategy = self.strategy_class()
             strategy.hold_bars = hb
             strategy.stop_distance_points = float(stop_pts)
@@ -1713,14 +2084,19 @@ class StrategyOptimizer:
 
             summary = engine.results()
             total_trades = int(summary["Total Trades"])
+            net_pnl = self._parse_money(summary["Net PnL"])
+            pf = float(summary["Profit Factor"])
 
-            trades_per_year = (
-                total_trades / years_in_sample if years_in_sample > 0 else 0.0
-            )
-
+            trades_per_year = total_trades / years_in_sample if years_in_sample > 0 else 0.0
             passes_trade_filter = (
                 total_trades >= min_trades
                 and trades_per_year >= min_trades_per_year
+            )
+
+            print(
+                f"  Run {run_number}/{total_runs} | "
+                f"hold_bars={hb}, stop_distance_points={stop_pts} | "
+                f"PF={pf:.2f} | Net={net_pnl:.2f} | trades={total_trades}"
             )
 
             if not passes_trade_filter:
@@ -1739,11 +2115,11 @@ class StrategyOptimizer:
                 years_in_sample=years_in_sample,
                 trades_per_year=trades_per_year,
                 passes_trade_filter=passes_trade_filter,
-                net_pnl=self._parse_money(summary["Net PnL"]),
+                net_pnl=net_pnl,
                 gross_profit=self._parse_money(summary["Gross Profit"]),
                 gross_loss=self._parse_money(summary["Gross Loss"]),
                 average_trade=self._parse_money(summary["Average Trade"]),
-                profit_factor=float(summary["Profit Factor"]),
+                profit_factor=pf,
                 max_drawdown=self._parse_money(summary["Max Drawdown"]),
                 win_rate=self._parse_percent(summary["Win Rate"]),
                 average_mae_points=float(summary["Average MAE (pts)"]),
@@ -1763,7 +2139,7 @@ class StrategyOptimizer:
 
         df = pd.DataFrame([r.__dict__ for r in self.results])
 
-        sort_columns = ["profit_factor", "average_trade", "net_pnl"]
+        sort_columns = ["net_pnl", "profit_factor", "average_trade"]
         existing_sort_columns = [col for col in sort_columns if col in df.columns]
 
         if existing_sort_columns:
@@ -1775,9 +2151,6 @@ class StrategyOptimizer:
         return df
 
     def display_dataframe(self) -> pd.DataFrame:
-        """
-        Returns a cleaner dataframe for terminal display.
-        """
         df = self.results_dataframe()
         if df.empty:
             return df
@@ -1825,16 +2198,12 @@ class StrategyOptimizer:
         return df.head(n)
 
     def save_results_csv(self, filepath: str | Path) -> Path:
-        """
-        Saves the full optimization results dataframe to CSV.
-        """
         df = self.results_dataframe()
         if df.empty:
             raise ValueError("No optimization results to save.")
 
         output_path = Path(filepath)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-
         df.to_csv(output_path, index=False)
         return output_path
 
@@ -2171,8 +2540,12 @@ def _rebuild_strategy_from_leaderboard_row(
 ) -> tuple[pd.DataFrame, str, EngineConfig]:
     strategy_type_name = str(row["strategy_type"]).strip()
     leader_source = str(row.get("leader_source", "")).strip().lower()
+    strategy_type_inst = get_strategy_type(strategy_type_name)
 
-    combo_name = str(row.get("best_combo_strategy_name", ""))
+    combo_name = str(row.get("best_combo_strategy_name", "")).strip()
+    if combo_name in ["", "NONE"]:
+        return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
+
     combo_row = _load_combo_reference_row(outputs_dir, strategy_type_name, combo_name)
     if not combo_row:
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
@@ -2181,14 +2554,12 @@ def _rebuild_strategy_from_leaderboard_row(
     if not combo_classes:
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
 
-    strategy_type_inst = get_strategy_type(strategy_type_name)
-
     hold_bars = _safe_int(row.get("leader_hold_bars", 0), 0)
     stop_distance_points = _safe_float(row.get("leader_stop_distance_points", 0.0), 0.0)
     min_avg_range = _safe_float(row.get("leader_min_avg_range", 0.0), 0.0)
     momentum_lookback = _safe_int(row.get("leader_momentum_lookback", 0), 0)
 
-    # If combo leader was selected, use family defaults.
+    # If combo leader was selected, rebuild using family defaults.
     if leader_source == "combo":
         hold_bars = int(getattr(strategy_type_inst, "default_hold_bars", 3))
         stop_distance_points = float(getattr(strategy_type_inst, "default_stop_distance_points", 1.0))
@@ -2253,11 +2624,16 @@ def evaluate_portfolio(
 
     # Only evaluate families that actually had promoted candidates.
     leaderboard_df = leaderboard_df[leaderboard_df["promotion_status"] == "PROMOTED"].copy()
+    if leaderboard_df.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     print(f"\nEvaluating {len(leaderboard_df)} strategies from Leaderboard...")
 
     for _, row in leaderboard_df.iterrows():
-        strategy_name = str(row.get("leader_strategy_name", "UNKNOWN"))
+        strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
+        if strategy_name in ["", "NONE"]:
+            continue
+
         print(f"\n  Evaluating: {row['strategy_type']} -> {strategy_name}")
 
         try:
@@ -2272,11 +2648,15 @@ def evaluate_portfolio(
                 print(f"    [Warning] Skipping. Could not rebuild trades for {strategy_name}.")
                 continue
 
-            last_cfg = cfg
-
             trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
             trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
 
+            # Extra safety: skip statistically junk reconstructions if any slipped through.
+            if len(trades_df) < 1:
+                print(f"    [Warning] Skipping. No reconstructed trades for {strategy_name}.")
+                continue
+
+            last_cfg = cfg
             all_trades_list.append(trades_df)
 
             daily_returns_dict[f"{run_id}_{strategy_name}"] = (
@@ -2415,7 +2795,12 @@ def _calculate_years_in_sample(data: pd.DataFrame) -> float:
     return total_days / 365.25 if total_days > 0 else 0.0
 
 
-def _init_refinement_worker(engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig) -> None:
+def _init_refinement_worker(
+    engine_class: type,
+    data: pd.DataFrame,
+    strategy_factory: Callable[..., Any],
+    config: EngineConfig,
+) -> None:
     global _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG
     _WORKER_ENGINE_CLASS = engine_class
     _WORKER_DATA = data
@@ -2511,7 +2896,13 @@ class RefinementResult:
 
 
 class StrategyParameterRefiner:
-    def __init__(self, engine_class: type, data: pd.DataFrame, strategy_factory: Callable[..., Any], config: EngineConfig | None = None):
+    def __init__(
+        self,
+        engine_class: type,
+        data: pd.DataFrame,
+        strategy_factory: Callable[..., Any],
+        config: EngineConfig | None = None,
+    ):
         self.engine_class = engine_class
         self.data = data
         self.strategy_factory = strategy_factory
@@ -2580,8 +2971,8 @@ class StrategyParameterRefiner:
                         f"  Done {idx}/{total_runs} | "
                         f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
                         f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
-                        f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
-                        f"{result['reject_reason']}"
+                        f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
+                        f"trades={result['total_trades']} | {result['reject_reason']}"
                     )
         else:
             _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
@@ -2598,8 +2989,8 @@ class StrategyParameterRefiner:
                     f"  Done {idx}/{total_runs} | "
                     f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
                     f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
-                    f"PF={result['profit_factor']:.2f} | trades={result['total_trades']} | "
-                    f"{result['reject_reason']}"
+                    f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
+                    f"trades={result['total_trades']} | {result['reject_reason']}"
                 )
 
         print(f"\n✅ Accepted refinement sets: {accepted_count}")
@@ -3006,12 +3397,15 @@ from modules.filter_combinator import build_filter_combo_name, generate_filter_c
 from modules.filters import (
     BaseFilter,
     BreakoutCloseStrengthFilter,
+    BreakoutDistanceFilter,
     BreakoutRetestFilter,
     BreakoutTrendFilter,
     CompressionFilter,
     ExpansionBarFilter,
     PriorRangePositionFilter,
     RangeBreakoutFilter,
+    RisingBaseFilter,
+    TightRangeFilter,
 )
 from modules.refiner import StrategyParameterRefiner
 from modules.strategy_types.base_strategy_type import BaseStrategyType
@@ -3023,8 +3417,8 @@ class _InlineBreakoutStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 6,
-        stop_distance_atr: float = 2.0,
+        hold_bars: int = 4,
+        stop_distance_atr: float = 1.25,
         name: str | None = None,
     ):
         self.filters = filters
@@ -3114,8 +3508,8 @@ class BreakoutStrategyType(BaseStrategyType):
     min_filters_per_combo = 3
     max_filters_per_combo = 5
 
-    default_hold_bars = 6
-    default_stop_distance_points = 2.0
+    default_hold_bars = 4
+    default_stop_distance_points = 1.25
 
     def get_required_sma_lengths(self) -> list[int]:
         return [50, 200]
@@ -3128,10 +3522,11 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            CompressionFilter(),
-            RangeBreakoutFilter(),
-            ExpansionBarFilter(),
-            BreakoutTrendFilter(),
+            CompressionFilter(lookback=20, max_atr_mult=0.90),
+            RangeBreakoutFilter(lookback=20),
+            ExpansionBarFilter(lookback=20, expansion_multiplier=1.15),
+            BreakoutTrendFilter(fast_length=50, slow_length=200),
+            BreakoutCloseStrengthFilter(close_position_threshold=0.60),
         ]
 
     def build_default_strategy(self) -> _InlineBreakoutStrategy:
@@ -3154,10 +3549,39 @@ class BreakoutStrategyType(BaseStrategyType):
             BreakoutTrendFilter,
             BreakoutCloseStrengthFilter,
             PriorRangePositionFilter,
+            BreakoutDistanceFilter,
+            RisingBaseFilter,
+            TightRangeFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is CompressionFilter:
+                filters.append(CompressionFilter(lookback=20, max_atr_mult=0.90))
+            elif cls is RangeBreakoutFilter:
+                filters.append(RangeBreakoutFilter(lookback=20))
+            elif cls is ExpansionBarFilter:
+                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.15))
+            elif cls is BreakoutRetestFilter:
+                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.00))
+            elif cls is BreakoutTrendFilter:
+                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            elif cls is BreakoutCloseStrengthFilter:
+                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
+            elif cls is PriorRangePositionFilter:
+                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
+            elif cls is BreakoutDistanceFilter:
+                filters.append(BreakoutDistanceFilter(lookback=20, min_breakout_atr=0.05))
+            elif cls is RisingBaseFilter:
+                filters.append(RisingBaseFilter(lookback=5))
+            elif cls is TightRangeFilter:
+                filters.append(TightRangeFilter(lookback=20, max_bar_range_mult=0.90))
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -3183,7 +3607,25 @@ class BreakoutStrategyType(BaseStrategyType):
 
         for cls in classes:
             if cls is CompressionFilter:
-                filters.append(CompressionFilter(max_atr_mult=min_avg_range if min_avg_range > 0 else 0.8))
+                filters.append(CompressionFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 0.90))
+            elif cls is RangeBreakoutFilter:
+                filters.append(RangeBreakoutFilter(lookback=20))
+            elif cls is ExpansionBarFilter:
+                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.15))
+            elif cls is BreakoutRetestFilter:
+                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.00))
+            elif cls is BreakoutTrendFilter:
+                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+            elif cls is BreakoutCloseStrengthFilter:
+                filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
+            elif cls is PriorRangePositionFilter:
+                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
+            elif cls is BreakoutDistanceFilter:
+                filters.append(BreakoutDistanceFilter(lookback=20, min_breakout_atr=0.05))
+            elif cls is RisingBaseFilter:
+                filters.append(RisingBaseFilter(lookback=5))
+            elif cls is TightRangeFilter:
+                filters.append(TightRangeFilter(lookback=20, max_bar_range_mult=0.90))
             else:
                 filters.append(cls())
 
@@ -3196,7 +3638,7 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
-            "min_profit_factor": 0.85,
+            "min_profit_factor": 0.70,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
             "min_trades": 60,
@@ -3217,11 +3659,11 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [2, 4, 6, 8, 12],
-            "stop_distance_points": [1.0, 1.5, 2.0, 3.0],
+            "hold_bars": [2, 3, 4, 5, 6, 8, 10],
+            "stop_distance_points": [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
         }
 
-        grid["min_avg_range"] = [0.6, 0.7, 0.8, 0.9] if any(cls is CompressionFilter for cls in classes) else [0.0]
+        grid["min_avg_range"] = [0.60, 0.70, 0.80, 0.90, 1.00] if any(cls is CompressionFilter for cls in classes) else [0.0]
         grid["momentum_lookback"] = [0]
 
         return grid
@@ -3245,9 +3687,13 @@ class BreakoutStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -3255,7 +3701,7 @@ class BreakoutStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 
@@ -3318,10 +3764,13 @@ from modules.filters import (
     AboveLongTermSMAFilter,
     BaseFilter,
     BelowFastSMAFilter,
+    CloseNearLowFilter,
     DistanceBelowSMAFilter,
     DownCloseFilter,
     LowVolatilityRegimeFilter,
     ReversalUpBarFilter,
+    StretchFromLongTermSMAFilter,
+    ThreeBarDownFilter,
     TwoBarDownFilter,
 )
 from modules.refiner import StrategyParameterRefiner
@@ -3334,8 +3783,8 @@ class _InlineMeanReversionStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 4,
-        stop_distance_atr: float = 1.5,
+        hold_bars: int = 5,
+        stop_distance_atr: float = 0.75,
         name: str | None = None,
     ):
         self.filters = filters
@@ -3423,10 +3872,10 @@ class _MRRefinementFactory:
 class MeanReversionStrategyType(BaseStrategyType):
     name = "mean_reversion"
     min_filters_per_combo = 3
-    max_filters_per_combo = 7
+    max_filters_per_combo = 6
 
-    default_hold_bars = 4
-    default_stop_distance_points = 1.5
+    default_hold_bars = 5
+    default_stop_distance_points = 0.75
 
     def get_required_sma_lengths(self) -> list[int]:
         return [20, 200]
@@ -3439,10 +3888,11 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            BelowFastSMAFilter(),
-            DownCloseFilter(),
+            DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.8),
+            TwoBarDownFilter(),
             ReversalUpBarFilter(),
-            AboveLongTermSMAFilter(),
+            AboveLongTermSMAFilter(slow_length=200),
+            CloseNearLowFilter(max_close_position=0.35),
         ]
 
     def build_default_strategy(self) -> _InlineMeanReversionStrategy:
@@ -3462,13 +3912,42 @@ class MeanReversionStrategyType(BaseStrategyType):
             DistanceBelowSMAFilter,
             DownCloseFilter,
             TwoBarDownFilter,
+            ThreeBarDownFilter,
             ReversalUpBarFilter,
             LowVolatilityRegimeFilter,
             AboveLongTermSMAFilter,
+            CloseNearLowFilter,
+            StretchFromLongTermSMAFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is BelowFastSMAFilter:
+                filters.append(BelowFastSMAFilter(fast_length=20))
+            elif cls is DistanceBelowSMAFilter:
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.8))
+            elif cls is DownCloseFilter:
+                filters.append(DownCloseFilter())
+            elif cls is TwoBarDownFilter:
+                filters.append(TwoBarDownFilter())
+            elif cls is ThreeBarDownFilter:
+                filters.append(ThreeBarDownFilter())
+            elif cls is ReversalUpBarFilter:
+                filters.append(ReversalUpBarFilter())
+            elif cls is LowVolatilityRegimeFilter:
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=1.10))
+            elif cls is AboveLongTermSMAFilter:
+                filters.append(AboveLongTermSMAFilter(slow_length=200))
+            elif cls is CloseNearLowFilter:
+                filters.append(CloseNearLowFilter(max_close_position=0.35))
+            elif cls is StretchFromLongTermSMAFilter:
+                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=0.6))
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -3493,10 +3972,26 @@ class MeanReversionStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in classes:
-            if cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(min_distance_atr=min_avg_range if min_avg_range > 0 else 0.5))
+            if cls is BelowFastSMAFilter:
+                filters.append(BelowFastSMAFilter(fast_length=20))
+            elif cls is DistanceBelowSMAFilter:
+                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.8))
+            elif cls is DownCloseFilter:
+                filters.append(DownCloseFilter())
+            elif cls is TwoBarDownFilter:
+                filters.append(TwoBarDownFilter())
+            elif cls is ThreeBarDownFilter:
+                filters.append(ThreeBarDownFilter())
+            elif cls is ReversalUpBarFilter:
+                filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(max_atr_mult=min_avg_range if min_avg_range > 0 else 1.0))
+                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.10))
+            elif cls is AboveLongTermSMAFilter:
+                filters.append(AboveLongTermSMAFilter(slow_length=200))
+            elif cls is CloseNearLowFilter:
+                filters.append(CloseNearLowFilter(max_close_position=0.35))
+            elif cls is StretchFromLongTermSMAFilter:
+                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
             else:
                 filters.append(cls())
 
@@ -3509,7 +4004,7 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
-            "min_profit_factor": 0.85,
+            "min_profit_factor": 0.80,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
             "min_trades": 60,
@@ -3530,13 +4025,13 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [2, 3, 4, 5, 6, 8],
-            "stop_distance_points": [0.75, 1.0, 1.5, 2.0],
+            "hold_bars": [2, 3, 4, 5, 6, 8, 10, 12],
+            "stop_distance_points": [0.4, 0.5, 0.75, 1.0, 1.25, 1.5],
         }
 
         grid["min_avg_range"] = (
-            [0.2, 0.4, 0.6, 0.8, 1.0]
-            if any(cls in [DistanceBelowSMAFilter, LowVolatilityRegimeFilter] for cls in classes)
+            [0.4, 0.6, 0.8, 1.0, 1.2, 1.4]
+            if any(cls in [DistanceBelowSMAFilter, LowVolatilityRegimeFilter, StretchFromLongTermSMAFilter] for cls in classes)
             else [0.0]
         )
         grid["momentum_lookback"] = [0]
@@ -3562,9 +4057,13 @@ class MeanReversionStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_mr_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_mr_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -3572,7 +4071,7 @@ class MeanReversionStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 
@@ -3678,10 +4177,13 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
     BaseFilter,
+    CloseAboveFastSMAFilter,
+    HigherLowFilter,
     MomentumFilter,
     PullbackFilter,
     RecoveryTriggerFilter,
     TrendDirectionFilter,
+    TrendSlopeFilter,
     TwoBarUpFilter,
     UpCloseFilter,
     VolatilityFilter,
@@ -3696,8 +4198,8 @@ class _InlineTrendStrategy:
     def __init__(
         self,
         filters: list[BaseFilter],
-        hold_bars: int = 10,
-        stop_distance_atr: float = 3.0,
+        hold_bars: int = 6,
+        stop_distance_atr: float = 1.25,
         name: str | None = None,
     ):
         self.filters = filters
@@ -3787,10 +4289,8 @@ class TrendStrategyType(BaseStrategyType):
     min_filters_per_combo = 4
     max_filters_per_combo = 6
 
-    # This is currently an ATR multiple, preserved under the old field name
-    # for compatibility with downstream CSVs and ranking tables.
-    default_hold_bars = 10
-    default_stop_distance_points = 3.0
+    default_hold_bars = 6
+    default_stop_distance_points = 1.25
 
     def get_required_sma_lengths(self) -> list[int]:
         return [50, 200]
@@ -3799,15 +4299,16 @@ class TrendStrategyType(BaseStrategyType):
         return [20]
 
     def get_required_momentum_lookbacks(self) -> list[int]:
-        return [10, 14, 20]
+        return [5, 8, 10, 14]
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
-            TrendDirectionFilter(),
-            PullbackFilter(),
-            RecoveryTriggerFilter(),
-            VolatilityFilter(),
-            MomentumFilter(),
+            TrendDirectionFilter(fast_length=50, slow_length=200),
+            PullbackFilter(fast_length=50),
+            RecoveryTriggerFilter(fast_length=50),
+            VolatilityFilter(lookback=20, min_atr_mult=0.95),
+            MomentumFilter(lookback=8),
+            TrendSlopeFilter(fast_length=50, slope_bars=5),
         ]
 
     def build_default_strategy(self) -> _InlineTrendStrategy:
@@ -3830,10 +4331,35 @@ class TrendStrategyType(BaseStrategyType):
             MomentumFilter,
             UpCloseFilter,
             TwoBarUpFilter,
+            TrendSlopeFilter,
+            CloseAboveFastSMAFilter,
+            HigherLowFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
-        return [cls() for cls in combo_classes]
+        filters: list[BaseFilter] = []
+
+        for cls in combo_classes:
+            if cls is TrendDirectionFilter:
+                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+            elif cls is PullbackFilter:
+                filters.append(PullbackFilter(fast_length=50))
+            elif cls is RecoveryTriggerFilter:
+                filters.append(RecoveryTriggerFilter(fast_length=50))
+            elif cls is VolatilityFilter:
+                filters.append(VolatilityFilter(lookback=20, min_atr_mult=0.95))
+            elif cls is MomentumFilter:
+                filters.append(MomentumFilter(lookback=8))
+            elif cls is TrendSlopeFilter:
+                filters.append(TrendSlopeFilter(fast_length=50, slope_bars=5))
+            elif cls is CloseAboveFastSMAFilter:
+                filters.append(CloseAboveFastSMAFilter(fast_length=50))
+            elif cls is HigherLowFilter:
+                filters.append(HigherLowFilter())
+            else:
+                filters.append(cls())
+
+        return filters
 
     def build_combinable_strategy(
         self,
@@ -3858,10 +4384,22 @@ class TrendStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in classes:
-            if cls is VolatilityFilter:
-                filters.append(VolatilityFilter(min_atr_mult=min_avg_range if min_avg_range > 0 else 1.0))
+            if cls is TrendDirectionFilter:
+                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+            elif cls is PullbackFilter:
+                filters.append(PullbackFilter(fast_length=50))
+            elif cls is RecoveryTriggerFilter:
+                filters.append(RecoveryTriggerFilter(fast_length=50))
+            elif cls is VolatilityFilter:
+                filters.append(VolatilityFilter(lookback=20, min_atr_mult=min_avg_range if min_avg_range > 0 else 0.95))
             elif cls is MomentumFilter:
-                filters.append(MomentumFilter(lookback=momentum_lookback if momentum_lookback > 0 else 10))
+                filters.append(MomentumFilter(lookback=momentum_lookback if momentum_lookback > 0 else 8))
+            elif cls is TrendSlopeFilter:
+                filters.append(TrendSlopeFilter(fast_length=50, slope_bars=5))
+            elif cls is CloseAboveFastSMAFilter:
+                filters.append(CloseAboveFastSMAFilter(fast_length=50))
+            elif cls is HigherLowFilter:
+                filters.append(HigherLowFilter())
             else:
                 filters.append(cls())
 
@@ -3874,7 +4412,7 @@ class TrendStrategyType(BaseStrategyType):
 
     def get_promotion_thresholds(self) -> dict[str, float | bool]:
         return {
-            "min_profit_factor": 0.85,
+            "min_profit_factor": 0.75,
             "min_average_trade": 0.0,
             "require_positive_net_pnl": False,
             "min_trades": 60,
@@ -3895,12 +4433,12 @@ class TrendStrategyType(BaseStrategyType):
 
     def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
         grid = {
-            "hold_bars": [5, 10, 15, 20],
-            "stop_distance_points": [1.5, 2.0, 3.0, 4.0],
+            "hold_bars": [3, 4, 5, 6, 8, 10, 12, 15],
+            "stop_distance_points": [0.75, 1.0, 1.25, 1.5, 2.0, 2.5],
         }
 
-        grid["min_avg_range"] = [0.8, 1.0, 1.2] if any(cls is VolatilityFilter for cls in classes) else [0.0]
-        grid["momentum_lookback"] = [10, 14] if any(cls is MomentumFilter for cls in classes) else [0]
+        grid["min_avg_range"] = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4] if any(cls is VolatilityFilter for cls in classes) else [0.0]
+        grid["momentum_lookback"] = [0, 5, 8, 10, 14] if any(cls is MomentumFilter for cls in classes) else [0]
 
         return grid
 
@@ -3923,9 +4461,13 @@ class TrendStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_trend_combo_case, tasks)):
-                print(f"  Combo {idx + 1}/{len(combinations)} | {res['strategy_name']}")
-                res["filter_classes"] = combinations[idx]
+            for idx, res in enumerate(executor.map(_run_trend_combo_case, tasks), start=1):
+                print(
+                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                    f"trades={res['total_trades']}"
+                )
+                res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
 
         if not results:
@@ -3933,7 +4475,7 @@ class TrendStrategyType(BaseStrategyType):
 
         return (
             pd.DataFrame(results)
-            .sort_values(by=["passes_trade_filter", "net_pnl"], ascending=[False, False])
+            .sort_values(by=["net_pnl", "profit_factor", "average_trade"], ascending=[False, False, False])
             .reset_index(drop=True)
         )
 
