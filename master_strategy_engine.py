@@ -100,6 +100,23 @@ def run_family_filter_combination_sweep(
     )
 
 
+def estimate_compute_budget(
+    stage: str,
+    n_evaluations: int,
+    avg_seconds_per_eval: float = 0.5,
+) -> dict[str, float]:
+    """Print and return a compute budget estimate before running a stage."""
+    estimated_minutes = (n_evaluations * avg_seconds_per_eval) / 60.0
+    print(f"\n📊 COMPUTE BUDGET — {stage}")
+    print(f"   Evaluations:  {n_evaluations:,}")
+    print(f"   Est. time:    {estimated_minutes:.1f} minutes (at {avg_seconds_per_eval:.2f}s/eval)")
+    return {
+        "stage": stage,
+        "n_evaluations": n_evaluations,
+        "estimated_minutes": round(estimated_minutes, 2),
+    }
+
+
 def get_promotion_gate_config(strategy_type: Any) -> dict[str, Any]:
     return call_first_available(strategy_type, ["get_promotion_gate_config"])
 
@@ -522,6 +539,17 @@ def run_single_family(
 
     sanity_check = run_sanity_check(strategy_type=strategy_type, data=data, cfg=cfg)
 
+    from itertools import combinations as _combs
+    filter_classes = strategy_type.get_filter_classes()
+    n_filter_combos = sum(
+        len(list(_combs(filter_classes, r)))
+        for r in range(strategy_type.min_filters_per_combo, len(filter_classes) + 1)
+    )
+    estimate_compute_budget(
+        stage=f"{strategy_type_name} filter sweep",
+        n_evaluations=n_filter_combos,
+    )
+
     sweep_start = time.perf_counter()
     combo_results_df = run_family_filter_combination_sweep(
         strategy_type=strategy_type,
@@ -549,6 +577,20 @@ def run_single_family(
     if promoted_df is None or promoted_df.empty:
         print(f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted.")
     else:
+        n_candidates = min(len(promoted_df), MAX_CANDIDATES_TO_REFINE)
+        sample_grid = call_first_available(
+            strategy_type,
+            ["get_refinement_grid_for_candidate"],
+            promoted_df.iloc[0].to_dict(),
+        )
+        grid_size = 1
+        for values in sample_grid.values():
+            grid_size *= len(values)
+        estimate_compute_budget(
+            stage=f"{strategy_type_name} refinement ({n_candidates} candidates × {grid_size} grid points)",
+            n_evaluations=n_candidates * grid_size,
+        )
+
         candidates_to_test = promoted_df.head(MAX_CANDIDATES_TO_REFINE).to_dict("records")
 
         for rank, candidate in enumerate(candidates_to_test, start=1):
