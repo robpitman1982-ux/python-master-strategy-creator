@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-03-17 — Session 2: Config, consistency, multi-dataset
+
+**What was done**:
+- Created `config.yaml` — single source of truth for all pipeline constants (datasets, engine, gates, oos_split_date)
+- Created `modules/config_loader.py` — `load_config()` and `get_nested()` helpers; falls back to hardcoded defaults if yaml missing
+- Updated `master_strategy_engine.py` to load all settings from config (CSV path, workers, leaderboard gates, EngineConfig fields)
+- Created `modules/consistency.py` — `analyse_yearly_consistency()`: yearly PnL aggregation, pct_profitable_years, max_consecutive_losing_years, consistency_flag (CONSISTENT/MIXED/INCONSISTENT/INSUFFICIENT_DATA)
+- Integrated consistency into `engine.results()` — three new return fields: Pct Profitable Years, Max Consecutive Losing Years, Consistency Flag
+- Factored consistency into `calculate_quality_score()` as 6th component (weight 0.15); adjusted other weights to still sum to 1.0
+- Propagated new fields through all 3 strategy type sweep result dicts and `RefinementResult`/`_run_refinement_case()` in refiner.py
+- Added `oos_split_date` field to `EngineConfig` dataclass; replaced hardcoded `"2019-01-01"` in engine.py results()
+- Updated `portfolio_evaluator.py`: `calculate_metrics_split()` and `evaluate_portfolio()` now accept `oos_split_date` parameter
+- Updated `__main__` block in master_strategy_engine.py: iterates over `datasets` list from config; calls new `_run_dataset()` helper; each dataset gets its own output subdir (`Outputs/ES_60m/`, etc.)
+- Fixed Unicode/emoji output issue in config_loader.py for Windows cp1252 terminals
+
+**Output changes vs Session 1**:
+- Config loading prints "[OK] Loaded config from config.yaml" at startup
+- Results now include consistency_flag, pct_profitable_years, max_consecutive_losing_years
+- quality_score weights slightly adjusted (consistency now 0.15, others reduced proportionally)
+- Output directory structure changed: `Outputs/ES_60m/` instead of `Outputs/` flat
+- Dataset header printed before each run: "DATASET 1/1: ES 60m"
+
+**Verified**:
+- All imports OK, smoke test passed (engine.results() returns all new fields correctly)
+- consistency module tested with mock trades: CONSISTENT/INCONSISTENT/INSUFFICIENT_DATA all correct
+
+**Next session priorities**:
+1. Cloud deployment prep: Dockerfile, requirements.txt, run scripts
+2. Walk-forward validation as alternative to fixed IS/OOS split
+3. Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
+4. Actual full pipeline run to verify end-to-end with new directory structure
+
+---
+
 ## 2026-03-16 — Session 1: Foundation hardening
 
 **What was done**:

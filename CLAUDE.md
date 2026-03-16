@@ -25,8 +25,11 @@
 ```
 python-master-strategy-creator/
 ├── master_strategy_engine.py           # Main orchestrator — runs all families
+├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
 ├── modules/
 │   ├── __init__.py
+│   ├── config_loader.py               # load_config() + get_nested() helpers
+│   ├── consistency.py                 # analyse_yearly_consistency() — year-by-year PnL checks
 │   ├── engine.py                       # MasterStrategyEngine, EngineConfig, trade execution
 │   ├── data_loader.py                  # TradeStation CSV loader
 │   ├── feature_builder.py             # Precomputed features (SMA, ATR, momentum, etc.)
@@ -44,7 +47,7 @@ python-master-strategy-creator/
 │       ├── breakout_strategy_type.py  # Breakout family
 │       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types()
 ├── Data/                              # .gitignored — TradeStation CSVs
-├── Outputs/                           # .gitignored — all run results
+├── Outputs/                           # .gitignored — per-dataset subdirectories (ES_60m/, etc.)
 ├── project_to_text.py                 # Utility: dump all .py to single text file
 └── .gitignore
 ```
@@ -97,23 +100,19 @@ The engine runs a **funnel** for each strategy family (trend, mean_reversion, br
 | STABLE | is_pf >= 1.0, oos_pf >= 1.0 | Acceptable both periods |
 | MARGINAL | everything else | Weak or inconsistent |
 
-**IS/OOS split date**: 2019-01-01 (hardcoded in engine.py)
+**IS/OOS split date**: configurable via `config.yaml` → `pipeline.oos_split_date` (default: 2019-01-01)
 
-## Key configuration (master_strategy_engine.py)
+## Key configuration (config.yaml)
 
-```python
-CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
-STRATEGY_TYPE_NAME = "all"        # or "trend", "mean_reversion", "breakout"
-MAX_WORKERS_SWEEP = 10
-MAX_WORKERS_REFINEMENT = 10
-MAX_CANDIDATES_TO_REFINE = 3
+All pipeline constants now live in `config.yaml`. Edit that file to change any settings.
+The code reads from config with hardcoded fallback defaults if config.yaml is missing.
 
-# Final leaderboard acceptance gate
-FINAL_MIN_NET_PNL = 0.0
-FINAL_MIN_PF = 1.00
-FINAL_MIN_OOS_PF = 1.00
-FINAL_MIN_TOTAL_TRADES = 60
-```
+Key sections:
+- `datasets`: list of CSV paths with market/timeframe labels (supports multi-dataset runs)
+- `engine`: initial_capital, risk_per_trade, commission, slippage, tick_value, dollars_per_point
+- `pipeline`: max_workers, oos_split_date, max_candidates_to_refine
+- `promotion_gate`: min_pf, min_trades, min_trades_per_year, max_promoted_candidates
+- `leaderboard`: final acceptance thresholds (min_pf, min_oos_pf, min_total_trades)
 
 ## Current filter inventory
 
@@ -135,16 +134,17 @@ FINAL_MIN_TOTAL_TRADES = 60
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
 
 ### Important (before multi-instrument expansion)
-- [ ] Make dataset path configurable (currently hardcoded to ES_60m)
-- [ ] Add support for multiple timeframes in single run
+- [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
+- [x] OOS split date hardcoded — now configurable via config.yaml pipeline.oos_split_date
+- [x] Add support for multiple datasets in single run — datasets list in config, per-dataset output dirs
 - [ ] Add walk-forward validation as alternative to fixed IS/OOS split
-- [ ] Yearly stats show trend strategy lost money 9/11 years 2009-2018 — engine should flag this pattern
+- [x] Yearly stats show trend strategy lost money 9/11 years 2009-2018 — consistency module added: pct_profitable_years, max_consecutive_losing_years, consistency_flag in all results
 
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
 - [ ] Trade-list-level deduplication (detect when two filter combos produce same trades)
 - [ ] Progress logging with ETA for long runs
-- [ ] Config file (YAML/TOML) instead of hardcoded constants
+- [x] Config file (YAML/TOML) instead of hardcoded constants — config.yaml created
 
 ## Coding standards
 
@@ -166,5 +166,4 @@ FINAL_MIN_TOTAL_TRADES = 60
 7. Commit and push to GitHub
 
 ## Last updated
-<!-- Claude: update this line each session -->
-2026-03-16 — Session 1: Added quality_score, BORDERLINE flag detection, promotion cap (20), compute budget estimator, candidate dedup. Pipeline verified on ES 60m.
+2026-03-17 — Session 2: config.yaml + config_loader, yearly consistency analysis (consistency_flag, pct_profitable_years), OOS split date configurable, multi-dataset loop with per-dataset output dirs. All imports verified, engine smoke-tested.
