@@ -760,6 +760,7 @@ if __name__ == "__main__":
             data_csv=CSV_PATH,
             market_name=market_symbol,
             timeframe=timeframe,
+            oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
         )
 
         if not review_table.empty:

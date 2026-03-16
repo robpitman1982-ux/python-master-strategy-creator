@@ -20,7 +20,7 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
 from modules.strategy_types import get_strategy_type
 
-OOS_SPLIT_DATE = "2019-01-01"
+_DEFAULT_OOS_SPLIT_DATE = "2019-01-01"
 
 
 def generate_run_id(market: str, timeframe: str) -> tuple[str, str]:
@@ -65,7 +65,7 @@ def run_monte_carlo_stats(trades_df: pd.DataFrame, iterations: int = 10000) -> d
     }
 
 
-def calculate_metrics_split(trades_df: pd.DataFrame) -> dict[str, float]:
+def calculate_metrics_split(trades_df: pd.DataFrame, oos_split_date: str = _DEFAULT_OOS_SPLIT_DATE) -> dict[str, float]:
     if trades_df.empty or "exit_time" not in trades_df.columns or "net_pnl" not in trades_df.columns:
         return {
             "full_pf": 0.0,
@@ -101,8 +101,8 @@ def calculate_metrics_split(trades_df: pd.DataFrame) -> dict[str, float]:
 
     max_date = df["exit_time"].max()
     recent_trades = df[df["exit_time"] >= (max_date - timedelta(days=365))]
-    is_trades = df[df["exit_time"] < pd.to_datetime(OOS_SPLIT_DATE)]
-    oos_trades = df[df["exit_time"] >= pd.to_datetime(OOS_SPLIT_DATE)]
+    is_trades = df[df["exit_time"] < pd.to_datetime(oos_split_date)]
+    oos_trades = df[df["exit_time"] >= pd.to_datetime(oos_split_date)]
 
     return {
         "full_pf": full_pf,
@@ -257,6 +257,7 @@ def evaluate_portfolio(
     data_csv: Path,
     market_name: str,
     timeframe: str,
+    oos_split_date: str = _DEFAULT_OOS_SPLIT_DATE,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     leaderboard_csv = Path(leaderboard_csv)
     data_csv = Path(data_csv)
@@ -328,7 +329,7 @@ def evaluate_portfolio(
                 trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0)
             )
 
-            stats = calculate_metrics_split(trades_df)
+            stats = calculate_metrics_split(trades_df, oos_split_date=oos_split_date)
             mc = run_monte_carlo_stats(trades_df, iterations=10000)
             shock_pnl = calculate_slippage_shock(trades_df, tick_value=cfg.tick_value)
 
@@ -385,7 +386,7 @@ def evaluate_portfolio(
         combo_df = pd.concat(all_trades_list, ignore_index=True)
         combo_df = combo_df.sort_values("exit_time").reset_index(drop=True)
 
-        stats = calculate_metrics_split(combo_df)
+        stats = calculate_metrics_split(combo_df, oos_split_date=oos_split_date)
         mc = run_monte_carlo_stats(combo_df, iterations=10000)
         shock_pnl = calculate_slippage_shock(combo_df, tick_value=last_cfg.tick_value)
 

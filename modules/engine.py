@@ -19,6 +19,7 @@ class EngineConfig:
     slippage_ticks: int = 4
     tick_value: float = 12.50
     dollars_per_point: float = 50.0
+    oos_split_date: str = "2019-01-01"
 
 
 @dataclass
@@ -364,7 +365,7 @@ class MasterStrategyEngine:
 
         max_drawdown = self._calculate_max_drawdown()
 
-        oos_split_date = pd.to_datetime("2019-01-01")
+        oos_split_date = pd.to_datetime(self.config.oos_split_date)
 
         if self.trades:
             max_date = max(t.exit_time for t in self.trades)
