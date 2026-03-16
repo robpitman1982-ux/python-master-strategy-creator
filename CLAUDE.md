@@ -128,11 +128,11 @@ FINAL_MIN_TOTAL_TRADES = 60
 <!-- UPDATE THIS SECTION EACH SESSION -->
 
 ### Critical (fix before cloud deployment)
-- [ ] Quality flag logic uses hard thresholds with no boundary handling — strategies at 0.99 vs 1.01 IS PF get very different labels
-- [ ] Promotion gate too loose — trend promoted 93 candidates, most are noise. Compute will explode at scale
+- [x] Quality flag logic uses hard thresholds — BORDERLINE detection added, quality_score continuous metric added
+- [x] Promotion gate too loose — capped at 20 candidates with composite ranking (quality_score × oos_pf × trades/yr)
 - [ ] Refinement grid is brute-force (4×4×4×4=256) — needs adaptive/Bayesian approach for cloud
-- [ ] No deduplication of near-identical filter combos before refinement
-- [ ] No compute budget estimator before launching runs
+- [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
+- [x] No compute budget estimator before launching runs — added before sweep and refinement
 
 ### Important (before multi-instrument expansion)
 - [ ] Make dataset path configurable (currently hardcoded to ES_60m)
@@ -167,4 +167,4 @@ FINAL_MIN_TOTAL_TRADES = 60
 
 ## Last updated
 <!-- Claude: update this line each session -->
-2026-03-16 — Initial creation. Pipeline producing first outputs on ES 60m. Two viable strategies found (trend: REGIME_DEPENDENT, MR: STABLE). Breakout rejected (BROKEN_IN_OOS).
+2026-03-16 — Session 1: Added quality_score, BORDERLINE flag detection, promotion cap (20), compute budget estimator, candidate dedup. Pipeline verified on ES 60m.
