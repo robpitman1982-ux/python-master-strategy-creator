@@ -14,13 +14,13 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
     config_path = Path(path) if path else _DEFAULT_CONFIG_PATH
 
     if not config_path.exists():
-        print(f"⚠ Config file not found at {config_path}, using hardcoded defaults.")
+        print(f"[WARN] Config file not found at {config_path}, using hardcoded defaults.")
         return {}
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}
 
-    print(f"✅ Loaded config from {config_path}")
+    print(f"[OK] Loaded config from {config_path}")
     return config
 
 
