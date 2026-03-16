@@ -237,6 +237,54 @@ def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[st
     print(promoted_df[display_cols].head(10).to_string(index=False))
 
 
+def deduplicate_promoted_candidates(
+    promoted_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Remove near-duplicate filter combos from promoted candidates.
+    Two combos are duplicates if they have identical total_trades AND
+    their net_pnl values are within 1% of each other.
+    """
+    if promoted_df is None or promoted_df.empty or len(promoted_df) <= 1:
+        return promoted_df
+
+    keep_mask = [True] * len(promoted_df)
+
+    for i in range(len(promoted_df)):
+        if not keep_mask[i]:
+            continue
+        for j in range(i + 1, len(promoted_df)):
+            if not keep_mask[j]:
+                continue
+
+            trades_i = promoted_df.iloc[i].get("total_trades", 0)
+            trades_j = promoted_df.iloc[j].get("total_trades", 0)
+            pnl_i = promoted_df.iloc[i].get("net_pnl", 0.0)
+            pnl_j = promoted_df.iloc[j].get("net_pnl", 0.0)
+
+            if trades_i == trades_j and trades_i > 0:
+                pnl_diff = abs(pnl_i - pnl_j) / max(abs(pnl_i), 1.0)
+                if pnl_diff < 0.01:
+                    score_i = promoted_df.iloc[i].get("quality_score", promoted_df.iloc[i].get("profit_factor", 0.0))
+                    score_j = promoted_df.iloc[j].get("quality_score", promoted_df.iloc[j].get("profit_factor", 0.0))
+                    if score_j > score_i:
+                        keep_mask[i] = False
+                        break
+                    else:
+                        keep_mask[j] = False
+
+    original_count = len(promoted_df)
+    result = promoted_df[keep_mask].reset_index(drop=True)
+    removed = original_count - len(result)
+
+    if removed > 0:
+        print(f"\n🔍 Deduplication: {original_count} → {len(result)} candidates (removed {removed} near-duplicates)")
+    else:
+        print(f"\n🔍 Deduplication: no near-duplicates found in {original_count} candidates")
+
+    return result
+
+
 def save_csv_if_not_empty(df: pd.DataFrame, filepath: Path) -> None:
     if df is None or df.empty:
         return
@@ -567,6 +615,9 @@ def run_single_family(
     promotion_gate = get_promotion_gate_config(strategy_type)
     promoted_df = apply_promotion_gate(combo_results_df, promotion_gate)
     print_promotion_gate_report(strategy_type_name, promotion_gate, promoted_df)
+
+    if promoted_df is not None and not promoted_df.empty:
+        promoted_df = deduplicate_promoted_candidates(promoted_df)
 
     promoted_path = outputs_dir / f"{strategy_type_name}_promoted_candidates.csv"
     save_csv_if_not_empty(promoted_df, promoted_path)
