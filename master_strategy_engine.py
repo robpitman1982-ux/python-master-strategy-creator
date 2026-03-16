@@ -11,6 +11,7 @@ from typing import Any
 
 import pandas as pd
 
+from modules.config_loader import get_nested, load_config
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
@@ -18,22 +19,24 @@ from modules.portfolio_evaluator import evaluate_portfolio
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
 # =============================================================================
-# USER SETTINGS
+# CONFIGURATION
 # =============================================================================
 
-CSV_PATH = Path("Data") / "ES_60m_2008_2026_tradestation.csv"
-STRATEGY_TYPE_NAME = "all"
-OUTPUTS_DIR = Path("Outputs")
+_cfg = load_config()
 
-MAX_WORKERS_SWEEP = 10
-MAX_WORKERS_REFINEMENT = 10
-MAX_CANDIDATES_TO_REFINE = 3
+CSV_PATH = Path(get_nested(_cfg, "datasets", default=[{}])[0].get("path", "Data/ES_60m_2008_2026_tradestation.csv"))
+STRATEGY_TYPE_NAME = get_nested(_cfg, "strategy_types", default="all")
+OUTPUTS_DIR = Path(get_nested(_cfg, "output_dir", default="Outputs"))
+
+MAX_WORKERS_SWEEP = get_nested(_cfg, "pipeline", "max_workers_sweep", default=10)
+MAX_WORKERS_REFINEMENT = get_nested(_cfg, "pipeline", "max_workers_refinement", default=10)
+MAX_CANDIDATES_TO_REFINE = get_nested(_cfg, "pipeline", "max_candidates_to_refine", default=3)
 
 # Final leaderboard acceptance gate
-FINAL_MIN_NET_PNL = 0.0
-FINAL_MIN_PF = 1.00
-FINAL_MIN_OOS_PF = 1.00
-FINAL_MIN_TOTAL_TRADES = 60
+FINAL_MIN_NET_PNL = get_nested(_cfg, "leaderboard", "min_net_pnl", default=0.0)
+FINAL_MIN_PF = get_nested(_cfg, "leaderboard", "min_pf", default=1.00)
+FINAL_MIN_OOS_PF = get_nested(_cfg, "leaderboard", "min_oos_pf", default=1.00)
+FINAL_MIN_TOTAL_TRADES = get_nested(_cfg, "leaderboard", "min_total_trades", default=60)
 FINAL_MIN_IS_TRADES = 25
 FINAL_MIN_OOS_TRADES = 25
 
@@ -572,9 +575,14 @@ def run_single_family(
     data = load_tradestation_csv(dataset_path, debug=True)
 
     cfg = EngineConfig(
-        initial_capital=250_000.0,
-        risk_per_trade=0.01,
+        initial_capital=get_nested(_cfg, "engine", "initial_capital", default=250_000.0),
+        risk_per_trade=get_nested(_cfg, "engine", "risk_per_trade", default=0.01),
         symbol=market_symbol,
+        commission_per_contract=get_nested(_cfg, "engine", "commission_per_contract", default=2.00),
+        slippage_ticks=get_nested(_cfg, "engine", "slippage_ticks", default=4),
+        tick_value=get_nested(_cfg, "engine", "tick_value", default=12.50),
+        dollars_per_point=get_nested(_cfg, "engine", "dollars_per_point", default=50.0),
+        oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
     )
 
     print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type_name}")

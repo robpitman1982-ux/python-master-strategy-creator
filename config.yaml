@@ -1,0 +1,47 @@
+# ============================================================
+# Master Strategy Engine Configuration
+# ============================================================
+
+# --- Data source ---
+datasets:
+  - path: "Data/ES_60m_2008_2026_tradestation.csv"
+    market: "ES"
+    timeframe: "60m"
+
+# Which strategy families to run ("all" or list specific names)
+strategy_types: "all"
+
+# --- Engine defaults ---
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 2.00
+  slippage_ticks: 4
+  tick_value: 12.50
+  dollars_per_point: 50.0
+
+# --- Pipeline controls ---
+pipeline:
+  max_workers_sweep: 10
+  max_workers_refinement: 10
+  max_candidates_to_refine: 3
+  oos_split_date: "2019-01-01"
+
+# --- Promotion gate (global defaults, strategy types can override) ---
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+
+# --- Final leaderboard acceptance ---
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 60
+
+# --- Output ---
+output_dir: "Outputs"
