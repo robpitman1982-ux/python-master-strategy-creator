@@ -34,6 +34,8 @@ FINAL_MIN_NET_PNL = 0.0
 FINAL_MIN_PF = 1.00
 FINAL_MIN_OOS_PF = 1.00
 FINAL_MIN_TOTAL_TRADES = 60
+FINAL_MIN_IS_TRADES = 25
+FINAL_MIN_OOS_TRADES = 25
 
 
 # =============================================================================
@@ -163,6 +165,31 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
     if "strategy_name" in promoted.columns:
         promoted = promoted.drop_duplicates(subset=["strategy_name"]).reset_index(drop=True)
 
+    max_candidates = int(promotion_gate.get("max_promoted_candidates", 50))
+
+    if len(promoted) > max_candidates:
+        if "quality_score" in promoted.columns:
+            qs = promoted["quality_score"].fillna(0.0)
+            oos = promoted["oos_pf"].fillna(0.0) if "oos_pf" in promoted.columns else pd.Series(0.0, index=promoted.index)
+            tpy = promoted["trades_per_year"].fillna(0.0) if "trades_per_year" in promoted.columns else pd.Series(0.0, index=promoted.index)
+
+            def _normalize(s: pd.Series) -> pd.Series:
+                r = s.max() - s.min()
+                return (s - s.min()) / r if r > 0 else s * 0.0
+
+            promoted = promoted.copy()
+            promoted["_composite_rank"] = (
+                _normalize(qs) * 0.4
+                + _normalize(oos) * 0.3
+                + _normalize(tpy) * 0.3
+            )
+            promoted = promoted.nlargest(max_candidates, "_composite_rank")
+            promoted = promoted.drop(columns=["_composite_rank"])
+        else:
+            promoted = promoted.head(max_candidates)
+
+        promoted = promoted.reset_index(drop=True)
+
     return promoted
 
 
@@ -187,7 +214,9 @@ def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[st
         if c in promoted_df.columns
     ]
 
-    print(f"\n✅ Promoted Candidates ({len(promoted_df)} Distinct):")
+    max_candidates = int(promotion_gate.get("max_promoted_candidates", 50))
+    cap_note = f" — capped at {max_candidates}" if len(promoted_df) == max_candidates else ""
+    print(f"\n✅ Promoted Candidates ({len(promoted_df)} Distinct{cap_note}):")
     print(promoted_df[display_cols].head(10).to_string(index=False))
 
 
@@ -390,6 +419,8 @@ def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
     leader_pf = float(row.get("leader_pf", 0.0) or 0.0)
     oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
     leader_trades = int(row.get("leader_trades", 0) or 0)
+    is_trades = int(row.get("is_trades", 0) or 0)
+    oos_trades = int(row.get("oos_trades", 0) or 0)
 
     if leader_net <= FINAL_MIN_NET_PNL:
         return False
@@ -399,6 +430,11 @@ def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
         return False
     if leader_trades < FINAL_MIN_TOTAL_TRADES:
         return False
+    if is_trades < FINAL_MIN_IS_TRADES:
+        return False
+    if oos_trades < FINAL_MIN_OOS_TRADES:
+        return False
+
     return True
 
 
@@ -598,7 +634,7 @@ if __name__ == "__main__":
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
 
-        print("\n🏆 LEADERBOARD 3.1 (Saved to family_leaderboard_results.csv)")
+        print("\n🏆 LEADERBOARD 3.2 (Saved to family_leaderboard_results.csv)")
         preview_cols = [
             "strategy_type",
             "leader_source",

@@ -258,6 +258,7 @@ class BreakoutStrategyType(BaseStrategyType):
             "require_positive_net_pnl": False,
             "min_trades": 60,
             "min_trades_per_year": 3.0,
+            "max_promoted_candidates": 20,
         }
 
     def get_promotion_gate_config(self) -> dict[str, float | bool]:
