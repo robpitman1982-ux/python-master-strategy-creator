@@ -94,6 +94,9 @@ def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -
         "recent_12m_pf": _pf(summary.get("Recent 12m PF", 0.0)),
         "quality_flag": str(summary.get("Quality Flag", "UNKNOWN")),
         "quality_score": _pf(summary.get("Quality Score", 0.0)),
+        "pct_profitable_years": _pf(summary.get("Pct Profitable Years", 0.0)),
+        "max_consecutive_losing_years": int(summary.get("Max Consecutive Losing Years", 0)),
+        "consistency_flag": str(summary.get("Consistency Flag", "INSUFFICIENT_DATA")),
     }
 
 

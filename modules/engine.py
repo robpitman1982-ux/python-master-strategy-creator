@@ -7,6 +7,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from modules.consistency import analyse_yearly_consistency
+
 
 @dataclass
 class EngineConfig:
@@ -284,11 +286,14 @@ class MasterStrategyEngine:
         total_trades: int,
         is_trades: int,
         oos_trades: int,
+        pct_profitable_years: float | None = None,
+        max_consecutive_losing_years: int = 0,
     ) -> float:
         """
         Continuous quality score from 0.0 to 1.0.
         Rewards IS and OOS profit factors both above 1.0, balance between
-        IS and OOS, higher trade counts, and strong recent performance.
+        IS and OOS, higher trade counts, strong recent performance, and
+        year-over-year consistency.
         """
         avg_pf = (is_pf + oos_pf) / 2.0
         pf_strength = max(0.0, min(1.0, (avg_pf - 0.8) / 1.2))
@@ -305,12 +310,20 @@ class MasterStrategyEngine:
 
         oos_penalty = 1.0 if oos_trades >= 10 else 0.3
 
+        # Component 6: Yearly consistency (neutral 0.5 if insufficient data)
+        if pct_profitable_years is not None:
+            streak_penalty = max(0.0, 1.0 - max_consecutive_losing_years * 0.15)
+            consistency_component = pct_profitable_years * streak_penalty
+        else:
+            consistency_component = 0.5
+
         score = (
-            pf_strength * 0.30
-            + balance_score * 0.25
-            + trade_confidence * 0.20
+            pf_strength * 0.25
+            + balance_score * 0.20
+            + trade_confidence * 0.15
             + recent_score * 0.15
             + oos_penalty * 0.10
+            + consistency_component * 0.15
         )
 
         return round(max(0.0, min(1.0, score)), 4)
@@ -402,6 +415,9 @@ class MasterStrategyEngine:
             if near_boundary:
                 quality_flag += "_BORDERLINE"
 
+        # --- Yearly consistency analysis ---
+        consistency = analyse_yearly_consistency(self.trades)
+
         quality_score = self.calculate_quality_score(
             is_pf=is_pf,
             oos_pf=oos_pf,
@@ -409,6 +425,8 @@ class MasterStrategyEngine:
             total_trades=total_trades,
             is_trades=is_trades_count,
             oos_trades=oos_trades_count,
+            pct_profitable_years=consistency["pct_profitable_years"] if consistency["consistency_flag"] != "INSUFFICIENT_DATA" else None,
+            max_consecutive_losing_years=consistency["max_consecutive_losing_years"],
         )
 
         exit_reason_counts: dict[str, int] = {}
@@ -448,4 +466,7 @@ class MasterStrategyEngine:
             "Recent 12m PF": f"{recent_pf:.2f}",
             "Quality Flag": quality_flag,
             "Quality Score": f"{quality_score:.4f}",
+            "Pct Profitable Years": f"{consistency['pct_profitable_years']:.4f}",
+            "Max Consecutive Losing Years": consistency["max_consecutive_losing_years"],
+            "Consistency Flag": consistency["consistency_flag"],
         }

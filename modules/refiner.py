@@ -108,6 +108,9 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         "recent_12m_pf": float(summary.get("Recent 12m PF", 0.0)),
         "quality_flag": str(summary.get("Quality Flag", "UNKNOWN")),
         "quality_score": _parse_money(summary.get("Quality Score", "0.0")),
+        "pct_profitable_years": _parse_money(summary.get("Pct Profitable Years", "0.0")),
+        "max_consecutive_losing_years": int(summary.get("Max Consecutive Losing Years", 0)),
+        "consistency_flag": str(summary.get("Consistency Flag", "INSUFFICIENT_DATA")),
     }
 
 
@@ -139,6 +142,9 @@ class RefinementResult:
     recent_12m_pf: float
     quality_flag: str
     quality_score: float
+    pct_profitable_years: float
+    max_consecutive_losing_years: int
+    consistency_flag: str
 
 
 class StrategyParameterRefiner:
