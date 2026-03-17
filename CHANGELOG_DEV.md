@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-03-17 — Session 3: Cloud deployment preparation
+
+**What was done**:
+- Created `Dockerfile` (python:3.11-slim based, gcc/g++ for numpy/pandas)
+- Created `requirements.txt` (numpy, pandas, pyyaml)
+- Created `.dockerignore` (excludes Data/, Outputs/, .git, pycache, etc.)
+- Created `cloud/run_cloud.sh` — bash script: create droplet → upload → build Docker → run → download results → destroy
+- Created `cloud/run_cloud.ps1` — PowerShell equivalent for Windows
+- Created `cloud/config_full_es.yaml` — full ES 60m sweep config (all 3 families, 5 candidates to refine, 7 workers)
+- Created `cloud/config_quick_test.yaml` — quick single-family (mean_reversion) test config
+- Created `cloud/SETUP.md` — DigitalOcean setup guide with doctl install, SSH key setup, droplet size/cost reference
+- Added `--config` CLI argument to `master_strategy_engine.py` via argparse
+- Config is now reloaded from CLI arg in `__main__`, re-deriving all module-level constants
+- Added `cloud_results/` to `.gitignore`
+- Region set to `syd1` (Sydney — closest to Melbourne) in all scripts
+
+**Cloud workflow**:
+1. `run_cloud.ps1` creates a c-8 droplet in syd1
+2. Uploads code + data via SCP/rsync
+3. Builds Docker image on droplet
+4. Runs pipeline inside container with config mounted
+5. Downloads results to `cloud_results/<droplet-name>/`
+6. Destroys droplet
+Total estimated cost: $0.30-0.50 per full ES run on c-8
+
+**Next session priorities**:
+1. Test Docker build locally: `docker build -t strategy-engine .`
+2. First cloud test run: `.\cloud\run_cloud.ps1 -ConfigFile cloud\config_quick_test.yaml`
+3. Export additional TradeStation data (ES 5m/15m/30m/daily, CL, NQ)
+4. Create multi-instrument config and run
+
+---
+
 ## 2026-03-17 — Session 2: Config, consistency, multi-dataset
 
 **What was done**:

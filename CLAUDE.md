@@ -46,8 +46,18 @@ python-master-strategy-creator/
 │       ├── mean_reversion_strategy_type.py  # Mean reversion family
 │       ├── breakout_strategy_type.py  # Breakout family
 │       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types()
+├── cloud/
+│   ├── run_cloud.sh            # Linux/Mac cloud run script
+│   ├── run_cloud.ps1           # Windows cloud run script
+│   ├── config_full_es.yaml     # Full ES sweep config
+│   ├── config_quick_test.yaml  # Quick test config
+│   └── SETUP.md                # DigitalOcean setup guide
+├── Dockerfile
+├── requirements.txt
+├── .dockerignore
 ├── Data/                              # .gitignored — TradeStation CSVs
 ├── Outputs/                           # .gitignored — per-dataset subdirectories (ES_60m/, etc.)
+├── cloud_results/                     # .gitignored — downloaded results from cloud runs
 ├── project_to_text.py                 # Utility: dump all .py to single text file
 └── .gitignore
 ```
@@ -132,6 +142,7 @@ Key sections:
 - [ ] Refinement grid is brute-force (4×4×4×4=256) — needs adaptive/Bayesian approach for cloud
 - [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
+- [x] Cloud deployment: Dockerfile, requirements.txt, run scripts, cloud configs all created
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -139,6 +150,9 @@ Key sections:
 - [x] Add support for multiple datasets in single run — datasets list in config, per-dataset output dirs
 - [ ] Add walk-forward validation as alternative to fixed IS/OOS split
 - [x] Yearly stats show trend strategy lost money 9/11 years 2009-2018 — consistency module added: pct_profitable_years, max_consecutive_losing_years, consistency_flag in all results
+- [ ] Test Docker build locally before first cloud run
+- [ ] Add multi-timeframe data files for ES (5m, 15m, 30m, daily)
+- [ ] Add CL and NQ data exports from TradeStation
 
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
@@ -166,4 +180,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-17 — Session 2: config.yaml + config_loader, yearly consistency analysis (consistency_flag, pct_profitable_years), OOS split date configurable, multi-dataset loop with per-dataset output dirs. All imports verified, engine smoke-tested.
+2026-03-17 — Session 3: Cloud deployment setup — Dockerfile, requirements.txt, .dockerignore, cloud/ run scripts (bash + PowerShell), cloud configs (full_es, quick_test), DigitalOcean SETUP.md, --config CLI arg added to master_strategy_engine.py. Region: syd1 (Sydney).
