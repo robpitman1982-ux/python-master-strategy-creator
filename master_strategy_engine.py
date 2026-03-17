@@ -37,8 +37,6 @@ FINAL_MIN_NET_PNL = get_nested(_cfg, "leaderboard", "min_net_pnl", default=0.0)
 FINAL_MIN_PF = get_nested(_cfg, "leaderboard", "min_pf", default=1.00)
 FINAL_MIN_OOS_PF = get_nested(_cfg, "leaderboard", "min_oos_pf", default=1.00)
 FINAL_MIN_TOTAL_TRADES = get_nested(_cfg, "leaderboard", "min_total_trades", default=60)
-FINAL_MIN_IS_TRADES = 25
-FINAL_MIN_OOS_TRADES = 25
 
 
 # =============================================================================
@@ -487,8 +485,6 @@ def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
     leader_pf = float(row.get("leader_pf", 0.0) or 0.0)
     oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
     leader_trades = int(row.get("leader_trades", 0) or 0)
-    is_trades = int(row.get("is_trades", 0) or 0)
-    oos_trades = int(row.get("oos_trades", 0) or 0)
 
     if leader_net <= FINAL_MIN_NET_PNL:
         return False
@@ -497,10 +493,6 @@ def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
     if oos_pf < FINAL_MIN_OOS_PF:
         return False
     if leader_trades < FINAL_MIN_TOTAL_TRADES:
-        return False
-    if is_trades < FINAL_MIN_IS_TRADES:
-        return False
-    if oos_trades < FINAL_MIN_OOS_TRADES:
         return False
 
     return True
