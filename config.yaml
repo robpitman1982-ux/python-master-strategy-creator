@@ -9,7 +9,7 @@ datasets:
     timeframe: "60m"
 
 # Which strategy families to run ("all" or list specific names)
-strategy_types: "mean_reversion"
+strategy_types: "all"
 
 # --- Engine defaults ---
 engine:
@@ -21,9 +21,11 @@ engine:
   dollars_per_point: 50.0
 
 # --- Pipeline controls ---
+# Local (many cores): max_workers_sweep: 10, max_workers_refinement: 10
+# Cloud 2-core droplet: set both to 2
 pipeline:
-  max_workers_sweep: 10
-  max_workers_refinement: 10
+  max_workers_sweep: 2
+  max_workers_refinement: 2
   max_candidates_to_refine: 3
   oos_split_date: "2019-01-01"
 
