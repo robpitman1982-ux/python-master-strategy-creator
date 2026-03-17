@@ -9,7 +9,7 @@ datasets:
     timeframe: "60m"
 
 # Which strategy families to run ("all" or list specific names)
-strategy_types: "all"
+strategy_types: "mean_reversion"
 
 # --- Engine defaults ---
 engine:
