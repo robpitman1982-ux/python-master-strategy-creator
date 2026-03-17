@@ -1,0 +1,14 @@
+.git/
+__pycache__/
+*.pyc
+Data/
+Outputs/
+.claude/
+*.rtf
+*.md
+!CLAUDE.md
+paste.md
+full_project_context.txt
+project_to_text.py
+SESSION_*_TASKS.md
+.vscode/
