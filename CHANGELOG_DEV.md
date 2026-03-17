@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-03-18 — Session 4: Structured logging + cloud launcher fix
+
+**What was done**:
+- Created `modules/progress.py` — ProgressTracker class with timestamped log lines and status.json output
+- Integrated ProgressTracker into master_strategy_engine.py pipeline — all stage transitions and sweep/refinement progress now logged
+- Added optional `progress_callback` parameter to sweep and refinement functions (backward compatible)
+- Fixed `run_cloud_job.py` start_engine timeout issue (was 60s, now handles nohup startup properly)
+- status.json written to each dataset's output directory, updated every 10% of sweep/refinement progress
+
+**Output changes vs Session 3**:
+- Log output now has structured timestamps and stage prefixes
+- `Outputs/ES_60m/status.json` created during runs — instant progress check via `cat status.json`
+- run_cloud_job.py can now start the engine without SSH timeout errors
+
+**Verified**:
+- ProgressTracker unit test passed (manual quick test)
+- All imports OK
+- Existing pipeline behaviour unchanged (progress_callback is optional)
+
+**Next session priorities**:
+1. Run updated engine on new DigitalOcean droplet to test structured logging
+2. Analyze results from current cloud run (still in progress on 209.38.86.189)
+3. Expand to additional ES timeframes (5m, 15m, 30m, daily)
+4. Design master leaderboard aggregator for multi-dataset runs
+
+---
+
 ## 2026-03-17 — Session 3: Cloud deployment preparation
 
 **What was done**:

@@ -157,8 +157,9 @@ Key sections:
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
 - [ ] Trade-list-level deduplication (detect when two filter combos produce same trades)
-- [ ] Progress logging with ETA for long runs
+- [x] Progress logging with ETA for long runs
 - [x] Config file (YAML/TOML) instead of hardcoded constants — config.yaml created
+- [ ] Integrate status.json polling into run_cloud_job.py wait loop
 
 ## Coding standards
 
@@ -180,4 +181,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-17 — Session 3: Cloud deployment setup — Dockerfile, requirements.txt, .dockerignore, cloud/ run scripts (bash + PowerShell), cloud configs (full_es, quick_test), DigitalOcean SETUP.md, --config CLI arg added to master_strategy_engine.py. Region: syd1 (Sydney).
+2026-03-18 — Session 4: Structured progress logging (ProgressTracker, status.json), cloud launcher timeout fix
