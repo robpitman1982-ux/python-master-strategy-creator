@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 import pandas as pd
 
@@ -299,6 +299,7 @@ class MeanReversionStrategyType(BaseStrategyType):
         data: pd.DataFrame,
         cfg: EngineConfig,
         max_workers: int = 10,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         combinations = generate_filter_combinations(
             self.get_filter_classes(),
@@ -318,6 +319,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 )
                 res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
+                if progress_callback is not None:
+                    progress_callback(idx, len(combinations))
 
         if not results:
             return pd.DataFrame()
@@ -335,6 +338,7 @@ class MeanReversionStrategyType(BaseStrategyType):
         candidate_row: dict[str, Any],
         output_dir: str | Path = "Outputs",
         max_workers: int = 10,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         classes = candidate_row.get("filter_classes", [])
         grid = self.get_active_refinement_grid_for_combo(classes)
@@ -356,6 +360,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             min_trades_per_year=thresholds["min_trades_per_year"],
             parallel=True,
             max_workers=max_workers,
+            progress_callback=progress_callback,
         )
 
         if not refinement_df.empty:

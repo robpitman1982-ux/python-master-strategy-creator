@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Optional
 
 import pandas as pd
 from modules.engine import EngineConfig
@@ -103,6 +103,7 @@ class BaseStrategyType(ABC):
         data: pd.DataFrame,
         cfg: EngineConfig,
         max_workers: int = 10,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         raise NotImplementedError
 
@@ -114,5 +115,6 @@ class BaseStrategyType(ABC):
         candidate_row: dict[str, Any],
         output_dir: str | Path = "Outputs",
         max_workers: int = 10,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         raise NotImplementedError

@@ -6,7 +6,7 @@ from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from itertools import product
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import pandas as pd
 
@@ -175,6 +175,7 @@ class StrategyParameterRefiner:
         min_trades_per_year: float = 8.0,
         parallel: bool = True,
         max_workers: int | None = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         self.results = []
 
@@ -226,6 +227,8 @@ class StrategyParameterRefiner:
                         f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
                         f"trades={result['total_trades']} | {result['reject_reason']}"
                     )
+                    if progress_callback is not None:
+                        progress_callback(idx, total_runs)
         else:
             _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
             for idx, task in enumerate(tasks, start=1):
@@ -244,6 +247,8 @@ class StrategyParameterRefiner:
                     f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
                     f"trades={result['total_trades']} | {result['reject_reason']}"
                 )
+                if progress_callback is not None:
+                    progress_callback(idx, total_runs)
 
         print(f"\n✅ Accepted refinement sets: {accepted_count}")
         print(f"❌ Rejected refinement sets: {rejected_count}")

@@ -17,6 +17,7 @@ from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
 from modules.portfolio_evaluator import evaluate_portfolio
+from modules.progress import ProgressTracker
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
 # =============================================================================
@@ -92,6 +93,7 @@ def run_family_filter_combination_sweep(
     data: pd.DataFrame,
     cfg: EngineConfig,
     max_workers: int,
+    progress_callback: Any = None,
 ) -> pd.DataFrame:
     return call_first_available(
         strategy_type,
@@ -99,6 +101,7 @@ def run_family_filter_combination_sweep(
         data=data,
         cfg=cfg,
         max_workers=max_workers,
+        progress_callback=progress_callback,
     )
 
 
@@ -140,6 +143,7 @@ def run_top_combo_refinement(
     cfg: EngineConfig,
     candidate_row: dict[str, Any],
     max_workers: int,
+    progress_callback: Any = None,
 ) -> pd.DataFrame:
     return call_first_available(
         strategy_type,
@@ -148,6 +152,7 @@ def run_top_combo_refinement(
         cfg=cfg,
         candidate_row=candidate_row,
         max_workers=max_workers,
+        progress_callback=progress_callback,
     )
 
 
@@ -568,9 +573,13 @@ def run_single_family(
     max_workers_sweep: int,
     max_workers_refinement: int,
     market_symbol: str,
+    tracker: ProgressTracker | None = None,
 ) -> dict[str, Any]:
     family_start = time.perf_counter()
     strategy_type = get_strategy_type(strategy_type_name)
+
+    if tracker is not None:
+        tracker.start_family(strategy_type_name)
 
     print(f"\nSelected strategy type: {strategy_type_name}")
     print(f"Available strategy types: {list_strategy_types()}")
@@ -610,12 +619,15 @@ def run_single_family(
         n_evaluations=n_filter_combos,
     )
 
+    if tracker is not None:
+        tracker.reset_stage_timer()
     sweep_start = time.perf_counter()
     combo_results_df = run_family_filter_combination_sweep(
         strategy_type=strategy_type,
         data=data,
         cfg=cfg,
         max_workers=max_workers_sweep,
+        progress_callback=tracker.update_sweep if tracker is not None else None,
     )
     sweep_elapsed = time.perf_counter() - sweep_start
 
@@ -627,6 +639,12 @@ def run_single_family(
     promotion_gate = get_promotion_gate_config(strategy_type)
     promoted_df = apply_promotion_gate(combo_results_df, promotion_gate)
     print_promotion_gate_report(strategy_type_name, promotion_gate, promoted_df)
+
+    if tracker is not None:
+        tracker.log_promotion(
+            count=len(promoted_df) if promoted_df is not None else 0,
+            cap=int(promotion_gate.get("max_promoted_candidates", 20)),
+        )
 
     if promoted_df is not None and not promoted_df.empty:
         promoted_df = deduplicate_promoted_candidates(promoted_df)
@@ -656,6 +674,9 @@ def run_single_family(
 
         candidates_to_test = promoted_df.head(MAX_CANDIDATES_TO_REFINE).to_dict("records")
 
+        if tracker is not None:
+            tracker.reset_stage_timer()
+
         for rank, candidate in enumerate(candidates_to_test, start=1):
             print(f"\n{'=' * 50}\n🏆 Attempting Refinement on Promoted Candidate #{rank}\n{'=' * 50}")
             print(f"Strategy: {candidate.get('strategy_name', 'UNKNOWN')}")
@@ -667,6 +688,7 @@ def run_single_family(
                 cfg=cfg,
                 candidate_row=candidate,
                 max_workers=max_workers_refinement,
+                progress_callback=tracker.update_refinement if tracker is not None else None,
             )
 
             if current_refinement_df is not None and not current_refinement_df.empty:
@@ -696,6 +718,10 @@ def run_single_family(
 
     print_family_summary(family_summary_row)
     family_summary_row["family_runtime_seconds"] = round(time.perf_counter() - family_start, 2)
+
+    if tracker is not None:
+        tracker.end_family(strategy_type_name)
+
     return family_summary_row
 
 
@@ -715,6 +741,12 @@ def _run_dataset(
     family_names = list_strategy_types() if STRATEGY_TYPE_NAME == "all" else [STRATEGY_TYPE_NAME]
     dataset_summaries: list[dict[str, Any]] = []
 
+    tracker = ProgressTracker(
+        output_dir=ds_output_dir,
+        dataset_label=f"{ds_market}_{ds_timeframe}",
+    )
+    tracker.set_families(family_names)
+
     for family_name in family_names:
         summary_row = run_single_family(
             strategy_type_name=family_name,
@@ -723,6 +755,7 @@ def _run_dataset(
             max_workers_sweep=MAX_WORKERS_SWEEP,
             max_workers_refinement=MAX_WORKERS_REFINEMENT,
             market_symbol=ds_market,
+            tracker=tracker,
         )
         dataset_summaries.append(summary_row)
 
@@ -755,6 +788,9 @@ def _run_dataset(
 
         print("\n" + "=" * 72 + "\n🔬 STARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
 
+        n_accepted = int(leaderboard_df.get("accepted_final", pd.Series(dtype=bool)).sum()) if "accepted_final" in leaderboard_df.columns else len(leaderboard_df)
+        tracker.log_portfolio(n_accepted)
+
         review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
             leaderboard_csv=leaderboard_path,
             data_csv=ds_path,
@@ -785,6 +821,8 @@ def _run_dataset(
             print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
         else:
             print("\n⚠ No strategies passed final leaderboard acceptance gate for evaluation.")
+
+    tracker.log_done()
 
 
 if __name__ == "__main__":
