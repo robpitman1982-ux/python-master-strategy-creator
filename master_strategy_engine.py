@@ -5,6 +5,7 @@ Project: Python Master Strategy Creator
 
 from __future__ import annotations
 
+import argparse
 import time
 from pathlib import Path
 from typing import Any
@@ -116,6 +117,17 @@ def estimate_compute_budget(
         "n_evaluations": n_evaluations,
         "estimated_minutes": round(estimated_minutes, 2),
     }
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Master Strategy Engine")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to config YAML file (default: config.yaml)",
+    )
+    return parser.parse_args()
 
 
 def get_promotion_gate_config(strategy_type: Any) -> dict[str, Any]:
@@ -776,6 +788,21 @@ def _run_dataset(
 
 
 if __name__ == "__main__":
+    args = parse_args()
+    _cfg = load_config(args.config)
+
+    # Re-derive all constants from the loaded config
+    CSV_PATH = Path(get_nested(_cfg, "datasets", default=[{}])[0].get("path", "Data/ES_60m_2008_2026_tradestation.csv"))
+    STRATEGY_TYPE_NAME = get_nested(_cfg, "strategy_types", default="all")
+    OUTPUTS_DIR = Path(get_nested(_cfg, "output_dir", default="Outputs"))
+    MAX_WORKERS_SWEEP = get_nested(_cfg, "pipeline", "max_workers_sweep", default=10)
+    MAX_WORKERS_REFINEMENT = get_nested(_cfg, "pipeline", "max_workers_refinement", default=10)
+    MAX_CANDIDATES_TO_REFINE = get_nested(_cfg, "pipeline", "max_candidates_to_refine", default=3)
+    FINAL_MIN_NET_PNL = get_nested(_cfg, "leaderboard", "min_net_pnl", default=0.0)
+    FINAL_MIN_PF = get_nested(_cfg, "leaderboard", "min_pf", default=1.00)
+    FINAL_MIN_OOS_PF = get_nested(_cfg, "leaderboard", "min_oos_pf", default=1.00)
+    FINAL_MIN_TOTAL_TRADES = get_nested(_cfg, "leaderboard", "min_total_trades", default=60)
+
     total_start = time.perf_counter()
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
 
