@@ -268,14 +268,18 @@ def upload_csv(client: paramiko.SSHClient, local_csv: Path):
 
 
 def start_engine(client: paramiko.SSHClient) -> str:
+    """Launch the engine on the droplet without waiting for completion."""
     cmd = (
+        'bash -c "'
         f"cd {REMOTE_PROJECT_DIR} && "
-        f"nohup ./venv/bin/python master_strategy_engine.py "
-        f"> Outputs/logs/run_$(date +%Y%m%d_%H%M%S).log 2>&1 & "
-        f"echo $!"
+        "nohup ./venv/bin/python master_strategy_engine.py "
+        "> Outputs/logs/run_$(date +%Y%m%d_%H%M%S).log 2>&1 & "
+        'echo $!"'
     )
-    pid = ssh_exec(client, cmd)
-    print(f"Engine started (PID {pid})")
+    # Use exec_command directly with a short timeout — we only need the PID back
+    _, stdout, stderr = client.exec_command(cmd, timeout=30)
+    pid = stdout.read().decode().strip()
+    print(f"Engine started with PID: {pid}")
     ssh_exec(
         client,
         f"nohup bash -c 'while kill -0 {pid} 2>/dev/null; do sleep 10; done; touch {DONE_MARKER}' &",
