@@ -600,7 +600,20 @@ def run_single_family(
         timeframe=timeframe,
     )
 
-    print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type_name} (timeframe={timeframe})")
+    # Memory estimation — warn if parallel copies of the dataframe may exceed RAM budget
+    data_mb = data.memory_usage(deep=True).sum() / 1_048_576
+    est_parallel_mb = data_mb * max_workers_sweep
+    print(f"\nData: {len(data):,} bars, {data_mb:.1f} MB per copy")
+    print(f"   Parallel estimate: {est_parallel_mb:.0f} MB for {max_workers_sweep} workers")
+    max_memory_gb = get_nested(_cfg, "pipeline", "max_memory_gb", default=None)
+    if max_memory_gb is not None and est_parallel_mb > float(max_memory_gb) * 1024:
+        adjusted_workers = max(2, int(float(max_memory_gb) * 1024 / data_mb))
+        print(f"   Auto-reducing sweep workers from {max_workers_sweep} to {adjusted_workers} to fit memory budget ({max_memory_gb} GB)")
+        max_workers_sweep = adjusted_workers
+    elif est_parallel_mb > 60_000:
+        print(f"   WARNING: Estimated memory usage ({est_parallel_mb:.0f} MB) is high — consider reducing max_workers or adding max_memory_gb to config.")
+
+    print(f"\n Adding precomputed feature columns for strategy type: {strategy_type_name} (timeframe={timeframe})")
     data = add_precomputed_features(
         data,
         sma_lengths=get_required_sma_lengths(strategy_type, timeframe=timeframe),
