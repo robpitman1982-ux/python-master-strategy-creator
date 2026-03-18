@@ -573,6 +573,7 @@ def run_single_family(
     max_workers_sweep: int,
     max_workers_refinement: int,
     market_symbol: str,
+    timeframe: str = "60m",
     tracker: ProgressTracker | None = None,
 ) -> dict[str, Any]:
     family_start = time.perf_counter()
@@ -596,6 +597,7 @@ def run_single_family(
         tick_value=get_nested(_cfg, "engine", "tick_value", default=12.50),
         dollars_per_point=get_nested(_cfg, "engine", "dollars_per_point", default=50.0),
         oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
+        timeframe=timeframe,
     )
 
     print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type_name}")
@@ -659,18 +661,25 @@ def run_single_family(
         print(f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted.")
     else:
         n_candidates = min(len(promoted_df), MAX_CANDIDATES_TO_REFINE)
+        sample_candidate = {**promoted_df.iloc[0].to_dict(), "timeframe": cfg.timeframe}
         sample_grid = call_first_available(
             strategy_type,
             ["get_refinement_grid_for_candidate"],
-            promoted_df.iloc[0].to_dict(),
+            sample_candidate,
         )
         grid_size = 1
         for values in sample_grid.values():
             grid_size *= len(values)
+
+        from modules.config_loader import get_timeframe_multiplier as _gtm
+        _mult = _gtm(cfg.timeframe)
+        _tf_note = f"{cfg.timeframe} timeframe, multiplier={_mult:.3g}x" if cfg.timeframe != "60m" else "60m timeframe"
         estimate_compute_budget(
-            stage=f"{strategy_type_name} refinement ({n_candidates} candidates × {grid_size} grid points)",
+            stage=f"{strategy_type_name} refinement ({n_candidates} candidates × {grid_size} grid points, {_tf_note})",
             n_evaluations=n_candidates * grid_size,
         )
+        print(f"   hold_bars (scaled): {sample_grid.get('hold_bars', [])}")
+        print(f"   stop_distance_points (ATR-based, unscaled): {sample_grid.get('stop_distance_points', [])}")
 
         candidates_to_test = promoted_df.head(MAX_CANDIDATES_TO_REFINE).to_dict("records")
 
@@ -755,6 +764,7 @@ def _run_dataset(
             max_workers_sweep=MAX_WORKERS_SWEEP,
             max_workers_refinement=MAX_WORKERS_REFINEMENT,
             market_symbol=ds_market,
+            timeframe=ds_timeframe,
             tracker=tracker,
         )
         dataset_summaries.append(summary_row)

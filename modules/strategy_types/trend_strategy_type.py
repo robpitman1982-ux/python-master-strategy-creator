@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from modules.config_loader import get_timeframe_multiplier
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
@@ -269,19 +270,43 @@ class TrendStrategyType(BaseStrategyType):
     def get_trade_filter_config(self) -> dict[str, float]:
         return self.get_trade_filter_thresholds()
 
-    def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
+    def get_active_refinement_grid_for_combo(
+        self, classes: list[type], timeframe: str = "60m"
+    ) -> dict[str, list]:
+        base_hold_bars = [3, 4, 5, 6, 8, 10, 12, 15]
+        mult = get_timeframe_multiplier(timeframe)
+
+        if mult != 1.0:
+            scaled = sorted(set(max(1, round(h * mult)) for h in base_hold_bars))
+            if len(scaled) < 4:
+                scaled = sorted(set(scaled + [1, 2, 3, 5]))
+        else:
+            scaled = base_hold_bars
+
+        base_mom_lookbacks = [0, 5, 8, 10, 14]
+        if mult != 1.0 and any(cls is MomentumFilter for cls in classes):
+            scaled_mom = sorted(set(max(1, round(m * mult)) for m in base_mom_lookbacks if m > 0))
+            if len(scaled_mom) < 3:
+                scaled_mom = sorted(set(scaled_mom + [5, 10, 20]))
+            momentum_lookback = [0] + scaled_mom
+        else:
+            momentum_lookback = base_mom_lookbacks if any(cls is MomentumFilter for cls in classes) else [0]
+
         grid = {
-            "hold_bars": [3, 4, 5, 6, 8, 10, 12, 15],
+            "hold_bars": scaled,
+            # stop_distance_points are ATR-based, unscaled
             "stop_distance_points": [0.75, 1.0, 1.25, 1.5, 2.0, 2.5],
         }
 
         grid["min_avg_range"] = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4] if any(cls is VolatilityFilter for cls in classes) else [0.0]
-        grid["momentum_lookback"] = [0, 5, 8, 10, 14] if any(cls is MomentumFilter for cls in classes) else [0]
+        grid["momentum_lookback"] = momentum_lookback
 
         return grid
 
     def get_refinement_grid_for_candidate(self, row: dict[str, Any]) -> dict[str, list]:
-        return self.get_active_refinement_grid_for_combo(row.get("filter_classes", []))
+        return self.get_active_refinement_grid_for_combo(
+            row.get("filter_classes", []), row.get("timeframe", "60m")
+        )
 
     def run_family_filter_combination_sweep(
         self,
@@ -330,7 +355,8 @@ class TrendStrategyType(BaseStrategyType):
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         classes = candidate_row.get("filter_classes", [])
-        grid = self.get_active_refinement_grid_for_combo(classes)
+        timeframe = cfg.timeframe
+        grid = self.get_active_refinement_grid_for_combo(classes, timeframe=timeframe)
         thresholds = self.get_trade_filter_thresholds()
 
         refiner = StrategyParameterRefiner(

@@ -20,6 +20,7 @@ class EngineConfig:
     tick_value: float = 12.50
     dollars_per_point: float = 50.0
     oos_split_date: str = "2019-01-01"
+    timeframe: str = "60m"
 
 
 @dataclass

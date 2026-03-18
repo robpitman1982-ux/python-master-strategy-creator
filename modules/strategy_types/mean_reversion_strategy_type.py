@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
+from modules.config_loader import get_timeframe_multiplier
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
@@ -276,9 +277,23 @@ class MeanReversionStrategyType(BaseStrategyType):
     def get_trade_filter_config(self) -> dict[str, float]:
         return self.get_trade_filter_thresholds()
 
-    def get_active_refinement_grid_for_combo(self, classes: list[type]) -> dict[str, list]:
+    def get_active_refinement_grid_for_combo(
+        self, classes: list[type], timeframe: str = "60m"
+    ) -> dict[str, list]:
+        base_hold_bars = [2, 3, 4, 5, 6, 8, 10, 12]
+        mult = get_timeframe_multiplier(timeframe)
+
+        if mult != 1.0:
+            scaled = sorted(set(max(1, round(h * mult)) for h in base_hold_bars))
+            # Ensure minimum grid diversity for very coarse timeframes
+            if len(scaled) < 4:
+                scaled = sorted(set(scaled + [1, 2, 3, 5]))
+        else:
+            scaled = base_hold_bars
+
         grid = {
-            "hold_bars": [2, 3, 4, 5, 6, 8, 10, 12],
+            "hold_bars": scaled,
+            # stop_distance_points are ATR-based, unscaled (ATR already adapts to timeframe)
             "stop_distance_points": [0.4, 0.5, 0.75, 1.0, 1.25, 1.5],
         }
 
@@ -292,7 +307,9 @@ class MeanReversionStrategyType(BaseStrategyType):
         return grid
 
     def get_refinement_grid_for_candidate(self, row: dict[str, Any]) -> dict[str, list]:
-        return self.get_active_refinement_grid_for_combo(row.get("filter_classes", []))
+        return self.get_active_refinement_grid_for_combo(
+            row.get("filter_classes", []), row.get("timeframe", "60m")
+        )
 
     def run_family_filter_combination_sweep(
         self,
@@ -341,7 +358,8 @@ class MeanReversionStrategyType(BaseStrategyType):
         progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> pd.DataFrame:
         classes = candidate_row.get("filter_classes", [])
-        grid = self.get_active_refinement_grid_for_combo(classes)
+        timeframe = cfg.timeframe
+        grid = self.get_active_refinement_grid_for_combo(classes, timeframe=timeframe)
         thresholds = self.get_trade_filter_thresholds()
 
         refiner = StrategyParameterRefiner(
