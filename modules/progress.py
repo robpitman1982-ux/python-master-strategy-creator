@@ -21,6 +21,9 @@ class ProgressTracker:
         self._current_family = ""
         self._current_stage = ""
         self._stage_start = time.perf_counter()
+        self._current_candidate: int = 0
+        self._total_candidates: int = 0
+        self._candidate_name: str = ""
 
     def _ts(self) -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -91,6 +94,15 @@ class ProgressTracker:
         self.log("", "DONE", f"Total runtime: {total:.1f}s")
         self._write_status("DONE", 100, 0, 0)
 
+    def log_refinement_candidate(self, candidate_num: int, total_candidates: int,
+                                  candidate_name: str) -> None:
+        self._current_candidate = candidate_num
+        self._total_candidates = total_candidates
+        self._candidate_name = candidate_name
+        self.log(self._current_family, "REFINEMENT",
+                 f"Candidate {candidate_num}/{total_candidates}: {candidate_name}")
+        self._write_status("REFINEMENT", 0, 0, 0)
+
     def reset_stage_timer(self) -> None:
         self._stage_start = time.perf_counter()
 
@@ -109,6 +121,9 @@ class ProgressTracker:
             "families_completed": self.families_completed,
             "families_remaining": self.families_remaining,
             "last_event": f"{stage} {done}/{total}" if total > 0 else stage,
+            "current_candidate": self._current_candidate,
+            "total_candidates": self._total_candidates,
+            "candidate_name": self._candidate_name,
         }
         try:
             self.status_path.write_text(json.dumps(status, indent=2))

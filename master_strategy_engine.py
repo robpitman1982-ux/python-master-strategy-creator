@@ -696,10 +696,11 @@ def run_single_family(
 
         candidates_to_test = promoted_df.head(MAX_CANDIDATES_TO_REFINE).to_dict("records")
 
-        if tracker is not None:
-            tracker.reset_stage_timer()
-
         for rank, candidate in enumerate(candidates_to_test, start=1):
+            candidate_name = candidate.get('strategy_name', candidate.get('filters', 'UNKNOWN'))
+            if tracker is not None:
+                tracker.log_refinement_candidate(rank, len(candidates_to_test), candidate_name)
+                tracker.reset_stage_timer()
             print(f"\n{'=' * 50}\n🏆 Attempting Refinement on Promoted Candidate #{rank}\n{'=' * 50}")
             print(f"Strategy: {candidate.get('strategy_name', 'UNKNOWN')}")
             print(f"Filters:  {candidate.get('filters', 'UNKNOWN')}")
