@@ -26,9 +26,13 @@
 python-master-strategy-creator/
 ├── master_strategy_engine.py           # Main orchestrator — runs all families
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
+├── tests/
+│   ├── __init__.py
+│   └── test_smoke.py                  # 11 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe)
 ├── modules/
 │   ├── __init__.py
-│   ├── config_loader.py               # load_config() + get_nested() helpers
+│   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() helpers
+│   ├── master_leaderboard.py          # aggregate_master_leaderboard() — consolidates all dataset leaderboards
 │   ├── consistency.py                 # analyse_yearly_consistency() — year-by-year PnL checks
 │   ├── engine.py                       # MasterStrategyEngine, EngineConfig, trade execution
 │   ├── data_loader.py                  # TradeStation CSV loader
@@ -143,6 +147,7 @@ Key sections:
 - [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
 - [x] Cloud deployment: Dockerfile, requirements.txt, run scripts, cloud configs all created
+- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (11 tests, all fast)
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -153,6 +158,8 @@ Key sections:
 - [ ] Test Docker build locally before first cloud run
 - [ ] Add multi-timeframe data files for ES (5m, 15m, 30m, daily)
 - [ ] Add CL and NQ data exports from TradeStation
+- [x] Master leaderboard aggregator — `python -m modules.master_leaderboard` → Outputs/master_leaderboard.csv
+- [x] Timeframe-aware refinement grids — hold_bars auto-scales with bar duration (5m → 12×, daily → 0.154×)
 
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
@@ -167,7 +174,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: none yet (add before cloud)
+- Tests: `python -m pytest tests/test_smoke.py -v` — 11 smoke tests, all < 2s
 - Git: commit after every meaningful change with descriptive messages
 
 ## Session workflow
@@ -181,4 +188,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-18 — Session 4: Structured progress logging (ProgressTracker, status.json), cloud launcher timeout fix
+2026-03-18 — Session 5: Smoke tests (11), master leaderboard aggregator, timeframe-aware refinement grids

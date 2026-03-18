@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-03-18 — Session 5: Smoke tests, master leaderboard, timeframe grids
+
+**What was done**:
+- Created `tests/__init__.py` and `tests/test_smoke.py` — 11 smoke tests covering: config_loader, feature_builder, EngineConfig, engine run, consistency module, filter combination generation, strategy type factory, quality score range, progress tracker, master leaderboard aggregator, timeframe multiplier
+- Created `modules/master_leaderboard.py` — scans all `Outputs/*/family_leaderboard_results.csv`, filters to `accepted_final=True`, extracts market/timeframe from directory name, adds rank column, returns consolidated DataFrame. Runnable standalone: `python -m modules.master_leaderboard`
+- Added `TIMEFRAME_BAR_MINUTES` dict and `get_timeframe_multiplier()` to `modules/config_loader.py`
+- Added `timeframe: str = "60m"` field to `EngineConfig` dataclass
+- Updated `get_active_refinement_grid_for_combo()` in all 3 strategy types to accept `timeframe` parameter and scale `hold_bars` (and `momentum_lookback` for trend) proportionally — e.g., 5m multiplier=12.0×, daily multiplier≈0.154×
+- Threaded `timeframe` through: `_run_dataset()` → `EngineConfig` → `run_single_family()` → strategy type refinement grids
+- Compute budget output now prints scaled hold_bars grid and timeframe multiplier note
+- Added `pytest>=8.0.0` to `requirements.txt`
+
+**Output changes vs Session 4**:
+- `python -m pytest tests/test_smoke.py -v` runs 11 smoke tests in < 2s
+- `python -m modules.master_leaderboard` produces `Outputs/master_leaderboard.csv`
+- Refinement grids now auto-scale hold_bars and momentum_lookback based on dataset timeframe
+- Compute budget output shows: `hold_bars (scaled): [24, 36, 48, ...]` when timeframe ≠ 60m
+
+**Verified**:
+- All 11 smoke tests pass
+- No regressions on existing tests
+
+**Next session priorities**:
+1. Download and analyze results from DigitalOcean droplets (destroy droplets after)
+2. Export ES 5m/15m/30m/daily data from TradeStation
+3. Run multi-timeframe sweep on cloud
+4. Walk-forward validation (alternative to fixed IS/OOS split)
+5. Bayesian/Optuna optimization for refinement grid
+
+---
+
 ## 2026-03-18 — Session 4: Structured logging + cloud launcher fix
 
 **What was done**:
