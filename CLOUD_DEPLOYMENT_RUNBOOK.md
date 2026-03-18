@@ -237,3 +237,80 @@ Each dataset gets its own output subdirectory (`Outputs/ES_60m/`, `Outputs/ES_5m
 | Stop engine | `kill $(cat engine.pid)` |
 | Pull latest code | `git pull origin main` |
 | Upload data | `scp file.csv root@<IP>:~/python-master-strategy-creator/Data/` |
+
+---
+
+## 48-Core Dedicated CPU Run
+
+For multi-timeframe sweeps, use the dedicated-cpu-48x96gb droplet.
+
+### Create the droplet
+
+1. Region: Sydney (SYD1)
+2. Image: Ubuntu 24.04 LTS
+3. Plan: Dedicated CPU — General Purpose — $2.14/hr (48 vCPUs / 96 GB RAM)
+4. Or via CLI: `doctl compute droplet create strategy-48core --region syd1 --size gd-48vcpu-192gb --image ubuntu-24-04-x64 --ssh-keys <KEY_ID>`
+
+### Clone and set up
+
+```bash
+ssh root@<NEW_IP>
+cd /root
+git clone https://github.com/robpitman1982-ux/python-master-strategy-creator.git
+cd python-master-strategy-creator
+bash setup_server.sh
+```
+
+### Upload all 4 data files (from local machine)
+
+```bash
+scp Data/ES_daily_2008_2026_tradestation.csv root@<IP>:/root/python-master-strategy-creator/Data/
+scp Data/ES_60m_2008_2026_tradestation.csv root@<IP>:/root/python-master-strategy-creator/Data/
+scp Data/ES_30m_2008_2026_tradestation.csv root@<IP>:/root/python-master-strategy-creator/Data/
+scp Data/ES_15m_2008_2026_tradestation.csv root@<IP>:/root/python-master-strategy-creator/Data/
+```
+
+### Run with 48-core config
+
+```bash
+bash run_engine.sh --config cloud/config_es_all_timeframes_48core.yaml
+```
+
+This runs under nohup — disconnect SSH and it keeps going (~7 hours).
+
+### Monitor progress
+
+```bash
+# Per-dataset progress
+cat Outputs/ES_daily/status.json
+cat Outputs/ES_60m/status.json
+cat Outputs/ES_30m/status.json
+cat Outputs/ES_15m/status.json
+
+# Follow log
+tail -f Outputs/logs/run_*.log
+```
+
+### Download results and destroy
+
+```bash
+# From local machine — download the whole Outputs folder
+scp -r root@<IP>:/root/python-master-strategy-creator/Outputs cloud_outputs_48core
+# Check the money file:
+# cloud_outputs_48core/Outputs/master_leaderboard.csv
+# Then destroy the droplet immediately to stop billing
+```
+
+### Automated run via run_cloud_job.py
+
+```bash
+python run_cloud_job.py \
+  --repo https://github.com/robpitman1982-ux/python-master-strategy-creator.git \
+  --csv Data/ES_60m_2008_2026_tradestation.csv \
+  --config cloud/config_es_all_timeframes_48core.yaml \
+  --size gd-48vcpu-192gb \
+  --output-dir cloud_outputs_48core \
+  --watch
+```
+
+Note: This uploads only one CSV automatically. For 4 files, use the manual scp approach above.
