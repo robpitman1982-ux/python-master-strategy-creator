@@ -86,15 +86,15 @@ class BaseStrategyType(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def get_required_sma_lengths(self) -> list[int]:
+    def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_required_avg_range_lookbacks(self) -> list[int]:
+    def get_required_avg_range_lookbacks(self, timeframe: str = "60m") -> list[int]:
         raise NotImplementedError
 
     @abstractmethod
-    def get_required_momentum_lookbacks(self) -> list[int]:
+    def get_required_momentum_lookbacks(self, timeframe: str = "60m") -> list[int]:
         raise NotImplementedError
 
     @abstractmethod

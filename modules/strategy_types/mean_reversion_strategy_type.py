@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
-from modules.config_loader import get_timeframe_multiplier
+from modules.config_loader import get_timeframe_multiplier, scale_lookbacks
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
@@ -52,7 +52,7 @@ def _run_mr_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> d
     data, cfg, combo_classes = task
     strat_type = MeanReversionStrategyType()
 
-    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes)
+    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
     strategy = strat_type.build_combinable_strategy(
         filters=filter_objects,
         hold_bars=strat_type.default_hold_bars,
@@ -102,9 +102,10 @@ def _run_mr_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> d
 
 
 class _MRRefinementFactory:
-    def __init__(self, strat_inst, combo_classes: list[type]):
+    def __init__(self, strat_inst, combo_classes: list[type], timeframe: str = "60m"):
         self.strat_inst = strat_inst
         self.combo_classes = combo_classes
+        self.timeframe = timeframe
 
     def __call__(
         self,
@@ -119,6 +120,7 @@ class _MRRefinementFactory:
             stop_distance_points,
             min_avg_range,
             momentum_lookback,
+            timeframe=self.timeframe,
         )
 
 
@@ -130,13 +132,15 @@ class MeanReversionStrategyType(BaseStrategyType):
     default_hold_bars = 5
     default_stop_distance_points = 0.75
 
-    def get_required_sma_lengths(self) -> list[int]:
-        return [20, 200]
+    def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([20, 200], mult, min_val=5)
 
-    def get_required_avg_range_lookbacks(self) -> list[int]:
-        return [20]
+    def get_required_avg_range_lookbacks(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([20], mult, min_val=5)
 
-    def get_required_momentum_lookbacks(self) -> list[int]:
+    def get_required_momentum_lookbacks(self, timeframe: str = "60m") -> list[int]:
         return []
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
@@ -173,14 +177,19 @@ class MeanReversionStrategyType(BaseStrategyType):
             StretchFromLongTermSMAFilter,
         ]
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
+    def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(5, round(20 * mult))
+        slow_sma = max(5, round(200 * mult))
+        vol_lookback = max(5, round(20 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in combo_classes:
             if cls is BelowFastSMAFilter:
-                filters.append(BelowFastSMAFilter(fast_length=20))
+                filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=0.8))
+                filters.append(DistanceBelowSMAFilter(fast_length=fast_sma, min_distance_atr=0.8))
             elif cls is DownCloseFilter:
                 filters.append(DownCloseFilter())
             elif cls is TwoBarDownFilter:
@@ -190,13 +199,13 @@ class MeanReversionStrategyType(BaseStrategyType):
             elif cls is ReversalUpBarFilter:
                 filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=1.10))
+                filters.append(LowVolatilityRegimeFilter(lookback=vol_lookback, max_atr_mult=1.10))
             elif cls is AboveLongTermSMAFilter:
-                filters.append(AboveLongTermSMAFilter(slow_length=200))
+                filters.append(AboveLongTermSMAFilter(slow_length=slow_sma))
             elif cls is CloseNearLowFilter:
                 filters.append(CloseNearLowFilter(max_close_position=0.35))
             elif cls is StretchFromLongTermSMAFilter:
-                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=0.6))
+                filters.append(StretchFromLongTermSMAFilter(slow_length=slow_sma, min_distance_atr=0.6))
             else:
                 filters.append(cls())
 
@@ -221,14 +230,20 @@ class MeanReversionStrategyType(BaseStrategyType):
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        timeframe: str = "60m",
     ) -> _InlineMeanReversionStrategy:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(5, round(20 * mult))
+        slow_sma = max(5, round(200 * mult))
+        vol_lookback = max(5, round(20 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in classes:
             if cls is BelowFastSMAFilter:
-                filters.append(BelowFastSMAFilter(fast_length=20))
+                filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
-                filters.append(DistanceBelowSMAFilter(fast_length=20, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.8))
+                filters.append(DistanceBelowSMAFilter(fast_length=fast_sma, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.8))
             elif cls is DownCloseFilter:
                 filters.append(DownCloseFilter())
             elif cls is TwoBarDownFilter:
@@ -238,13 +253,13 @@ class MeanReversionStrategyType(BaseStrategyType):
             elif cls is ReversalUpBarFilter:
                 filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.10))
+                filters.append(LowVolatilityRegimeFilter(lookback=vol_lookback, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.10))
             elif cls is AboveLongTermSMAFilter:
-                filters.append(AboveLongTermSMAFilter(slow_length=200))
+                filters.append(AboveLongTermSMAFilter(slow_length=slow_sma))
             elif cls is CloseNearLowFilter:
                 filters.append(CloseNearLowFilter(max_close_position=0.35))
             elif cls is StretchFromLongTermSMAFilter:
-                filters.append(StretchFromLongTermSMAFilter(slow_length=200, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
+                filters.append(StretchFromLongTermSMAFilter(slow_length=slow_sma, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
             else:
                 filters.append(cls())
 
@@ -365,7 +380,7 @@ class MeanReversionStrategyType(BaseStrategyType):
         refiner = StrategyParameterRefiner(
             MasterStrategyEngine,
             data,
-            _MRRefinementFactory(self, classes),
+            _MRRefinementFactory(self, classes, timeframe=timeframe),
             cfg,
         )
 

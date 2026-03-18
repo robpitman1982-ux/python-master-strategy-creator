@@ -69,16 +69,16 @@ def call_first_available(obj: Any, method_names: list[str], *args, **kwargs):
     raise AttributeError(f"{obj.__class__.__name__} does not implement any of: {method_names}")
 
 
-def get_required_sma_lengths(strategy_type: Any) -> list[int]:
-    return call_first_available(strategy_type, ["get_required_sma_lengths"])
+def get_required_sma_lengths(strategy_type: Any, timeframe: str = "60m") -> list[int]:
+    return call_first_available(strategy_type, ["get_required_sma_lengths"], timeframe=timeframe)
 
 
-def get_required_avg_range_lookbacks(strategy_type: Any) -> list[int]:
-    return call_first_available(strategy_type, ["get_required_avg_range_lookbacks"])
+def get_required_avg_range_lookbacks(strategy_type: Any, timeframe: str = "60m") -> list[int]:
+    return call_first_available(strategy_type, ["get_required_avg_range_lookbacks"], timeframe=timeframe)
 
 
-def get_required_momentum_lookbacks(strategy_type: Any) -> list[int]:
-    return call_first_available(strategy_type, ["get_required_momentum_lookbacks"])
+def get_required_momentum_lookbacks(strategy_type: Any, timeframe: str = "60m") -> list[int]:
+    return call_first_available(strategy_type, ["get_required_momentum_lookbacks"], timeframe=timeframe)
 
 
 def build_sanity_check_strategy(strategy_type: Any):
@@ -600,12 +600,12 @@ def run_single_family(
         timeframe=timeframe,
     )
 
-    print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type_name}")
+    print(f"\n⚙ Adding precomputed feature columns for strategy type: {strategy_type_name} (timeframe={timeframe})")
     data = add_precomputed_features(
         data,
-        sma_lengths=get_required_sma_lengths(strategy_type),
-        avg_range_lookbacks=get_required_avg_range_lookbacks(strategy_type),
-        momentum_lookbacks=get_required_momentum_lookbacks(strategy_type),
+        sma_lengths=get_required_sma_lengths(strategy_type, timeframe=timeframe),
+        avg_range_lookbacks=get_required_avg_range_lookbacks(strategy_type, timeframe=timeframe),
+        momentum_lookbacks=get_required_momentum_lookbacks(strategy_type, timeframe=timeframe),
     )
 
     sanity_check = run_sanity_check(strategy_type=strategy_type, data=data, cfg=cfg)

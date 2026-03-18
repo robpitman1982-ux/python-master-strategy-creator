@@ -410,3 +410,58 @@ def test_timeframe_multiplier():
     assert get_timeframe_multiplier("15m") == 4.0
     assert get_timeframe_multiplier("30m") == 2.0
     assert get_timeframe_multiplier("1m") == 60.0
+
+
+# ---------------------------------------------------------------------------
+# Test 12: Hybrid filter parameter scaling
+# ---------------------------------------------------------------------------
+
+def test_hybrid_filter_scaling():
+    from modules.config_loader import scale_lookbacks, get_timeframe_multiplier
+    from modules.strategy_types import get_strategy_type
+
+    # --- scale_lookbacks() edge cases ---
+    # Standard 15m scaling (4x)
+    result = scale_lookbacks([20, 200], 4.0)
+    assert result == [80, 800], f"Expected [80, 800], got {result}"
+
+    # Daily scaling (~0.154x), min_val clamp
+    daily_mult = get_timeframe_multiplier("daily")
+    result_daily = scale_lookbacks([20, 200], daily_mult, min_val=5)
+    assert result_daily[0] >= 5, "min_val clamp failed"
+    assert result_daily[-1] == max(5, round(200 * daily_mult)), "daily slow SMA wrong"
+
+    # Deduplication: if two values round to the same, they should be deduplicated
+    result_dedup = scale_lookbacks([10, 11], 1.0, min_val=5)
+    assert len(result_dedup) == 2  # 10 and 11 stay distinct
+
+    # Extreme multiplier: min_val kicks in for all values
+    result_min = scale_lookbacks([1, 2, 3], 0.01, min_val=5)
+    assert result_min == [5], f"All values should clamp to min_val=5, got {result_min}"
+
+    # --- MR strategy type: 15m SMA lengths should be ~4x the 60m values ---
+    mr = get_strategy_type("mean_reversion")
+    sma_60m = mr.get_required_sma_lengths("60m")
+    sma_15m = mr.get_required_sma_lengths("15m")
+    assert len(sma_15m) == len(sma_60m), "15m should have same number of SMA lengths as 60m"
+    for s60, s15 in zip(sma_60m, sma_15m):
+        assert abs(s15 / s60 - 4.0) < 0.1, f"Expected ~4x scaling: 60m={s60}, 15m={s15}"
+
+    # --- Trend strategy type: daily SMA lengths should be smaller than 60m ---
+    trend = get_strategy_type("trend")
+    sma_60m_trend = trend.get_required_sma_lengths("60m")
+    sma_daily_trend = trend.get_required_sma_lengths("daily")
+    assert max(sma_daily_trend) < max(sma_60m_trend), \
+        f"Daily SMA max ({max(sma_daily_trend)}) should be < 60m max ({max(sma_60m_trend)})"
+
+    # --- Momentum lookbacks scale with timeframe (trend only) ---
+    mom_60m = trend.get_required_momentum_lookbacks("60m")
+    mom_15m = trend.get_required_momentum_lookbacks("15m")
+    assert len(mom_15m) >= 1, "15m momentum lookbacks should be non-empty"
+    assert min(mom_15m) >= 2, "15m momentum lookbacks should respect min_val=2"
+
+    # --- Breakout avg_range lookbacks scale ---
+    bo = get_strategy_type("breakout")
+    atr_60m = bo.get_required_avg_range_lookbacks("60m")
+    atr_15m = bo.get_required_avg_range_lookbacks("15m")
+    assert atr_15m[0] == 4 * atr_60m[0], f"15m ATR lookback should be 4x: {atr_15m} vs {atr_60m}"

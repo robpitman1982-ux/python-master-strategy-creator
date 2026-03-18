@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
-from modules.config_loader import get_timeframe_multiplier
+from modules.config_loader import get_timeframe_multiplier, scale_lookbacks
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
@@ -52,7 +52,7 @@ def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -
     data, cfg, combo_classes = task
     strat_type = TrendStrategyType()
 
-    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes)
+    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
     strategy = strat_type.build_combinable_strategy(
         filters=filter_objects,
         hold_bars=strat_type.default_hold_bars,
@@ -102,9 +102,10 @@ def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -
 
 
 class _TrendRefinementFactory:
-    def __init__(self, strat_inst, combo_classes: list[type]):
+    def __init__(self, strat_inst, combo_classes: list[type], timeframe: str = "60m"):
         self.strat_inst = strat_inst
         self.combo_classes = combo_classes
+        self.timeframe = timeframe
 
     def __call__(
         self,
@@ -119,6 +120,7 @@ class _TrendRefinementFactory:
             stop_distance_points,
             min_avg_range,
             momentum_lookback,
+            timeframe=self.timeframe,
         )
 
 
@@ -130,14 +132,17 @@ class TrendStrategyType(BaseStrategyType):
     default_hold_bars = 6
     default_stop_distance_points = 1.25
 
-    def get_required_sma_lengths(self) -> list[int]:
-        return [50, 200]
+    def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([50, 200], mult, min_val=5)
 
-    def get_required_avg_range_lookbacks(self) -> list[int]:
-        return [20]
+    def get_required_avg_range_lookbacks(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([20], mult, min_val=5)
 
-    def get_required_momentum_lookbacks(self) -> list[int]:
-        return [5, 8, 10, 14]
+    def get_required_momentum_lookbacks(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([5, 8, 10, 14], mult, min_val=2)
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
         return [
@@ -174,24 +179,31 @@ class TrendStrategyType(BaseStrategyType):
             HigherLowFilter,
         ]
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
+    def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(10, round(50 * mult))
+        slow_sma = max(20, round(200 * mult))
+        vol_lookback = max(5, round(20 * mult))
+        mom_lookback = max(2, round(8 * mult))
+        slope_bars = max(2, round(5 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in combo_classes:
             if cls is TrendDirectionFilter:
-                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+                filters.append(TrendDirectionFilter(fast_length=fast_sma, slow_length=slow_sma))
             elif cls is PullbackFilter:
-                filters.append(PullbackFilter(fast_length=50))
+                filters.append(PullbackFilter(fast_length=fast_sma))
             elif cls is RecoveryTriggerFilter:
-                filters.append(RecoveryTriggerFilter(fast_length=50))
+                filters.append(RecoveryTriggerFilter(fast_length=fast_sma))
             elif cls is VolatilityFilter:
-                filters.append(VolatilityFilter(lookback=20, min_atr_mult=0.95))
+                filters.append(VolatilityFilter(lookback=vol_lookback, min_atr_mult=0.95))
             elif cls is MomentumFilter:
-                filters.append(MomentumFilter(lookback=8))
+                filters.append(MomentumFilter(lookback=mom_lookback))
             elif cls is TrendSlopeFilter:
-                filters.append(TrendSlopeFilter(fast_length=50, slope_bars=5))
+                filters.append(TrendSlopeFilter(fast_length=fast_sma, slope_bars=slope_bars))
             elif cls is CloseAboveFastSMAFilter:
-                filters.append(CloseAboveFastSMAFilter(fast_length=50))
+                filters.append(CloseAboveFastSMAFilter(fast_length=fast_sma))
             elif cls is HigherLowFilter:
                 filters.append(HigherLowFilter())
             else:
@@ -218,24 +230,32 @@ class TrendStrategyType(BaseStrategyType):
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        timeframe: str = "60m",
     ) -> _InlineTrendStrategy:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(10, round(50 * mult))
+        slow_sma = max(20, round(200 * mult))
+        vol_lookback = max(5, round(20 * mult))
+        default_mom = max(2, round(8 * mult))
+        slope_bars = max(2, round(5 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in classes:
             if cls is TrendDirectionFilter:
-                filters.append(TrendDirectionFilter(fast_length=50, slow_length=200))
+                filters.append(TrendDirectionFilter(fast_length=fast_sma, slow_length=slow_sma))
             elif cls is PullbackFilter:
-                filters.append(PullbackFilter(fast_length=50))
+                filters.append(PullbackFilter(fast_length=fast_sma))
             elif cls is RecoveryTriggerFilter:
-                filters.append(RecoveryTriggerFilter(fast_length=50))
+                filters.append(RecoveryTriggerFilter(fast_length=fast_sma))
             elif cls is VolatilityFilter:
-                filters.append(VolatilityFilter(lookback=20, min_atr_mult=min_avg_range if min_avg_range > 0 else 0.95))
+                filters.append(VolatilityFilter(lookback=vol_lookback, min_atr_mult=min_avg_range if min_avg_range > 0 else 0.95))
             elif cls is MomentumFilter:
-                filters.append(MomentumFilter(lookback=momentum_lookback if momentum_lookback > 0 else 8))
+                filters.append(MomentumFilter(lookback=momentum_lookback if momentum_lookback > 0 else default_mom))
             elif cls is TrendSlopeFilter:
-                filters.append(TrendSlopeFilter(fast_length=50, slope_bars=5))
+                filters.append(TrendSlopeFilter(fast_length=fast_sma, slope_bars=slope_bars))
             elif cls is CloseAboveFastSMAFilter:
-                filters.append(CloseAboveFastSMAFilter(fast_length=50))
+                filters.append(CloseAboveFastSMAFilter(fast_length=fast_sma))
             elif cls is HigherLowFilter:
                 filters.append(HigherLowFilter())
             else:
@@ -362,7 +382,7 @@ class TrendStrategyType(BaseStrategyType):
         refiner = StrategyParameterRefiner(
             MasterStrategyEngine,
             data,
-            _TrendRefinementFactory(self, classes),
+            _TrendRefinementFactory(self, classes, timeframe=timeframe),
             cfg,
         )
 

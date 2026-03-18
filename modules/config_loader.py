@@ -35,6 +35,16 @@ def get_timeframe_multiplier(timeframe: str, base_timeframe: str = "60m") -> flo
     return base_minutes / target_minutes
 
 
+def scale_lookbacks(base_values: list[int], multiplier: float, min_val: int = 5) -> list[int]:
+    """Scale lookback values by timeframe multiplier, deduplicate, enforce minimum.
+
+    Example: scale_lookbacks([20, 200], 4.0) → [80, 800]  (15m relative to 60m)
+    Example: scale_lookbacks([20, 200], 0.154) → [5, 31]  (daily, with min_val=5 clamp)
+    """
+    scaled = sorted(set(max(min_val, round(v * multiplier)) for v in base_values))
+    return scaled
+
+
 def load_config(path: Path | str | None = None) -> dict[str, Any]:
     """Load config from YAML file. Falls back to defaults if file missing."""
     config_path = Path(path) if path else _DEFAULT_CONFIG_PATH

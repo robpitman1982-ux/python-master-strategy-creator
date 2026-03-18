@@ -6,7 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 
-from modules.config_loader import get_timeframe_multiplier
+from modules.config_loader import get_timeframe_multiplier, scale_lookbacks
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.filters import (
@@ -52,7 +52,7 @@ def _run_breakout_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]
     data, cfg, combo_classes = task
     strat_type = BreakoutStrategyType()
 
-    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes)
+    filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
     strategy = strat_type.build_combinable_strategy(
         filters=filter_objects,
         hold_bars=strat_type.default_hold_bars,
@@ -102,9 +102,10 @@ def _run_breakout_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]
 
 
 class _BreakoutRefinementFactory:
-    def __init__(self, strat_inst, combo_classes: list[type]):
+    def __init__(self, strat_inst, combo_classes: list[type], timeframe: str = "60m"):
         self.strat_inst = strat_inst
         self.combo_classes = combo_classes
+        self.timeframe = timeframe
 
     def __call__(
         self,
@@ -119,6 +120,7 @@ class _BreakoutRefinementFactory:
             stop_distance_points,
             min_avg_range,
             momentum_lookback,
+            timeframe=self.timeframe,
         )
 
 
@@ -130,13 +132,15 @@ class BreakoutStrategyType(BaseStrategyType):
     default_hold_bars = 4
     default_stop_distance_points = 1.25
 
-    def get_required_sma_lengths(self) -> list[int]:
-        return [50, 200]
+    def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([50, 200], mult, min_val=5)
 
-    def get_required_avg_range_lookbacks(self) -> list[int]:
-        return [20]
+    def get_required_avg_range_lookbacks(self, timeframe: str = "60m") -> list[int]:
+        mult = get_timeframe_multiplier(timeframe)
+        return scale_lookbacks([20], mult, min_val=5)
 
-    def get_required_momentum_lookbacks(self) -> list[int]:
+    def get_required_momentum_lookbacks(self, timeframe: str = "60m") -> list[int]:
         return []
 
     def build_default_sanity_filters(self) -> list[BaseFilter]:
@@ -173,30 +177,35 @@ class BreakoutStrategyType(BaseStrategyType):
             TightRangeFilter,
         ]
 
-    def build_filter_objects_from_classes(self, combo_classes: list[type]) -> list[BaseFilter]:
+    def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(10, round(50 * mult))
+        slow_sma = max(20, round(200 * mult))
+        lookback = max(5, round(20 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in combo_classes:
             if cls is CompressionFilter:
-                filters.append(CompressionFilter(lookback=20, max_atr_mult=0.90))
+                filters.append(CompressionFilter(lookback=lookback, max_atr_mult=0.90))
             elif cls is RangeBreakoutFilter:
-                filters.append(RangeBreakoutFilter(lookback=20))
+                filters.append(RangeBreakoutFilter(lookback=lookback))
             elif cls is ExpansionBarFilter:
-                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.15))
+                filters.append(ExpansionBarFilter(lookback=lookback, expansion_multiplier=1.15))
             elif cls is BreakoutRetestFilter:
-                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.00))
+                filters.append(BreakoutRetestFilter(lookback=lookback, atr_buffer_mult=0.00))
             elif cls is BreakoutTrendFilter:
-                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+                filters.append(BreakoutTrendFilter(fast_length=fast_sma, slow_length=slow_sma))
             elif cls is BreakoutCloseStrengthFilter:
                 filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
             elif cls is PriorRangePositionFilter:
-                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
+                filters.append(PriorRangePositionFilter(lookback=lookback, min_position_in_range=0.55))
             elif cls is BreakoutDistanceFilter:
-                filters.append(BreakoutDistanceFilter(lookback=20, min_breakout_atr=0.05))
+                filters.append(BreakoutDistanceFilter(lookback=lookback, min_breakout_atr=0.05))
             elif cls is RisingBaseFilter:
-                filters.append(RisingBaseFilter(lookback=5))
+                filters.append(RisingBaseFilter(lookback=max(3, round(5 * mult))))
             elif cls is TightRangeFilter:
-                filters.append(TightRangeFilter(lookback=20, max_bar_range_mult=0.90))
+                filters.append(TightRangeFilter(lookback=lookback, max_bar_range_mult=0.90))
             else:
                 filters.append(cls())
 
@@ -221,30 +230,36 @@ class BreakoutStrategyType(BaseStrategyType):
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        timeframe: str = "60m",
     ) -> _InlineBreakoutStrategy:
+        mult = get_timeframe_multiplier(timeframe)
+        fast_sma = max(10, round(50 * mult))
+        slow_sma = max(20, round(200 * mult))
+        lookback = max(5, round(20 * mult))
+
         filters: list[BaseFilter] = []
 
         for cls in classes:
             if cls is CompressionFilter:
-                filters.append(CompressionFilter(lookback=20, max_atr_mult=min_avg_range if min_avg_range > 0 else 0.90))
+                filters.append(CompressionFilter(lookback=lookback, max_atr_mult=min_avg_range if min_avg_range > 0 else 0.90))
             elif cls is RangeBreakoutFilter:
-                filters.append(RangeBreakoutFilter(lookback=20))
+                filters.append(RangeBreakoutFilter(lookback=lookback))
             elif cls is ExpansionBarFilter:
-                filters.append(ExpansionBarFilter(lookback=20, expansion_multiplier=1.15))
+                filters.append(ExpansionBarFilter(lookback=lookback, expansion_multiplier=1.15))
             elif cls is BreakoutRetestFilter:
-                filters.append(BreakoutRetestFilter(lookback=20, atr_buffer_mult=0.00))
+                filters.append(BreakoutRetestFilter(lookback=lookback, atr_buffer_mult=0.00))
             elif cls is BreakoutTrendFilter:
-                filters.append(BreakoutTrendFilter(fast_length=50, slow_length=200))
+                filters.append(BreakoutTrendFilter(fast_length=fast_sma, slow_length=slow_sma))
             elif cls is BreakoutCloseStrengthFilter:
                 filters.append(BreakoutCloseStrengthFilter(close_position_threshold=0.60))
             elif cls is PriorRangePositionFilter:
-                filters.append(PriorRangePositionFilter(lookback=20, min_position_in_range=0.55))
+                filters.append(PriorRangePositionFilter(lookback=lookback, min_position_in_range=0.55))
             elif cls is BreakoutDistanceFilter:
-                filters.append(BreakoutDistanceFilter(lookback=20, min_breakout_atr=0.05))
+                filters.append(BreakoutDistanceFilter(lookback=lookback, min_breakout_atr=0.05))
             elif cls is RisingBaseFilter:
-                filters.append(RisingBaseFilter(lookback=5))
+                filters.append(RisingBaseFilter(lookback=max(3, round(5 * mult))))
             elif cls is TightRangeFilter:
-                filters.append(TightRangeFilter(lookback=20, max_bar_range_mult=0.90))
+                filters.append(TightRangeFilter(lookback=lookback, max_bar_range_mult=0.90))
             else:
                 filters.append(cls())
 
@@ -360,7 +375,7 @@ class BreakoutStrategyType(BaseStrategyType):
         refiner = StrategyParameterRefiner(
             MasterStrategyEngine,
             data,
-            _BreakoutRefinementFactory(self, classes),
+            _BreakoutRefinementFactory(self, classes, timeframe=timeframe),
             cfg,
         )
 
