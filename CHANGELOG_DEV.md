@@ -5,6 +5,41 @@
 
 ---
 
+## 2026-03-18 — Session 6: Multi-timeframe expansion prep
+
+**What was done**:
+- Implemented hybrid filter parameter scaling: `scale_lookbacks()` added to `config_loader.py`; `get_required_sma_lengths()`, `get_required_avg_range_lookbacks()`, `get_required_momentum_lookbacks()` in all 3 strategy types now accept `timeframe` param and return scaled values. `build_filter_objects_from_classes()` and `build_candidate_specific_strategy()` receive scaled SMA/ATR/lookback lengths based on timeframe multiplier. Pattern filters (TwoBarDown, etc.) stay as-is.
+- Threaded timeframe through refinement factories (`_MRRefinementFactory`, `_TrendRefinementFactory`, `_BreakoutRefinementFactory`) and combo case functions — sweep-phase filters now also scale
+- Updated `master_strategy_engine.py` helpers `get_required_*()` to pass timeframe; feature precomputation now uses timeframe-scaled lookbacks
+- Created `cloud/config_es_all_timeframes_48core.yaml` — 4 datasets (daily, 60m, 30m, 15m), 46 workers sweep+refinement, 5 candidates to refine, 80 GB memory budget
+- Removed hardcoded `sed` max_workers replacements from `run_cloud_job.py` cloud-init; added `--config` CLI arg to `start_engine()`
+- Created `docs/TRADESTATION_EXPORT_GUIDE.md` — step-by-step data export instructions with file naming and verification commands
+- Added master leaderboard auto-run at end of multi-dataset pipeline — prints ranked table and saves `Outputs/master_leaderboard.csv`
+- Added memory estimation and auto-throttle in `run_single_family()` — prints per-copy and parallel estimate; auto-reduces workers if `pipeline.max_memory_gb` is set and would be exceeded; warns if > 60 GB even without limit
+- Updated `CLOUD_DEPLOYMENT_RUNBOOK.md` with complete 48-core run instructions
+- Updated `CLAUDE.md` (issues list, structure, test count) and this CHANGELOG
+
+**Output changes vs Session 5**:
+- Feature precomputation uses timeframe-scaled SMA/ATR/momentum lookbacks (e.g., 15m → 4× the 60m lengths)
+- Filter constructors receive scaled SMA lengths in both sweep and refinement phases
+- Memory estimate printed before each family sweep: `Data: N bars, X.X MB per copy`
+- Master leaderboard printed automatically after multi-dataset runs
+- 12 smoke tests pass (was 11)
+
+**Verified**:
+- All 12 smoke tests pass including new `test_hybrid_filter_scaling`
+- 15m SMA lengths confirmed ~4x the 60m values; daily confirms smaller than 60m
+- Config validates correctly for 4-dataset setup
+
+**Next session priorities**:
+1. Export ES daily/30m/15m data from TradeStation (see `docs/TRADESTATION_EXPORT_GUIDE.md`)
+2. Destroy old 2-core droplets after downloading results
+3. Create 48-core droplet, upload 4 data files, launch full sweep
+4. Download master leaderboard results
+5. Begin portfolio assembly from cross-timeframe candidates
+
+---
+
 ## 2026-03-18 — Session 5: Smoke tests, master leaderboard, timeframe grids
 
 **What was done**:

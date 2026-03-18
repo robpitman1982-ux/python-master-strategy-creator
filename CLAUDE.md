@@ -28,10 +28,10 @@ python-master-strategy-creator/
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
 ├── tests/
 │   ├── __init__.py
-│   └── test_smoke.py                  # 11 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe)
+│   └── test_smoke.py                  # 12 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling)
 ├── modules/
 │   ├── __init__.py
-│   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() helpers
+│   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
 │   ├── master_leaderboard.py          # aggregate_master_leaderboard() — consolidates all dataset leaderboards
 │   ├── consistency.py                 # analyse_yearly_consistency() — year-by-year PnL checks
 │   ├── engine.py                       # MasterStrategyEngine, EngineConfig, trade execution
@@ -50,11 +50,14 @@ python-master-strategy-creator/
 │       ├── mean_reversion_strategy_type.py  # Mean reversion family
 │       ├── breakout_strategy_type.py  # Breakout family
 │       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types()
+├── docs/
+│   └── TRADESTATION_EXPORT_GUIDE.md   # Step-by-step data export instructions
 ├── cloud/
 │   ├── run_cloud.sh            # Linux/Mac cloud run script
 │   ├── run_cloud.ps1           # Windows cloud run script
 │   ├── config_full_es.yaml     # Full ES sweep config
 │   ├── config_quick_test.yaml  # Quick test config
+│   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core config
 │   └── SETUP.md                # DigitalOcean setup guide
 ├── Dockerfile
 ├── requirements.txt
@@ -147,7 +150,7 @@ Key sections:
 - [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
 - [x] Cloud deployment: Dockerfile, requirements.txt, run scripts, cloud configs all created
-- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (11 tests, all fast)
+- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (12 tests, all fast)
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -156,10 +159,13 @@ Key sections:
 - [ ] Add walk-forward validation as alternative to fixed IS/OOS split
 - [x] Yearly stats show trend strategy lost money 9/11 years 2009-2018 — consistency module added: pct_profitable_years, max_consecutive_losing_years, consistency_flag in all results
 - [ ] Test Docker build locally before first cloud run
-- [ ] Add multi-timeframe data files for ES (5m, 15m, 30m, daily)
+- [ ] Add multi-timeframe data files for ES (daily, 30m, 15m) — see docs/TRADESTATION_EXPORT_GUIDE.md
 - [ ] Add CL and NQ data exports from TradeStation
-- [x] Master leaderboard aggregator — `python -m modules.master_leaderboard` → Outputs/master_leaderboard.csv
+- [x] Master leaderboard aggregator — auto-runs after multi-dataset pipeline → Outputs/master_leaderboard.csv
 - [x] Timeframe-aware refinement grids — hold_bars auto-scales with bar duration (5m → 12×, daily → 0.154×)
+- [x] Hybrid filter parameter scaling — SMA/ATR/momentum lookbacks scale per timeframe in sweep phase too
+- [x] 48-core cloud config created — cloud/config_es_all_timeframes_48core.yaml (4 datasets, 46 workers)
+- [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
 
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
@@ -167,6 +173,7 @@ Key sections:
 - [x] Progress logging with ETA for long runs
 - [x] Config file (YAML/TOML) instead of hardcoded constants — config.yaml created
 - [ ] Integrate status.json polling into run_cloud_job.py wait loop
+- [ ] Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
 
 ## Coding standards
 
@@ -174,7 +181,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py -v` — 11 smoke tests, all < 2s
+- Tests: `python -m pytest tests/test_smoke.py -v` — 12 smoke tests, all < 2s
 - Git: commit after every meaningful change with descriptive messages
 
 ## Session workflow
@@ -188,4 +195,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-18 — Session 5: Smoke tests (11), master leaderboard aggregator, timeframe-aware refinement grids
+2026-03-18 — Session 6: Hybrid filter scaling, 48-core cloud config, memory estimation, master leaderboard auto-run
