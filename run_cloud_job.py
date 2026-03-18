@@ -85,12 +85,8 @@ echo "=== [5/7] Install dependencies ==="
 echo "Installed packages:"
 ./venv/bin/pip list --format=columns | grep -iE "numpy|pandas|pyyaml"
 
-echo "=== [6/7] Create directories and configure ==="
+echo "=== [6/7] Create directories ==="
 mkdir -p Data Outputs/logs
-if [ -f config.yaml ]; then
-    sed -i 's/max_workers_sweep:.*/max_workers_sweep: 2/' config.yaml
-    sed -i 's/max_workers_refinement:.*/max_workers_refinement: 2/' config.yaml
-fi
 
 echo "=== [7/7] Cloud-init complete ==="
 touch /root/.cloud_init_done
@@ -267,12 +263,13 @@ def upload_csv(client: paramiko.SSHClient, local_csv: Path):
     print(f"Uploaded to {remote_path}")
 
 
-def start_engine(client: paramiko.SSHClient) -> str:
+def start_engine(client: paramiko.SSHClient, config_path: str | None = None) -> str:
     """Launch the engine on the droplet without waiting for completion."""
+    config_arg = f"--config {config_path}" if config_path else ""
     cmd = (
         'bash -c "'
         f"cd {REMOTE_PROJECT_DIR} && "
-        "nohup ./venv/bin/python master_strategy_engine.py "
+        f"nohup ./venv/bin/python master_strategy_engine.py {config_arg} "
         "> Outputs/logs/run_$(date +%Y%m%d_%H%M%S).log 2>&1 & "
         'echo $!"'
     )
@@ -370,6 +367,7 @@ def main():
     parser.add_argument("--keep", action="store_true", help="Don't destroy droplet when done")
     parser.add_argument("--size", default=DEFAULT_SIZE, help=f"Droplet size (default: {DEFAULT_SIZE})")
     parser.add_argument("--region", default=DEFAULT_REGION, help=f"Region (default: {DEFAULT_REGION})")
+    parser.add_argument("--config", default=None, help="Config YAML path to pass to master_strategy_engine.py (e.g. cloud/config_es_all_timeframes_48core.yaml)")
 
     args = parser.parse_args()
 
@@ -423,7 +421,7 @@ def main():
 
         # --- Step 6 ---
         print(f"\n[6/7] Starting strategy engine...")
-        pid = start_engine(client)
+        pid = start_engine(client, config_path=args.config)
 
         if args.watch:
             print("\nTailing engine log (Ctrl+C to detach)...")
