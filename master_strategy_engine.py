@@ -889,6 +889,26 @@ if __name__ == "__main__":
 
     if len(datasets) > 1:
         print(f"\n{'=' * 72}")
-        print(f"📊 All {len(datasets)} datasets complete.")
+        print(f"All {len(datasets)} datasets complete.")
 
-    print(f"\n🏁 Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
+        from modules.master_leaderboard import aggregate_master_leaderboard
+
+        master_lb = aggregate_master_leaderboard(outputs_root=str(OUTPUTS_DIR))
+        if not master_lb.empty:
+            print(f"\n{'=' * 72}")
+            print(f"MASTER LEADERBOARD — {len(master_lb)} accepted strategies across all datasets")
+            print(f"{'=' * 72}")
+            preview_cols = [
+                "rank", "market", "timeframe", "strategy_type",
+                "leader_strategy_name", "quality_flag", "leader_pf",
+                "leader_net_pnl", "is_pf", "oos_pf", "recent_12m_pf",
+            ]
+            print(master_lb[[c for c in preview_cols if c in master_lb.columns]].to_string(index=False))
+
+            master_path = OUTPUTS_DIR / "master_leaderboard.csv"
+            master_lb.to_csv(master_path, index=False)
+            print(f"\nSaved to {master_path}")
+        else:
+            print("\nNo accepted strategies found across all datasets for master leaderboard.")
+
+    print(f"\n Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
