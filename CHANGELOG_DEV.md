@@ -5,6 +5,46 @@
 
 ---
 
+## 2026-03-19 — Session 7: Prop firm challenge simulator
+
+**What was done**:
+- Created `modules/prop_firm_simulator.py` — complete prop firm challenge simulation module
+- Supports The5ers Bootcamp ($20K/$100K/$250K), High Stakes, and Hyper Growth programs
+- `PropFirmConfig` dataclass: generic, supports any prop firm with configurable rules
+- `The5ersBootcampConfig()` factory: correct step balances from The5ers website (Mar 2026)
+  - $250K: Steps at $100K → $150K → $200K, 6% target, 5% static DD, no daily DD during eval
+- `simulate_challenge()`: runs trade list through all steps chronologically
+- `monte_carlo_pass_rate()`: shuffles trade order N times to estimate pass probability
+- `compute_challenge_score()`: composite 0-1 score (pass rate 50%, DD margin 25%, speed 15%, consistency 10%)
+- `rank_strategies_for_prop()`: score and rank multiple strategies
+- Added 5 smoke tests: config verification, pass/fail simulation, MC stats, challenge score range
+- Self-test runs successfully with synthetic data
+
+**Design decisions**:
+- System 2 (prop firm) shares codebase with System 1 (best edge finder)
+- Only configs, gates, and ranking criteria differ
+- Trade PnL scaled as percentage of source capital → applied to step balance
+- Bootcamp chosen as primary target: no daily DD during eval, unlimited time, algo-friendly
+- High Stakes secondary: 5% daily loss limit makes it harder for automated strategies
+
+**Output changes vs Session 6**:
+- `python -m modules.prop_firm_simulator` runs self-test
+- 17 smoke tests pass (was 12)
+
+**Verified**:
+- All 17 smoke tests pass
+- Bootcamp $250K config: steps = [$100K, $150K, $200K], target = $250K
+- Synthetic strategy: 95.9% MC pass rate on Bootcamp
+
+**Next session priorities**:
+1. Wait for DigitalOcean 48/60-core approval
+2. When approved: run multi-timeframe sweep with existing System 1 config
+3. After results: run prop firm simulator on all accepted strategies' trade lists
+4. Create prop-firm-specific config YAML with modified gates for System 2 pipeline
+5. Add daily drawdown simulation for High Stakes / funded stage scoring
+
+---
+
 ## 2026-03-18 — Session 6: Multi-timeframe expansion prep
 
 **What was done**:
