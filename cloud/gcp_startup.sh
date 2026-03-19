@@ -40,22 +40,31 @@ pip install --quiet numpy pandas pyyaml pytest
 # --- Create Data directory ---
 mkdir -p Data Outputs
 
-# --- Wait for data files ---
+# --- Wait for ALL data files ---
 echo "[4/6] Waiting for data files to appear..."
-# The run_gcp_job.py script uploads files to /home/<user>/uploads/
-# We poll until at least one CSV appears, with a 30-minute timeout
+# We need at least 1 CSV file. But we also wait an extra 60 seconds
+# after the first file appears to allow remaining uploads to complete.
 WAITED=0
 MAX_WAIT=1800
 DATA_FOUND=0
+FIRST_FOUND_AT=0
 
 while [ $WAITED -lt $MAX_WAIT ]; do
-    # Look for any CSV in any user's uploads directory
-    CSV_COUNT=$(find $UPLOAD_SCAN_DIR -name "*.csv" -path "*/uploads/*" 2>/dev/null | wc -l)
-    if [ "$CSV_COUNT" -gt 0 ]; then
+    CSV_COUNT=$(find $UPLOAD_SCAN_DIR -maxdepth 3 -name "ES_*.csv" -o -name "CL_*.csv" -o -name "NQ_*.csv" -o -name "GC_*.csv" 2>/dev/null | wc -l)
+
+    if [ "$CSV_COUNT" -gt 0 ] && [ "$FIRST_FOUND_AT" -eq 0 ]; then
+        FIRST_FOUND_AT=$WAITED
+        echo "  First CSV found after ${WAITED}s. Waiting 60s for remaining uploads..."
+    fi
+
+    # Wait 60 seconds after first file to let all uploads complete
+    if [ "$FIRST_FOUND_AT" -gt 0 ] && [ $((WAITED - FIRST_FOUND_AT)) -ge 60 ]; then
+        CSV_COUNT=$(find $UPLOAD_SCAN_DIR -maxdepth 3 -name "ES_*.csv" -o -name "CL_*.csv" -o -name "NQ_*.csv" -o -name "GC_*.csv" 2>/dev/null | wc -l)
+        echo "  Found $CSV_COUNT CSV file(s) total. Proceeding."
         DATA_FOUND=1
-        echo "  Found $CSV_COUNT CSV file(s) after ${WAITED}s"
         break
     fi
+
     sleep 10
     WAITED=$((WAITED + 10))
     if [ $((WAITED % 60)) -eq 0 ]; then
@@ -69,31 +78,38 @@ if [ $DATA_FOUND -eq 0 ]; then
 fi
 
 # --- Move data files to correct location ---
-echo "[5/6] Moving data files..."
-find $UPLOAD_SCAN_DIR -name "*.csv" -path "*/uploads/*" -exec cp {} "$WORK_DIR/Data/" \;
-echo "  Data files in place:"
-ls -la "$WORK_DIR/Data/"
+echo "[5/6] Moving data files and config..."
 
-# --- Find config file ---
-# The run script also uploads the config to /home/<user>/uploads/
-CONFIG_FILE="config.yaml"
-UPLOADED_CONFIG=$(find $UPLOAD_SCAN_DIR -name "*.yaml" -path "*/uploads/*" 2>/dev/null | head -1)
+# Copy ALL CSVs from any user's upload directory
+for csv_file in $(find $UPLOAD_SCAN_DIR -maxdepth 3 -name "*.csv" 2>/dev/null); do
+    cp "$csv_file" "$WORK_DIR/Data/"
+    echo "  Copied: $(basename $csv_file)"
+done
+
+# Copy config if uploaded (look for .yaml files)
+UPLOADED_CONFIG=$(find $UPLOAD_SCAN_DIR -maxdepth 3 -name "*.yaml" 2>/dev/null | head -1)
 if [ -n "$UPLOADED_CONFIG" ]; then
-    cp "$UPLOADED_CONFIG" "$WORK_DIR/$CONFIG_FILE"
-    echo "  Using uploaded config: $UPLOADED_CONFIG"
+    cp "$UPLOADED_CONFIG" "$WORK_DIR/config.yaml"
+    echo "  Using uploaded config: $(basename $UPLOADED_CONFIG)"
 else
     echo "  No config uploaded, using repo default"
 fi
+
+echo "  Data files in place:"
+ls -la "$WORK_DIR/Data/"
+echo "  Config:"
+head -5 "$WORK_DIR/config.yaml"
 
 # --- Run the engine ---
 echo "[6/6] Starting engine..."
 cd "$WORK_DIR"
 source venv/bin/activate
 
-# Write a marker file so the polling script knows we've started
 echo "RUNNING" > /tmp/engine_status
+# Clear any old log
+rm -f /tmp/engine_run.log
 
-python master_strategy_engine.py --config "$CONFIG_FILE" > /tmp/engine_run.log 2>&1
+python master_strategy_engine.py > /tmp/engine_run.log 2>&1
 EXIT_CODE=$?
 
 if [ $EXIT_CODE -eq 0 ]; then
