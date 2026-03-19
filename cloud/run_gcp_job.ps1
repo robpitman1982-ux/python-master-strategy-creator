@@ -45,15 +45,18 @@ param(
     [switch]$SkipDestroy = $false
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # Use native OpenSSH instead of PuTTY (fixes freezing issues)
 $env:CLOUDSDK_SSH_NATIVE = "1"
 
-# Ensure gcloud is on PATH (Cloud SDK installs to user AppData, not system PATH)
+# Use gcloud.cmd explicitly — avoids gcloud.ps1 routing Python stderr through
+# PowerShell's error pipeline, which turns benign WARNINGs into terminating errors.
 $GcloudBinDir = "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin"
-if (Test-Path $GcloudBinDir) {
-    $env:PATH = "$GcloudBinDir;$env:PATH"
+$Gcloud = "$GcloudBinDir\gcloud.cmd"
+if (-not (Test-Path $Gcloud)) {
+    # Fallback: try system PATH
+    $Gcloud = "gcloud"
 }
 
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -78,7 +81,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "`n[1/7] Creating VM with startup script..." -ForegroundColor Yellow
 
 # Check if instance already exists
-$existing = gcloud compute instances list --filter="name=$InstanceName" --format="value(name)" 2>$null
+$existing = & $Gcloud compute instances list --filter="name=$InstanceName" --format="value(name)" 2>$null
 if ($existing) {
     Write-Host "  WARNING: Instance '$InstanceName' already exists!" -ForegroundColor Red
     $confirm = Read-Host "  Delete it and create fresh? (y/n)"
@@ -86,11 +89,11 @@ if ($existing) {
         Write-Host "  Aborted." -ForegroundColor Red
         exit 1
     }
-    gcloud compute instances delete $InstanceName --zone=$Zone --quiet
+    & $Gcloud compute instances delete $InstanceName --zone=$Zone --quiet
     Start-Sleep -Seconds 10
 }
 
-gcloud compute instances create $InstanceName `
+& $Gcloud compute instances create $InstanceName `
     --zone=$Zone `
     --machine-type=$MachineType `
     --provisioning-model=SPOT `
@@ -116,7 +119,7 @@ Write-Host "`n[2/7] Waiting for SSH..." -ForegroundColor Yellow
 $sshReady = $false
 for ($i = 1; $i -le 30; $i++) {
     try {
-        $result = gcloud compute ssh $InstanceName --zone=$Zone --command="echo ready" 2>$null
+        $result = & $Gcloud compute ssh $InstanceName --zone=$Zone --command="echo ready" 2>$null
         if ($result -match "ready") {
             $sshReady = $true
             Write-Host "  SSH ready after attempt $i" -ForegroundColor Green
@@ -137,7 +140,7 @@ if (-not $sshReady) {
 # ---------------------------------------------------------------
 Write-Host "`n[3/7] Preparing upload directory..." -ForegroundColor Yellow
 
-gcloud compute ssh $InstanceName --zone=$Zone --command="mkdir -p ~/uploads"
+& $Gcloud compute ssh $InstanceName --zone=$Zone --command="mkdir -p ~/uploads"
 
 # ---------------------------------------------------------------
 # STEP 4: Upload data files and config
@@ -153,7 +156,7 @@ if ($csvFiles.Count -eq 0) {
 
 foreach ($csv in $csvFiles) {
     Write-Host "  Uploading $($csv.Name) ($([math]::Round($csv.Length / 1MB, 1)) MB)..."
-    gcloud compute scp "$($csv.FullName)" "${InstanceName}:~/uploads/$($csv.Name)" --zone=$Zone
+    & $Gcloud compute scp "$($csv.FullName)" "${InstanceName}:~/uploads/$($csv.Name)" --zone=$Zone
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  WARNING: Failed to upload $($csv.Name)" -ForegroundColor Red
     }
@@ -161,7 +164,7 @@ foreach ($csv in $csvFiles) {
 
 # Upload config file
 Write-Host "  Uploading config: $ConfigFile..."
-gcloud compute scp "$ConfigFile" "${InstanceName}:~/uploads/config.yaml" --zone=$Zone
+& $Gcloud compute scp "$ConfigFile" "${InstanceName}:~/uploads/config.yaml" --zone=$Zone
 
 Write-Host "  All files uploaded." -ForegroundColor Green
 
@@ -185,7 +188,7 @@ while (-not $engineDone) {
     $elapsedStr = "{0:hh\:mm\:ss}" -f $elapsed
 
     try {
-        $status = gcloud compute ssh $InstanceName --zone=$Zone --command="cat /tmp/engine_status 2>/dev/null || echo PENDING" 2>$null
+        $status = & $Gcloud compute ssh $InstanceName --zone=$Zone --command="cat /tmp/engine_status 2>/dev/null || echo PENDING" 2>$null
         $status = $status.Trim()
     } catch {
         $status = "SSH_ERROR"
@@ -199,7 +202,7 @@ while (-not $engineDone) {
         if ($elapsed.TotalMinutes % 5 -lt 1.1) {
             # Also try to read status.json for detailed progress
             try {
-                $statusJson = gcloud compute ssh $InstanceName --zone=$Zone --command="cat /root/python-master-strategy-creator/Outputs/*/status.json 2>/dev/null | tail -1" 2>$null
+                $statusJson = & $Gcloud compute ssh $InstanceName --zone=$Zone --command="cat /root/python-master-strategy-creator/Outputs/*/status.json 2>/dev/null | tail -1" 2>$null
                 if ($statusJson) {
                     $parsed = $statusJson | ConvertFrom-Json -ErrorAction SilentlyContinue
                     if ($parsed) {
@@ -227,12 +230,12 @@ while (-not $engineDone) {
 
     # Safety: check if VM still exists (SPOT can be preempted)
     try {
-        $vmStatus = gcloud compute instances describe $InstanceName --zone=$Zone --format="value(status)" 2>$null
+        $vmStatus = & $Gcloud compute instances describe $InstanceName --zone=$Zone --format="value(status)" 2>$null
         if ($vmStatus -ne "RUNNING") {
             Write-Host "`n  WARNING: VM status is '$vmStatus' (may have been preempted)" -ForegroundColor Red
             if ($vmStatus -eq "TERMINATED" -or $vmStatus -eq "STOPPED") {
                 Write-Host "  SPOT instance was preempted. Restarting..." -ForegroundColor Yellow
-                gcloud compute instances start $InstanceName --zone=$Zone
+                & $Gcloud compute instances start $InstanceName --zone=$Zone
                 Start-Sleep -Seconds 60
             }
         }
@@ -247,7 +250,7 @@ Write-Host "`n[6/7] Downloading results..." -ForegroundColor Yellow
 $localOutputDir = "${OutputDir}_${Timestamp}"
 New-Item -ItemType Directory -Path $localOutputDir -Force | Out-Null
 
-gcloud compute scp --recurse "${InstanceName}:~/outputs/*" "$localOutputDir/" --zone=$Zone
+& $Gcloud compute scp --recurse "${InstanceName}:~/outputs/*" "$localOutputDir/" --zone=$Zone
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "  Results saved to: $localOutputDir" -ForegroundColor Green
@@ -264,7 +267,7 @@ if ($LASTEXITCODE -eq 0) {
 
 # Also download the engine log
 try {
-    gcloud compute scp "${InstanceName}:~/outputs/engine_run.log" "$localOutputDir/" --zone=$Zone 2>$null
+    & $Gcloud compute scp "${InstanceName}:~/outputs/engine_run.log" "$localOutputDir/" --zone=$Zone 2>$null
 } catch { }
 
 # ---------------------------------------------------------------
@@ -275,7 +278,7 @@ if ($SkipDestroy) {
     Write-Host "  Remember to manually destroy: gcloud compute instances delete $InstanceName --zone=$Zone --quiet"
 } else {
     Write-Host "`n[7/7] Destroying VM..." -ForegroundColor Yellow
-    gcloud compute instances delete $InstanceName --zone=$Zone --quiet
+    & $Gcloud compute instances delete $InstanceName --zone=$Zone --quiet
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  VM destroyed. No more billing." -ForegroundColor Green
