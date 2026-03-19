@@ -5,6 +5,41 @@
 
 ---
 
+## 2026-03-20 — Session 9: GCP automation bug fixes + Streamlit dashboard
+
+**What was done**:
+- Fixed 10 automation bugs found during Session 8 GCP run:
+  1. SCP tilde expansion: use /home/<user>/uploads/ instead of ~/uploads/
+  2. Working directory: Push-Location to project dir before SCP
+  3. Wildcard cp: explicit file-by-file copy in startup script
+  4. Config path: copy to repo root config.yaml, no --config flag needed
+  5. gcloud.cmd: bypass gcloud.ps1 stderr routing issue
+  6. ErrorActionPreference=Continue: benign warnings no longer kill script
+  7. Race condition: startup script waits 60s after first CSV before proceeding
+  8. Config detection: broader find pattern for uploaded config
+  9. Log clearing: rm old log before engine restart
+  10. GCP username detection: auto-detect from gcloud config, don't hardcode Rob
+- Rewrote cloud/run_gcp_job.ps1 with all fixes applied
+- Updated cloud/run_gcp_job.sh with same fixes
+- Updated cloud/gcp_startup.sh with race condition fix
+- Created dashboard.py — Streamlit app with 3 tabs:
+  - Cloud Monitor: SSH into VM, parse status.json, show progress bars + ETA
+  - Results Explorer: load master_leaderboard, portfolio review, correlations, yearly PnL charts, equity curves
+  - Prop Firm Simulator: select strategy, run MC pass rate, display metrics
+- Added streamlit and plotly to requirements.txt
+
+**Verified**:
+- All 19 existing smoke tests still pass
+- Streamlit app imports without error: python -c 'import dashboard'
+
+**Next session priorities**:
+1. Analyze Session 8 re-run results (with fixed portfolio evaluator)
+2. Run prop firm simulator on all accepted strategies
+3. Portfolio assembly for The5ers Bootcamp
+4. ES 5m run, then CL/NQ/GC
+
+---
+
 ## 2026-03-20 — Session 8: Portfolio evaluator bug fix + GCP automation
 
 **What was done**:

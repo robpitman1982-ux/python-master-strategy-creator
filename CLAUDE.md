@@ -26,6 +26,7 @@
 python-master-strategy-creator/
 ├── master_strategy_engine.py           # Main orchestrator — runs all families
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
+├── dashboard.py                        # Streamlit dashboard: Cloud Monitor + Results Explorer + Prop Firm Simulator
 ├── tests/
 │   ├── __init__.py
 │   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
@@ -175,6 +176,11 @@ Key sections:
 - [x] 96-core GCP cloud config created — cloud/config_es_all_timeframes_gcp96.yaml (4 datasets, 94 workers, Melbourne SPOT)
 - [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
 - [x] GCP automation scripts — run_gcp_job.ps1 / run_gcp_job.sh: fully unattended create → upload → poll → download → DESTROY
+- [x] GCP automation bug fixes (Session 9) — SCP tilde/paths, gcloud.cmd, user detection, race condition, log clearing, cwd
+
+### Dashboard / monitoring
+- [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (SSH status + log tail), Results Explorer (leaderboard/correlations/equity curves), Prop Firm Simulator (Monte Carlo pass rate)
+- [ ] Dashboard: equity curve per strategy from trade-level data
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -201,6 +207,7 @@ Key sections:
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
 - Tests: `python -m pytest tests/test_smoke.py -v` — 19 smoke tests, all < 5s
+- Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
 ## Session workflow
@@ -214,4 +221,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-20 — Session 8: Portfolio evaluator timeframe bug fix + GCP automation scripts
+2026-03-20 — Session 9: GCP automation bug fixes (10 bugs) + Streamlit dashboard
