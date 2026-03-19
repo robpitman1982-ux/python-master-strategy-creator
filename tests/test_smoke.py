@@ -465,3 +465,85 @@ def test_hybrid_filter_scaling():
     atr_60m = bo.get_required_avg_range_lookbacks("60m")
     atr_15m = bo.get_required_avg_range_lookbacks("15m")
     assert atr_15m[0] == 4 * atr_60m[0], f"15m ATR lookback should be 4x: {atr_15m} vs {atr_60m}"
+
+
+# ---------------------------------------------------------------------------
+# Test 13: Prop firm config — Bootcamp $250K
+# ---------------------------------------------------------------------------
+
+def test_prop_firm_config_bootcamp():
+    """Verify The5ers Bootcamp $250K config has correct step balances."""
+    from modules.prop_firm_simulator import The5ersBootcampConfig
+    cfg = The5ersBootcampConfig()
+    assert cfg.n_steps == 3
+    assert cfg.step_balances == [100_000.0, 150_000.0, 200_000.0]
+    assert cfg.target_balance == 250_000.0
+    assert cfg.profit_target_pct == 0.06
+    assert cfg.max_drawdown_pct == 0.05
+    assert cfg.max_daily_drawdown_pct is None  # No daily DD during eval
+    assert cfg.drawdown_type == "static"
+    assert cfg.entry_fee == 225.0
+    assert cfg.funded_fee == 350.0
+
+
+# ---------------------------------------------------------------------------
+# Test 14: Prop firm simulate — pass
+# ---------------------------------------------------------------------------
+
+def test_prop_firm_simulate_pass():
+    """A strongly positive trade list should pass the challenge."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersBootcampConfig
+    # 100 trades, all winners — should easily pass
+    trades = [3000.0] * 100  # $3K per trade on $250K = 1.2% per trade
+    result = simulate_challenge(trades, The5ersBootcampConfig(), source_capital=250_000.0)
+    assert result.passed_all_steps is True
+    assert len(result.steps) == 3
+    assert all(s.passed for s in result.steps)
+
+
+# ---------------------------------------------------------------------------
+# Test 15: Prop firm simulate — fail
+# ---------------------------------------------------------------------------
+
+def test_prop_firm_simulate_fail():
+    """A strongly negative trade list should fail the challenge."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersBootcampConfig
+    # All losers
+    trades = [-5000.0] * 50
+    result = simulate_challenge(trades, The5ersBootcampConfig(), source_capital=250_000.0)
+    assert result.passed_all_steps is False
+    assert "Drawdown breach" in result.steps[0].failure_reason
+
+
+# ---------------------------------------------------------------------------
+# Test 16: Prop firm Monte Carlo
+# ---------------------------------------------------------------------------
+
+def test_prop_firm_monte_carlo():
+    """Monte Carlo should return valid statistics."""
+    import random as rng_mod
+    from modules.prop_firm_simulator import monte_carlo_pass_rate, The5ersBootcampConfig
+    rng = rng_mod.Random(42)
+    trades = [rng.gauss(500, 2000) for _ in range(150)]
+    stats = monte_carlo_pass_rate(trades, The5ersBootcampConfig(), n_sims=100, seed=42)
+    assert 0.0 <= stats.pass_rate <= 1.0
+    assert stats.n_simulations == 100
+    assert len(stats.step_pass_rates) == 3
+    assert stats.p5_worst_dd_pct <= stats.p50_worst_dd_pct <= stats.p95_worst_dd_pct
+
+
+# ---------------------------------------------------------------------------
+# Test 17: Prop firm challenge score
+# ---------------------------------------------------------------------------
+
+def test_prop_firm_challenge_score():
+    """Challenge score should be between 0 and 1."""
+    from modules.prop_firm_simulator import (
+        monte_carlo_pass_rate, compute_challenge_score, The5ersBootcampConfig
+    )
+    import random as rng_mod
+    rng = rng_mod.Random(99)
+    trades = [rng.gauss(800, 1500) for _ in range(200)]
+    stats = monte_carlo_pass_rate(trades, The5ersBootcampConfig(), n_sims=100, seed=99)
+    score = compute_challenge_score(stats)
+    assert 0.0 <= score <= 1.0
