@@ -28,7 +28,7 @@ python-master-strategy-creator/
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
 ├── tests/
 │   ├── __init__.py
-│   └── test_smoke.py                  # 12 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling)
+│   └── test_smoke.py                  # 17 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm)
 ├── modules/
 │   ├── __init__.py
 │   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
@@ -43,6 +43,7 @@ python-master-strategy-creator/
 │   ├── optimizer.py                   # Grid search optimizer (legacy, being replaced by refiner)
 │   ├── refiner.py                     # Refinement engine (parallel parameter sweep)
 │   ├── portfolio_evaluator.py         # Portfolio metrics, Monte Carlo, stress tests
+│   ├── prop_firm_simulator.py         # Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
 │   └── strategy_types/
 │       ├── __init__.py
 │       ├── base_strategy_type.py      # Abstract base — all families implement this
@@ -167,6 +168,16 @@ Key sections:
 - [x] 48-core cloud config created — cloud/config_es_all_timeframes_48core.yaml (4 datasets, 46 workers)
 - [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
 
+### Prop firm system (System 2 — in progress)
+- [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
+- [x] The5ers Bootcamp $250K config with correct step balances ($100K/$150K/$200K)
+- [x] The5ers High Stakes and Hyper Growth configs
+- [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
+- [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
+- [ ] Add prop firm evaluation to portfolio_evaluator.py output
+- [ ] Daily drawdown simulation (for High Stakes / funded stage)
+- [ ] Position sizing optimizer (max contracts given leverage + DD constraints)
+
 ### Nice to have
 - [ ] Heatmap visualization of parameter plateaus
 - [ ] Trade-list-level deduplication (detect when two filter combos produce same trades)
@@ -195,4 +206,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-18 — Session 6: Hybrid filter scaling, 48-core cloud config, memory estimation, master leaderboard auto-run
+2026-03-19 — Session 7: Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
