@@ -196,10 +196,12 @@ def _rebuild_strategy_from_leaderboard_row(
     data: pd.DataFrame,
     outputs_dir: Path,
     market_symbol: str,
+    timeframe: str = "60m",
 ) -> tuple[pd.DataFrame, str, EngineConfig]:
     strategy_type_name = str(row["strategy_type"]).strip()
     leader_source = str(row.get("leader_source", "")).strip().lower()
     strategy_type_inst = get_strategy_type(strategy_type_name)
+    print(f"    Rebuilding {strategy_type_name} with timeframe={timeframe}")
 
     combo_name = str(row.get("best_combo_strategy_name", "")).strip()
     if combo_name in ["", "NONE"]:
@@ -226,9 +228,9 @@ def _rebuild_strategy_from_leaderboard_row(
 
     eval_data = add_precomputed_features(
         data.copy(),
-        sma_lengths=strategy_type_inst.get_required_sma_lengths(),
-        avg_range_lookbacks=strategy_type_inst.get_required_avg_range_lookbacks(),
-        momentum_lookbacks=strategy_type_inst.get_required_momentum_lookbacks(),
+        sma_lengths=strategy_type_inst.get_required_sma_lengths(timeframe=timeframe),
+        avg_range_lookbacks=strategy_type_inst.get_required_avg_range_lookbacks(timeframe=timeframe),
+        momentum_lookbacks=strategy_type_inst.get_required_momentum_lookbacks(timeframe=timeframe),
     )
 
     strategy = strategy_type_inst.build_candidate_specific_strategy(
@@ -237,6 +239,7 @@ def _rebuild_strategy_from_leaderboard_row(
         stop_distance_points,
         min_avg_range,
         momentum_lookback,
+        timeframe=timeframe,
     )
 
     cfg = EngineConfig(
@@ -310,6 +313,7 @@ def evaluate_portfolio(
                 data=data,
                 outputs_dir=leaderboard_csv.parent,
                 market_symbol=market_name,
+                timeframe=timeframe,
             )
 
             if trades_df.empty:
