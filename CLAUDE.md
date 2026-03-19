@@ -28,7 +28,7 @@ python-master-strategy-creator/
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
 ├── tests/
 │   ├── __init__.py
-│   └── test_smoke.py                  # 17 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm)
+│   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
 ├── modules/
 │   ├── __init__.py
 │   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
@@ -54,11 +54,15 @@ python-master-strategy-creator/
 ├── docs/
 │   └── TRADESTATION_EXPORT_GUIDE.md   # Step-by-step data export instructions
 ├── cloud/
-│   ├── run_cloud.sh            # Linux/Mac cloud run script
-│   ├── run_cloud.ps1           # Windows cloud run script
+│   ├── run_cloud.sh            # Linux/Mac cloud run script (DigitalOcean)
+│   ├── run_cloud.ps1           # Windows cloud run script (DigitalOcean)
+│   ├── run_gcp_job.ps1         # PowerShell: fully automated GCP run (create → upload → poll → download → DESTROY)
+│   ├── run_gcp_job.sh          # Bash equivalent of above for Linux/Mac
+│   ├── gcp_startup.sh          # VM boot script: install, clone, wait for data, run engine, copy outputs
 │   ├── config_full_es.yaml     # Full ES sweep config
 │   ├── config_quick_test.yaml  # Quick test config
-│   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core config
+│   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core DigitalOcean config
+│   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Melbourne SPOT config
 │   └── SETUP.md                # DigitalOcean setup guide
 ├── Dockerfile
 ├── requirements.txt
@@ -151,7 +155,9 @@ Key sections:
 - [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
 - [x] Cloud deployment: Dockerfile, requirements.txt, run scripts, cloud configs all created
-- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (12 tests, all fast)
+- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (19 tests, all fast)
+- [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
+- [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -166,7 +172,9 @@ Key sections:
 - [x] Timeframe-aware refinement grids — hold_bars auto-scales with bar duration (5m → 12×, daily → 0.154×)
 - [x] Hybrid filter parameter scaling — SMA/ATR/momentum lookbacks scale per timeframe in sweep phase too
 - [x] 48-core cloud config created — cloud/config_es_all_timeframes_48core.yaml (4 datasets, 46 workers)
+- [x] 96-core GCP cloud config created — cloud/config_es_all_timeframes_gcp96.yaml (4 datasets, 94 workers, Melbourne SPOT)
 - [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
+- [x] GCP automation scripts — run_gcp_job.ps1 / run_gcp_job.sh: fully unattended create → upload → poll → download → DESTROY
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -192,7 +200,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py -v` — 12 smoke tests, all < 2s
+- Tests: `python -m pytest tests/test_smoke.py -v` — 19 smoke tests, all < 5s
 - Git: commit after every meaningful change with descriptive messages
 
 ## Session workflow
@@ -206,4 +214,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-19 — Session 7: Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
+2026-03-20 — Session 8: Portfolio evaluator timeframe bug fix + GCP automation scripts

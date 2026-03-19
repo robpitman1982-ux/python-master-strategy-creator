@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-03-20 — Session 8: Portfolio evaluator bug fix + GCP automation
+
+**What was done**:
+- CRITICAL BUG FIX: portfolio_evaluator.py now passes `timeframe` to `get_required_sma_lengths()`, `get_required_avg_range_lookbacks()`, `get_required_momentum_lookbacks()`, and `build_candidate_specific_strategy()` during trade reconstruction
+  - Bug caused: Daily MR showed 149 trades/$41K in portfolio eval vs 351 trades/$3M in engine (73x gap)
+  - Bug caused: Daily Breakout showed -$27K (losing) vs +$245K in engine (sign flip!)
+  - Bug caused: Daily Trend missing entirely from portfolio evaluation
+  - Root: `_rebuild_strategy_from_leaderboard_row()` never passed timeframe, so all strategies reconstructed with 60m SMA/ATR/momentum defaults
+- Created `cloud/gcp_startup.sh` — VM boot script: installs deps, clones repo, waits for data uploads, runs engine, copies outputs
+- Created `cloud/run_gcp_job.ps1` — fully automated PowerShell script: create VM → upload data → poll completion → download results → destroy VM
+- Created `cloud/run_gcp_job.sh` — bash equivalent for Linux/Mac
+- Key GCP gotchas handled: PuTTY SCP issues (uses native SSH), permission model (uploads to ~/uploads, startup script copies to /root/), SPOT preemption detection and restart
+- Added 2 new smoke tests for portfolio evaluator timeframe parameter
+
+**Output changes vs Session 7**:
+- Portfolio evaluator now produces correct trade reconstructions for all timeframes
+- Previous run's portfolio_review_table.csv, correlation_matrix.csv, yearly_stats_breakdown.csv were WRONG for non-60m — need re-run
+- 19 smoke tests pass (was 17)
+- GCP runs now fully automated with one command
+
+**Verified**:
+- All 19 smoke tests pass
+- Portfolio evaluator signature accepts timeframe parameter
+- GCP scripts have correct path handling and VM cleanup
+
+**Impact on previous results**:
+- Master leaderboard strategy rankings (from engine) are still valid
+- Portfolio evaluation outputs (MC drawdowns, correlations, yearly stats) need re-running
+- The 9 accepted strategies are still real — but their validated performance metrics need recalculation
+
+**Next session priorities**:
+1. Re-run ES all timeframes on GCP with fixed code to get correct portfolio evaluation
+2. Run prop firm simulator on corrected trade lists
+3. Build portfolio of 3-6 uncorrelated strategies for The5ers Bootcamp
+4. Run ES 5m, then CL/NQ/GC
+
+---
+
 ## 2026-03-19 — Session 7: Prop firm challenge simulator
 
 **What was done**:
