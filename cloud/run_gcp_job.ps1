@@ -50,6 +50,12 @@ $ErrorActionPreference = "Stop"
 # Use native OpenSSH instead of PuTTY (fixes freezing issues)
 $env:CLOUDSDK_SSH_NATIVE = "1"
 
+# Ensure gcloud is on PATH (Cloud SDK installs to user AppData, not system PATH)
+$GcloudBinDir = "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin"
+if (Test-Path $GcloudBinDir) {
+    $env:PATH = "$GcloudBinDir;$env:PATH"
+}
+
 $ProjectDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $StartupScript = Join-Path $ProjectDir "cloud/gcp_startup.sh"
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmm"
