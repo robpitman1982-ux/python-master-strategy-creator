@@ -64,12 +64,9 @@ Push-Location $ProjectDir
 $StartupScript = "cloud/gcp_startup.sh"
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmm"
 
-# --- Detect GCP username (OS Login maps to lowercase email prefix) ---
-$GcpAccount = (& $Gcloud config get-value account 2>$null).Trim()
-$GcpUser = ($GcpAccount -split "@")[0] -replace "\.", "_"
-if (-not $GcpUser) { $GcpUser = "rob" }
-$RemoteHome = "/home/$GcpUser"
-Write-Host "Detected GCP user: $GcpUser (home: $RemoteHome)" -ForegroundColor Gray
+# --- GCP username detected dynamically after SSH is ready (Step 2b) ---
+$GcpUser = "pending"
+$RemoteHome = "pending"
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host " GCP Strategy Engine - Automated Run" -ForegroundColor Cyan
@@ -80,7 +77,6 @@ Write-Host "Zone:      $Zone"
 Write-Host "Config:    $ConfigFile"
 Write-Host "Data dir:  $DataDir"
 Write-Host "Output:    $OutputDir"
-Write-Host "GCP user:  $GcpUser"
 Write-Host "============================================" -ForegroundColor Cyan
 
 # ---------------------------------------------------------------
@@ -131,6 +127,27 @@ if (-not $sshReady) {
     Pop-Location
     exit 1
 }
+
+# ---------------------------------------------------------------
+# STEP 2b: Detect actual remote username and home directory
+# ---------------------------------------------------------------
+Write-Host "`n[2b] Detecting remote username..." -ForegroundColor Yellow
+
+$GcpUser = (& $Gcloud compute ssh $InstanceName --zone=$Zone --command="whoami" 2>$null | Out-String).Trim()
+$RemoteHome = (& $Gcloud compute ssh $InstanceName --zone=$Zone --command="echo `$HOME" 2>$null | Out-String).Trim()
+
+# Fallback if detection failed
+if (-not $GcpUser -or $GcpUser -eq "") {
+    $GcpAccount = (& $Gcloud config get-value account 2>$null).Trim()
+    $GcpUser = ($GcpAccount -split "@")[0] -replace "\.", "_"
+    if (-not $GcpUser) { $GcpUser = "rob" }
+}
+if (-not $RemoteHome -or $RemoteHome -eq "" -or $RemoteHome -eq "pending") {
+    $RemoteHome = "/home/$GcpUser"
+}
+
+Write-Host "  Remote user: $GcpUser" -ForegroundColor Green
+Write-Host "  Remote home: $RemoteHome" -ForegroundColor Green
 
 # ---------------------------------------------------------------
 # STEP 3: Create uploads directory
@@ -245,16 +262,38 @@ New-Item -ItemType Directory -Path $localOutputDir -Force | Out-Null
 
 & $Gcloud compute scp --recurse "${InstanceName}:${RemoteHome}/outputs" "$localOutputDir/" --zone=$Zone
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "  Results saved to: $localOutputDir" -ForegroundColor Green
+# Verify download actually got files
+$downloadedFiles = Get-ChildItem -Path $localOutputDir -Recurse -File -ErrorAction SilentlyContinue
+if ($downloadedFiles.Count -eq 0) {
+    Write-Host "  WARNING: Download directory is empty! Trying alternative path..." -ForegroundColor Red
+    # Try downloading from /tmp/engine_outputs (guaranteed fallback set by startup script)
+    & $Gcloud compute ssh $InstanceName --zone=$Zone --command="sudo tar czf /tmp/outputs.tar.gz -C /root/python-master-strategy-creator Outputs/ 2>/dev/null; sudo chmod 644 /tmp/outputs.tar.gz"
+    & $Gcloud compute scp "${InstanceName}:/tmp/outputs.tar.gz" "$localOutputDir/outputs.tar.gz" --zone=$Zone
+    if (Test-Path "$localOutputDir/outputs.tar.gz") {
+        # Extract tar on Windows (requires tar, available in Win10+)
+        tar -xzf "$localOutputDir/outputs.tar.gz" -C "$localOutputDir"
+        Remove-Item "$localOutputDir/outputs.tar.gz" -ErrorAction SilentlyContinue
+        $downloadedFiles = Get-ChildItem -Path $localOutputDir -Recurse -File -ErrorAction SilentlyContinue
+        Write-Host "  Fallback download: got $($downloadedFiles.Count) files" -ForegroundColor Yellow
+    }
+}
+
+if ($downloadedFiles.Count -eq 0) {
+    Write-Host "  CRITICAL: Still no files downloaded. DO NOT destroy VM!" -ForegroundColor Red
+    Write-Host "  Manually download with:" -ForegroundColor Red
+    Write-Host "    gcloud compute ssh $InstanceName --zone=$Zone --command=`"sudo tar czf /tmp/out.tar.gz -C /root/python-master-strategy-creator Outputs/`"" -ForegroundColor Red
+    Write-Host "    gcloud compute scp ${InstanceName}:/tmp/out.tar.gz . --zone=$Zone" -ForegroundColor Red
+    $SkipDestroy = $true  # Override — don't destroy if we got nothing
+}
+
+if ($downloadedFiles.Count -gt 0) {
+    Write-Host "  Results saved to: $localOutputDir ($($downloadedFiles.Count) files)" -ForegroundColor Green
 
     $leaderboard = Get-ChildItem -Path $localOutputDir -Recurse -Filter "master_leaderboard.csv" | Select-Object -First 1
     if ($leaderboard) {
         Write-Host "`n  === MASTER LEADERBOARD ===" -ForegroundColor Cyan
         Get-Content $leaderboard.FullName | Select-Object -First 12
     }
-} else {
-    Write-Host "  WARNING: Download may have failed." -ForegroundColor Red
 }
 
 # ---------------------------------------------------------------
