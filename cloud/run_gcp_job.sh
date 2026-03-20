@@ -19,13 +19,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
-# Detect GCP username (OS Login maps email prefix to Linux username)
-GCP_ACCOUNT=$(gcloud config get-value account 2>/dev/null)
-GCP_USER=$(echo "$GCP_ACCOUNT" | cut -d@ -f1 | tr '.' '_')
-if [ -z "$GCP_USER" ]; then
-    GCP_USER="rob"
-fi
-REMOTE_HOME="/home/${GCP_USER}"
+# GCP username detected dynamically after SSH is ready (Step 2b)
+GCP_USER="pending"
+REMOTE_HOME="pending"
 
 echo "============================================"
 echo " GCP Strategy Engine — Automated Run"
@@ -33,7 +29,6 @@ echo "============================================"
 echo "Config:    $CONFIG_FILE"
 echo "Machine:   $MACHINE_TYPE"
 echo "Zone:      $ZONE"
-echo "GCP user:  $GCP_USER (home: $REMOTE_HOME)"
 echo "Data dir:  $DATA_DIR"
 echo "Output:    $OUTPUT_DIR"
 echo "============================================"
@@ -70,6 +65,21 @@ for i in $(seq 1 40); do
     echo "  Attempt $i/40..."
     sleep 10
 done
+
+# Step 2b: Detect actual remote username
+echo "[2b] Detecting remote username..."
+GCP_USER=$(gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --command="whoami" 2>/dev/null | tr -d '[:space:]')
+REMOTE_HOME=$(gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" --command='echo $HOME' 2>/dev/null | tr -d '[:space:]')
+
+if [ -z "$GCP_USER" ]; then
+    GCP_ACCOUNT=$(gcloud config get-value account 2>/dev/null)
+    GCP_USER=$(echo "$GCP_ACCOUNT" | cut -d@ -f1 | tr '.' '_')
+    [ -z "$GCP_USER" ] && GCP_USER="rob"
+fi
+[ -z "$REMOTE_HOME" ] && REMOTE_HOME="/home/${GCP_USER}"
+
+echo "  Remote user: $GCP_USER"
+echo "  Remote home: $REMOTE_HOME"
 
 # Step 3: Create upload dir — use full path, not tilde
 echo "[3/7] Preparing upload directory..."
@@ -146,7 +156,30 @@ gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" \
 
 mkdir -p "$OUTPUT_DIR"
 gcloud compute scp --recurse "${INSTANCE_NAME}:${REMOTE_HOME}/outputs" "$OUTPUT_DIR/" --zone="$ZONE"
-echo "  Results in: $OUTPUT_DIR"
+
+# Verify download got files
+FILE_COUNT=$(find "$OUTPUT_DIR" -type f 2>/dev/null | wc -l)
+if [ "$FILE_COUNT" -eq 0 ]; then
+    echo "  WARNING: Download empty! Trying tar fallback..."
+    gcloud compute ssh "$INSTANCE_NAME" --zone="$ZONE" \
+        --command="sudo tar czf /tmp/outputs.tar.gz -C /root/python-master-strategy-creator Outputs/ 2>/dev/null; sudo chmod 644 /tmp/outputs.tar.gz"
+    gcloud compute scp "${INSTANCE_NAME}:/tmp/outputs.tar.gz" "$OUTPUT_DIR/outputs.tar.gz" --zone="$ZONE"
+    if [ -f "$OUTPUT_DIR/outputs.tar.gz" ]; then
+        tar -xzf "$OUTPUT_DIR/outputs.tar.gz" -C "$OUTPUT_DIR"
+        rm -f "$OUTPUT_DIR/outputs.tar.gz"
+        FILE_COUNT=$(find "$OUTPUT_DIR" -type f 2>/dev/null | wc -l)
+        echo "  Fallback: got $FILE_COUNT files"
+    fi
+fi
+
+if [ "$FILE_COUNT" -eq 0 ]; then
+    echo "  CRITICAL: No files downloaded. Skipping VM destroy."
+    echo "  Manual download: gcloud compute ssh $INSTANCE_NAME --zone=$ZONE --command='sudo tar czf /tmp/out.tar.gz -C /root/python-master-strategy-creator Outputs/'"
+    echo "  Then: gcloud compute scp ${INSTANCE_NAME}:/tmp/out.tar.gz . --zone=$ZONE"
+    exit 1  # Don't destroy
+fi
+
+echo "  Results in: $OUTPUT_DIR ($FILE_COUNT files)"
 
 # Show quick summary
 MASTER_LB=$(find "$OUTPUT_DIR" -name "master_leaderboard.csv" 2>/dev/null | head -1)
