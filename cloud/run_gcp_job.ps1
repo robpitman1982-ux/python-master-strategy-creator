@@ -40,8 +40,16 @@ param(
 )
 
 # --- Critical PowerShell settings ---
-# Use gcloud.cmd to bypass gcloud.ps1 which routes Python stderr through PS error pipeline
-$Gcloud = "gcloud.cmd"
+# Use gcloud.cmd via full path — "gcloud.cmd" alone fails when Cloud SDK is not on PATH
+# (e.g. when run as a subprocess from Claude Code / bash / Task Scheduler).
+# The Cloud SDK installs to AppData\Local, which is only added to PATH by the user's
+# interactive shell profile, not by subprocess environments.
+$GcloudBin = "$env:LOCALAPPDATA\Google\Cloud SDK\google-cloud-sdk\bin"
+$Gcloud = "$GcloudBin\gcloud.cmd"
+if (-not (Test-Path $Gcloud)) {
+    # Fallback: hope it's on PATH (interactive terminal use)
+    $Gcloud = "gcloud.cmd"
+}
 # Don't terminate on stderr warnings from gcloud
 $ErrorActionPreference = "Continue"
 # Use native OpenSSH instead of PuTTY (fixes freezing and tilde issues)
