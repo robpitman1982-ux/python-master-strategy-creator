@@ -132,4 +132,11 @@ if [ -n "$USER_HOME" ]; then
     echo "Outputs copied to $USER_HOME/outputs/"
 fi
 
+# Also copy to /tmp/engine_outputs as a guaranteed fallback path
+sudo mkdir -p /tmp/engine_outputs
+sudo cp -r "$WORK_DIR/Outputs/"* /tmp/engine_outputs/ 2>/dev/null || true
+sudo cp /tmp/engine_run.log /tmp/engine_outputs/ 2>/dev/null || true
+sudo chmod -R 755 /tmp/engine_outputs
+echo "Outputs also available at /tmp/engine_outputs/"
+
 echo "=== Startup script finished at $(date -u) ==="
