@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-03-20 — Session 10: GCP download reliability fix
+
+**What was done**:
+- Root cause of Session 8 empty download: GcpUser detected as "robpitman1982" but actual OS Login user was "Rob"
+- All SCP/SSH paths using /home/robpitman1982/ silently failed, download got 0 files, then VM was destroyed
+- Fix: detect username dynamically via `whoami` and `$HOME` after SSH is ready (not guessed from email)
+- Added tar-based download fallback: if SCP download is empty, tar the outputs on VM and SCP the tarball
+- Safety: if download is still empty after fallback, script refuses to destroy VM and prints manual commands
+- Startup script now also copies outputs to /tmp/engine_outputs/ as a guaranteed fallback path
+- Applied same fixes to both PowerShell and bash scripts
+
+**Verified**:
+- All 19 smoke tests still pass
+- PowerShell script syntax validated
+
+**Next session priorities**:
+1. Run ES 4-timeframe sweep with fixed automation (should be fully unattended this time)
+2. Analyze results with Streamlit dashboard
+3. Run prop firm simulator
+4. ES 5m, then CL/NQ/GC
+
+---
+
 ## 2026-03-20 — Session 9: GCP automation bug fixes + Streamlit dashboard
 
 **What was done**:

@@ -177,6 +177,7 @@ Key sections:
 - [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
 - [x] GCP automation scripts — run_gcp_job.ps1 / run_gcp_job.sh: fully unattended create → upload → poll → download → DESTROY
 - [x] GCP automation bug fixes (Session 9) — SCP tilde/paths, gcloud.cmd, user detection, race condition, log clearing, cwd
+- [x] GCP download reliability — dynamic username detection via SSH whoami, tar fallback, safety gate (refuse destroy if 0 files)
 
 ### Dashboard / monitoring
 - [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (SSH status + log tail), Results Explorer (leaderboard/correlations/equity curves), Prop Firm Simulator (Monte Carlo pass rate)
@@ -221,4 +222,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-20 — Session 9: GCP automation bug fixes (10 bugs) + Streamlit dashboard
+2026-03-20 — Session 10: GCP download reliability fix (dynamic username, tar fallback, safety gate)
