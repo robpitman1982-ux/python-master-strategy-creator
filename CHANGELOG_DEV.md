@@ -5,6 +5,79 @@
 
 ---
 
+## 2026-03-21 - Session 14: One-click GCP sweep wrapper + automatic VM lifecycle polish
+
+**What was done**:
+- Added `run_cloud_sweep.py` as the simplest project-root entry point for day-to-day GCP runs.
+- Kept the wrapper thin by delegating directly to `cloud.launch_gcp_run` with a sensible default config and passthrough flags like `--dry-run`, `--keep-vm`, and `--keep-remote`.
+- Hardened the launcher closeout flow so successful verified runs print a clear final summary including run outcome, VM outcome, verification status, local results path, and whether billing should now be stopped.
+- Added a lightweight `cloud_results/LATEST_RUN.txt` pointer so the newest local run folder is easy to find and the dashboard can default to it more reliably.
+- Made the dry-run path also write the latest-run pointer and final summary so the local handoff behavior is consistent even before a real VM is created.
+- Extended launcher tests to cover the wrapper defaults and latest-run helper behavior.
+- Updated the GCP runbook to make the wrapper-first one-click workflow explicit.
+
+**Verified**:
+- `python -m py_compile cloud/launch_gcp_run.py dashboard.py dashboard_utils.py run_cloud_sweep.py`
+- `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_dashboard_utils.py -v --basetemp=.tmp_pytest_run`
+
+**Next session priorities**:
+1. Execute the next real overnight sweep through `python run_cloud_sweep.py`.
+2. Confirm the final console summary and latest-run pointer match the downloaded artifacts from a real GCP run.
+3. Keep refining operational ergonomics without changing strategy logic.
+
+---
+
+## 2026-03-21 â€” Session 13: Dashboard upgrade + VM cost visibility
+
+**What was done**:
+- Upgraded `dashboard.py` from a simple file browser into a more operational control panel for cloud runs
+- Added `dashboard_utils.py` with pure helper logic for launcher-run discovery, result-source grouping, badge mapping, cost estimation, dataset-progress summarization, and best-candidate file detection
+- Cloud Monitor now highlights run identity, launcher state/stage/message, timestamps, instance/zone, run and VM outcomes, bundle size, local/remote paths, and launcher banners that make preserved-vs-destroyed VM status obvious
+- Added an estimated VM cost panel using a small local machine-type pricing map plus elapsed runtime from launcher timestamps
+- Dataset progress now shows per-dataset cards with market/timeframe, current family/stage, progress, ETA, elapsed time, and completed/remaining families, plus an overall progress summary
+- Added a “Best Candidates So Far” panel that prefers `master_leaderboard.csv`, then `family_leaderboard_results.csv`, then `family_summary_results.csv`
+- Results Explorer now uses grouped result sources (`cloud_results`, legacy `cloud_outputs*`, and local `Outputs`) with a smarter default selection and a file-presence summary
+- Prop Firm Simulator now reuses the selected result source, shows source context, reports how many strategy return columns were found, and gives clearer feedback when return data or trade counts are insufficient
+- Added lightweight dashboard helper tests in `tests/test_dashboard_utils.py`
+
+**Verified**:
+- `python -m py_compile dashboard.py dashboard_utils.py`
+- `python -m pytest tests/test_dashboard_utils.py -v`
+
+**Next session priorities**:
+1. Exercise the upgraded dashboard against the first real overnight GCP launcher run
+2. Refine the local hourly cost map once real VM durations are observed
+3. Consider a lightweight action panel for opening result directories or surfacing launch commands
+
+---
+
+## 2026-03-20 — Session 11: Windows-first GCP orchestration redesign
+
+**What was done**:
+- Added `cloud/launch_gcp_run.py` as the new single-command GCP launcher for Windows-first use
+- Launcher now parses the selected config, resolves only the datasets explicitly listed there, and builds `run_manifest.json`
+- Launcher bundles the current repo snapshot plus only the required datasets into one `input_bundle.tar.gz` before upload
+- Remote staging now uses deterministic absolute `/tmp/strategy_engine_runs/<run-id>/` paths instead of guessed Linux home directories
+- Engine start now happens only after remote bundle, config, and manifest validation succeed
+- Launcher monitors structured remote run status and existing dataset `status.json` progress updates during execution
+- Retrieval is now tarball-first: remote logs, status, manifest, config, and outputs are preserved into `artifacts.tar.gz` before download
+- VM destruction now happens only after preserved artifacts are downloaded and verified, unless `--keep-vm` is set
+- `cloud/run_gcp_job.ps1` and `cloud/run_gcp_job.sh` now defer to the Python launcher instead of carrying separate orchestration logic
+- Added focused tests for manifest resolution, bundle contents, and status parsing/summarization
+- Added `cloud/GCP_WINDOWS_RUNBOOK.md` and updated docs to make the new single-command flow explicit
+
+**Verified**:
+- `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v`
+- `python -m py_compile cloud/launch_gcp_run.py`
+
+**Next session priorities**:
+1. Run a full ES 4-timeframe sweep with the new launcher from Windows
+2. Confirm preserved artifacts layout against a real GCP run
+3. Point the dashboard cloud monitor at the new deterministic run root if needed
+4. Expand the same manifest/bundle flow to future CL/NQ/GC runs
+
+---
+
 ## 2026-03-20 — Session 10: GCP download reliability fix
 
 **What was done**:

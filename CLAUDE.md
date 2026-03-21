@@ -11,7 +11,7 @@
 - Target deployment: $25k account on MES micro futures
 - Risk rules: 30% max drawdown, 1% risk per trade
 - Target: ~6 uncorrelated strategies across multiple instruments/timeframes
-- Current phase: **get the engine right on ES 60m first**, then expand
+- Current phase: **operate the single-VM GCP sweep flow safely and repeatably**, then keep expanding datasets and dashboard ergonomics
 
 **Expansion roadmap**:
 1. ✅ ES 60m (current — getting pipeline solid)
@@ -26,7 +26,9 @@
 python-master-strategy-creator/
 ├── master_strategy_engine.py           # Main orchestrator — runs all families
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
-├── dashboard.py                        # Streamlit dashboard: Cloud Monitor + Results Explorer + Prop Firm Simulator
+├── dashboard.py                        # Streamlit operations + research dashboard
+├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, and result sources
+├── run_cloud_sweep.py                  # One-click Windows-friendly wrapper around cloud.launch_gcp_run
 ├── tests/
 │   ├── __init__.py
 │   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
@@ -59,7 +61,9 @@ python-master-strategy-creator/
 │   ├── run_cloud.ps1           # Windows cloud run script (DigitalOcean)
 │   ├── run_gcp_job.ps1         # PowerShell: fully automated GCP run (create → upload → poll → download → DESTROY)
 │   ├── run_gcp_job.sh          # Bash equivalent of above for Linux/Mac
+│   ├── launch_gcp_run.py       # Windows-first Python launcher: manifest → bundle → upload → monitor → tarball download → cleanup
 │   ├── gcp_startup.sh          # VM boot script: install, clone, wait for data, run engine, copy outputs
+│   ├── GCP_WINDOWS_RUNBOOK.md  # Single-command Windows guide for the new launcher
 │   ├── config_full_es.yaml     # Full ES sweep config
 │   ├── config_quick_test.yaml  # Quick test config
 │   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core DigitalOcean config
@@ -156,7 +160,7 @@ Key sections:
 - [x] No deduplication of near-identical filter combos before refinement — lightweight dedup added
 - [x] No compute budget estimator before launching runs — added before sweep and refinement
 - [x] Cloud deployment: Dockerfile, requirements.txt, run scripts, cloud configs all created
-- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (19 tests, all fast)
+- [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (22 tests total across smoke + cloud launcher coverage)
 - [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
 - [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
 
@@ -178,9 +182,12 @@ Key sections:
 - [x] GCP automation scripts — run_gcp_job.ps1 / run_gcp_job.sh: fully unattended create → upload → poll → download → DESTROY
 - [x] GCP automation bug fixes (Session 9) — SCP tilde/paths, gcloud.cmd, user detection, race condition, log clearing, cwd
 - [x] GCP download reliability — dynamic username detection via SSH whoami, tar fallback, safety gate (refuse destroy if 0 files)
+- [x] Windows-first GCP orchestration redesign — `cloud/launch_gcp_run.py` now builds a run manifest, bundles only config-required datasets, stages under deterministic `/tmp`, validates inputs before engine start, downloads artifacts tarball-first, and verifies preserved outputs before destroy
+- [x] One-click GCP sweep wrapper — `run_cloud_sweep.py` now provides the recommended project-root commands for dry run, safe first run, and normal unattended runs
+- [x] Latest-run pointer + final launcher summary — `cloud_results/LATEST_RUN.txt` plus explicit run outcome / VM outcome / billing messaging at the end of launcher runs
 
 ### Dashboard / monitoring
-- [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (SSH status + log tail), Results Explorer (leaderboard/correlations/equity curves), Prop Firm Simulator (Monte Carlo pass rate)
+- [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (launcher summary, VM billing awareness, cost estimate, dataset progress, best candidates), Results Explorer (guided source selection, leaderboard/correlations/equity curves), Prop Firm Simulator (connected to selected result source)
 - [ ] Dashboard: equity curve per strategy from trade-level data
 
 ### Prop firm system (System 2 — in progress)
@@ -207,7 +214,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py -v` — 19 smoke tests, all < 5s
+- Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v` — 22 tests, all fast
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -222,4 +229,4 @@ Key sections:
 7. Commit and push to GitHub
 
 ## Last updated
-2026-03-20 — Session 10: GCP download reliability fix (dynamic username, tar fallback, safety gate)
+2026-03-21 — Session 14: One-click GCP wrapper, latest-run pointer, and final automatic VM lifecycle polish
