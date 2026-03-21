@@ -121,6 +121,56 @@ class ArtifactDownloadResult:
     tarball_size_bytes: int
 
 
+@dataclass
+class ArtifactVerificationResult:
+    artifacts_downloaded: bool = False
+    extraction_verified: bool = False
+    expected_outputs_present: bool = False
+    artifact_verified: bool = False
+    tarball_exists: bool = False
+    tarball_size_bytes: int = 0
+    extracted_dir_exists: bool = False
+    expected_subdirs_present: bool = False
+    expected_files: list[str] | None = None
+    verification_message: str = ""
+
+
+RUN_OUTCOME_DRY_RUN_COMPLETE = "dry_run_complete"
+RUN_OUTCOME_COMPLETED_VERIFIED = "run_completed_verified"
+RUN_OUTCOME_COMPLETED_UNVERIFIED = "run_completed_unverified"
+RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED = "artifact_download_failed"
+RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED = "artifact_verification_failed"
+RUN_OUTCOME_REMOTE_START_FAILED = "remote_start_failed"
+RUN_OUTCOME_REMOTE_MONITOR_FAILED = "remote_monitor_failed"
+RUN_OUTCOME_REMOTE_INTERRUPTED_VM_PRESERVED = "remote_interrupted_vm_preserved"
+RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL = "vm_missing_before_retrieval"
+RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE = "unexpected_launcher_failure"
+RUN_OUTCOME_REMOTE_RUN_FAILED = "remote_run_failed"
+
+VM_OUTCOME_DESTROYED = "vm_destroyed"
+VM_OUTCOME_PRESERVED = "vm_preserved_for_inspection"
+VM_OUTCOME_ALREADY_GONE = "vm_already_gone"
+
+EXPLICIT_SUCCESS_RUN_OUTCOMES = {RUN_OUTCOME_COMPLETED_VERIFIED}
+TERMINAL_RUN_OUTCOMES = {
+    RUN_OUTCOME_DRY_RUN_COMPLETE,
+    RUN_OUTCOME_COMPLETED_VERIFIED,
+    RUN_OUTCOME_COMPLETED_UNVERIFIED,
+    RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+    RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED,
+    RUN_OUTCOME_REMOTE_START_FAILED,
+    RUN_OUTCOME_REMOTE_MONITOR_FAILED,
+    RUN_OUTCOME_REMOTE_INTERRUPTED_VM_PRESERVED,
+    RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+    RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE,
+    RUN_OUTCOME_REMOTE_RUN_FAILED,
+}
+
+DEFAULT_MONITOR_TIMEOUT_SECONDS = 24 * 60 * 60
+DEFAULT_SSH_READY_TIMEOUT_SECONDS = 420
+REMOTE_STATUS_UNKNOWN = "unknown"
+
+
 class LauncherStatusStore:
     def __init__(
         self,
@@ -148,9 +198,16 @@ class LauncherStatusStore:
             "bundle_size_bytes": None,
             "run_outcome": None,
             "vm_outcome": None,
+            "failure_reason": None,
+            "destroy_allowed": False,
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "instance_exists_at_end": None,
         }
 
-    def update(self, state: str, stage: str, message: str, **extra: Any) -> None:
+    def current_payload(self) -> dict[str, Any]:
         payload = dict(self.base_payload)
         if self.latest_path.exists():
             try:
@@ -159,9 +216,12 @@ class LauncherStatusStore:
                     payload.update(existing_payload)
             except Exception:
                 pass
-
         for key, value in self.base_payload.items():
             payload.setdefault(key, value)
+        return payload
+
+    def update(self, state: str, stage: str, message: str, **extra: Any) -> None:
+        payload = self.current_payload()
 
         for key, value in extra.items():
             if value is not None:
@@ -185,6 +245,10 @@ class LauncherStatusStore:
         self.latest_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         with self.events_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload) + "\n")
+
+
+def build_default_artifact_verification() -> ArtifactVerificationResult:
+    return ArtifactVerificationResult(expected_files=[])
 
 
 def sha256_file(path: Path) -> str:
@@ -784,6 +848,13 @@ def instance_exists(gcloud_base: list[str], instance_name: str, zone: str) -> bo
     return instance_name in (result.stdout or "").split()
 
 
+def safe_instance_exists(gcloud_base: list[str], instance_name: str, zone: str) -> bool | None:
+    try:
+        return instance_exists(gcloud_base, instance_name, zone)
+    except Exception:
+        return None
+
+
 def delete_instance(gcloud_base: list[str], instance_name: str, zone: str) -> None:
     run_command(
         gcloud_base + ["compute", "instances", "delete", instance_name, f"--zone={zone}", "--quiet"],
@@ -812,7 +883,12 @@ def create_instance(gcloud_base: list[str], args: argparse.Namespace, startup_me
     run_command(command)
 
 
-def wait_for_ssh(gcloud_base: list[str], instance_name: str, zone: str, timeout_seconds: int = 420) -> None:
+def wait_for_ssh(
+    gcloud_base: list[str],
+    instance_name: str,
+    zone: str,
+    timeout_seconds: int = DEFAULT_SSH_READY_TIMEOUT_SECONDS,
+) -> None:
     started = time.time()
     while time.time() - started < timeout_seconds:
         result = run_command(
@@ -855,6 +931,17 @@ def describe_instance_status(gcloud_base: list[str], instance_name: str, zone: s
 def read_remote_file(gcloud_base: list[str], instance_name: str, zone: str, remote_path: str) -> str:
     result = ssh_command(gcloud_base, instance_name, zone, f"cat {remote_path} 2>/dev/null || true", check=False)
     return (result.stdout or "").strip()
+
+
+def remote_artifact_exists(gcloud_base: list[str], instance_name: str, zone: str, remote_path: str) -> bool:
+    result = ssh_command(
+        gcloud_base,
+        instance_name,
+        zone,
+        f"test -s {remote_path} && echo present || true",
+        check=False,
+    )
+    return "present" in (result.stdout or "")
 
 
 def read_remote_dataset_statuses(gcloud_base: list[str], instance_name: str, zone: str, remote_run_root: str) -> list[dict[str, Any]]:
@@ -913,6 +1000,30 @@ def extract_tarball(tarball_path: Path, destination: Path) -> None:
         tar.extractall(destination)
 
 
+def _detect_expected_output_files(outputs_dir: Path) -> list[str]:
+    expected_files = [
+        outputs_dir / "master_leaderboard.csv",
+        outputs_dir / "family_summary_results.csv",
+        outputs_dir / "logs" / "engine_run.log",
+    ]
+
+    discovered: list[str] = []
+    for candidate in expected_files:
+        if candidate.exists():
+            discovered.append(str(candidate.relative_to(outputs_dir)).replace("\\", "/"))
+
+    for dataset_dir in sorted(path for path in outputs_dir.iterdir() if path.is_dir()):
+        for name in ("master_leaderboard.csv", "family_summary_results.csv", "family_leaderboard_results.csv"):
+            candidate = dataset_dir / name
+            if candidate.exists():
+                discovered.append(str(candidate.relative_to(outputs_dir)).replace("\\", "/"))
+        preserved_dir = dataset_dir / "preserved"
+        if preserved_dir.exists() and any(preserved_dir.rglob("*")):
+            discovered.append(str(preserved_dir.relative_to(outputs_dir)).replace("\\", "/"))
+
+    return discovered
+
+
 def download_and_extract_artifacts(
     gcloud_base: list[str],
     instance_name: str,
@@ -938,40 +1049,95 @@ def download_and_extract_artifacts(
 
 
 def verify_preserved_results(extracted_dir: Path, remote_state: str) -> tuple[bool, str]:
+    verification = inspect_preserved_artifacts(
+        tarball_path=None,
+        extracted_dir=extracted_dir,
+        remote_state=remote_state,
+    )
+    return verification.artifact_verified, verification.verification_message
+
+
+def inspect_preserved_artifacts(
+    *,
+    tarball_path: Path | None,
+    extracted_dir: Path,
+    remote_state: str,
+) -> ArtifactVerificationResult:
+    verification = build_default_artifact_verification()
+    verification.expected_files = []
+    if tarball_path is not None:
+        verification.tarball_exists = tarball_path.exists()
+        verification.tarball_size_bytes = tarball_path.stat().st_size if tarball_path.exists() else 0
+        verification.artifacts_downloaded = verification.tarball_exists and verification.tarball_size_bytes > 0
+    else:
+        verification.tarball_exists = True
+        verification.artifacts_downloaded = True
+    verification.extracted_dir_exists = extracted_dir.exists()
+
     required_metadata = ["run_status.json", "manifest.json", "config.yaml"]
     missing_metadata = [name for name in required_metadata if not (extracted_dir / name).exists()]
     if missing_metadata:
-        return False, f"Missing preserved metadata: {', '.join(missing_metadata)}."
+        verification.verification_message = f"Missing preserved metadata: {', '.join(missing_metadata)}."
+        return verification
 
     logs_dir = extracted_dir / "logs"
     if not logs_dir.exists() or not any(logs_dir.rglob("*")):
-        return False, "Preserved logs are missing."
+        verification.verification_message = "Preserved logs are missing."
+        return verification
+
+    verification.extraction_verified = verification.extracted_dir_exists
+    verification.expected_subdirs_present = logs_dir.exists()
 
     if remote_state == "completed":
         outputs_dir = extracted_dir / "Outputs"
         if not outputs_dir.exists():
-            return False, "Completed run did not preserve Outputs."
+            verification.verification_message = "Completed run did not preserve Outputs."
+            return verification
 
-        root_result_files = [path.name for path in outputs_dir.iterdir() if path.is_file() and path.name in MEANINGFUL_OUTPUT_FILE_NAMES]
-        dataset_dirs = [path for path in outputs_dir.iterdir() if path.is_dir()]
-        dataset_result_dirs = []
-        for dataset_dir in dataset_dirs:
-            has_status = (dataset_dir / "status.json").exists()
-            has_result = any((dataset_dir / name).exists() for name in MEANINGFUL_OUTPUT_FILE_NAMES if name != "master_leaderboard.csv")
-            if has_status and has_result:
-                dataset_result_dirs.append(dataset_dir.name)
+        verification.expected_subdirs_present = any(
+            (extracted_dir / name).exists() for name in ("Outputs", "logs", "preserved")
+        )
+        verification.expected_files = _detect_expected_output_files(outputs_dir)
+        verification.expected_outputs_present = bool(verification.expected_files)
+        verification.artifact_verified = (
+            verification.artifacts_downloaded
+            and verification.extraction_verified
+            and verification.expected_subdirs_present
+            and verification.expected_outputs_present
+        )
+        if verification.artifact_verified:
+            verification.verification_message = (
+                "Preserved outputs verified (" + ", ".join(sorted(verification.expected_files)) + ")."
+            )
+            return verification
 
-        if root_result_files or dataset_result_dirs:
-            detail = []
-            if root_result_files:
-                detail.append(f"root files: {', '.join(sorted(root_result_files))}")
-            if dataset_result_dirs:
-                detail.append(f"dataset outputs: {', '.join(sorted(dataset_result_dirs))}")
-            return True, "Preserved outputs verified (" + "; ".join(detail) + ")."
+        verification.verification_message = (
+            "Completed run preserved Outputs, but expected result files were missing."
+        )
+        return verification
 
-        return False, "Completed run preserved Outputs, but no meaningful result files were found."
+    verification.artifact_verified = False
+    verification.verification_message = "Failure artifacts preserved."
+    return verification
 
-    return True, "Failure artifacts preserved."
+
+def can_auto_destroy(status: dict[str, Any], args: argparse.Namespace) -> tuple[bool, str]:
+    if args.keep_vm:
+        return False, "--keep-vm requested"
+    if status.get("run_outcome") not in EXPLICIT_SUCCESS_RUN_OUTCOMES:
+        return False, f"run outcome is not explicit success ({status.get('run_outcome')!r})"
+    if not status.get("artifacts_downloaded"):
+        return False, "artifacts were not downloaded"
+    if not status.get("artifact_verified"):
+        return False, "artifact verification did not pass"
+    if not status.get("extraction_verified"):
+        return False, "artifact extraction was not verified"
+    if not status.get("expected_outputs_present"):
+        return False, "expected outputs are missing locally"
+    remote_state = str(status.get("remote_state") or "").strip().lower()
+    if remote_state not in {"completed", "artifacts_ready"}:
+        return False, f"remote state is not explicit success ({remote_state or 'unknown'})"
+    return True, "verified success with local artifacts present"
 
 
 def build_local_run_dir(results_root: Path, run_id: str) -> Path:
@@ -991,12 +1157,16 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     status = parse_status_json(status_path.read_text(encoding="utf-8")) if status_path.exists() else {}
     run_outcome = str(status.get("run_outcome", "unknown")).strip() or "unknown"
     vm_outcome = str(status.get("vm_outcome", "unknown")).strip() or "unknown"
-    verification_passed = run_outcome == "run_completed_verified"
-    billing_message = (
-        "Billing should now be stopped."
-        if vm_outcome == "vm_destroyed" or run_outcome == "dry_run_complete"
-        else "Billing may still be active."
-    )
+    artifacts_downloaded = bool(status.get("artifacts_downloaded"))
+    artifact_verified = bool(status.get("artifact_verified"))
+    destroy_allowed = bool(status.get("destroy_allowed"))
+    instance_exists_at_end = status.get("instance_exists_at_end")
+    if run_outcome == RUN_OUTCOME_DRY_RUN_COMPLETE or vm_outcome == VM_OUTCOME_DESTROYED:
+        billing_message = "yes"
+    elif instance_exists_at_end is False:
+        billing_message = "unknown"
+    else:
+        billing_message = "no"
 
     print("=" * 60)
     print("Final Run Summary")
@@ -1005,8 +1175,16 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     print(f"Local Results Path:  {local_run_dir}")
     print(f"Run Outcome:         {run_outcome}")
     print(f"VM Outcome:          {vm_outcome}")
-    print(f"Verification Passed: {'yes' if verification_passed else 'no'}")
-    print(billing_message)
+    print(f"Artifact Downloaded: {'yes' if artifacts_downloaded else 'no'}")
+    print(f"Artifact Verified:   {'yes' if artifact_verified else 'no'}")
+    print(f"Destroy Allowed:     {'yes' if destroy_allowed else 'no'}")
+    print(f"Billing should now be stopped: {billing_message}")
+    if status.get("failure_reason"):
+        print(f"Failure Reason:      {status['failure_reason']}")
+    if run_outcome != RUN_OUTCOME_DRY_RUN_COMPLETE and run_outcome != RUN_OUTCOME_COMPLETED_VERIFIED:
+        print("WARNING: Run did not complete verified artifact retrieval.")
+        print("VM was preserved or may have already disappeared.")
+        print("Do not trust this run's outputs until checked manually.")
     print("=" * 60)
 
 
@@ -1040,16 +1218,56 @@ def monitor_run(
     args: argparse.Namespace,
     manifest: RunManifest,
     status_store: LauncherStatusStore,
+    timeout_seconds: int = DEFAULT_MONITOR_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
     last_summary = ""
     restart_attempted = False
+    started_at = time.time()
+    ssh_disconnects = 0
     while True:
+        if time.time() - started_at >= timeout_seconds:
+            return {
+                "state": REMOTE_STATUS_UNKNOWN,
+                "stage": "monitor_timeout",
+                "message": f"Monitoring exceeded {timeout_seconds} seconds.",
+                "failure_reason": "monitor_timeout",
+            }
         time.sleep(max(5, args.poll_seconds))
-        vm_status = describe_instance_status(gcloud_base, args.instance_name, args.zone)
+        try:
+            vm_status = describe_instance_status(gcloud_base, args.instance_name, args.zone)
+        except Exception:
+            vm_exists = safe_instance_exists(gcloud_base, args.instance_name, args.zone)
+            if vm_exists is False:
+                return {
+                    "state": "missing",
+                    "stage": "vm_missing",
+                    "message": "VM disappeared during monitoring before artifacts were retrieved.",
+                    "failure_reason": RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+                }
+            ssh_disconnects += 1
+            if ssh_disconnects >= 3:
+                return {
+                    "state": REMOTE_STATUS_UNKNOWN,
+                    "stage": "ssh_disconnect",
+                    "message": "Lost SSH connectivity during monitoring.",
+                    "failure_reason": "ssh_disconnect",
+                }
+            status_store.update(
+                "running",
+                "ssh_disconnect",
+                "SSH connectivity dropped during monitoring; retrying before concluding failure.",
+                failure_reason="ssh_disconnect",
+            )
+            continue
 
         if vm_status in {"STOPPED", "TERMINATED"}:
             if restart_attempted:
-                raise RuntimeError(f"VM entered {vm_status} twice; leaving instance intact for inspection.")
+                return {
+                    "state": REMOTE_STATUS_UNKNOWN,
+                    "stage": "preempted_twice",
+                    "message": f"VM entered {vm_status} twice during monitoring.",
+                    "failure_reason": "spot_preempted_or_interrupted",
+                }
             status_store.update("running", "preempted_vm_detected", f"VM entered {vm_status}; checking whether remote restart is actually needed.", vm_status=vm_status)
             run_command(gcloud_base + ["compute", "instances", "start", args.instance_name, f"--zone={args.zone}"])
             wait_for_ssh(gcloud_base, args.instance_name, args.zone)
@@ -1089,8 +1307,29 @@ def monitor_run(
             restart_attempted = True
             continue
 
-        remote_status = parse_status_json(read_remote_file(gcloud_base, args.instance_name, args.zone, manifest.remote_status_path))
-        dataset_statuses = read_remote_dataset_statuses(gcloud_base, args.instance_name, args.zone, manifest.remote_run_root)
+        try:
+            remote_status = parse_status_json(read_remote_file(gcloud_base, args.instance_name, args.zone, manifest.remote_status_path))
+            dataset_statuses = read_remote_dataset_statuses(gcloud_base, args.instance_name, args.zone, manifest.remote_run_root)
+        except Exception:
+            vm_exists = safe_instance_exists(gcloud_base, args.instance_name, args.zone)
+            if vm_exists is False:
+                return {
+                    "state": "missing",
+                    "stage": "vm_missing",
+                    "message": "VM disappeared before remote status could be read.",
+                    "failure_reason": RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+                }
+            ssh_disconnects += 1
+            if ssh_disconnects >= 3:
+                return {
+                    "state": REMOTE_STATUS_UNKNOWN,
+                    "stage": "ssh_disconnect",
+                    "message": "Lost SSH/log access during monitoring.",
+                    "failure_reason": "ssh_disconnect",
+                }
+            continue
+
+        ssh_disconnects = 0
         summary = summarize_remote_progress(remote_status, dataset_statuses)
 
         if summary != last_summary:
@@ -1108,6 +1347,7 @@ def monitor_run(
 
         state = str(remote_status.get("state", "")).lower()
         if state in {"completed", "failed"}:
+            remote_status.setdefault("vm_status", vm_status)
             return remote_status
 
 
@@ -1129,7 +1369,7 @@ def print_manifest_summary(manifest: RunManifest) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
+    args = parse_args(argv) if argv is not None else parse_args()
     config_path = absolute_repo_path(args.config)
     results_root = absolute_repo_path(args.results_root)
     preflight = run_preflight(config_path, args.project)
@@ -1206,18 +1446,25 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.dry_run:
         status_store.update(
-            "dry_run_complete",
+            RUN_OUTCOME_DRY_RUN_COMPLETE,
             "dry_run",
             "Dry run completed after preflight, manifest creation, and bundle creation. No VM was created.",
-            run_outcome="dry_run_complete",
+            run_outcome=RUN_OUTCOME_DRY_RUN_COMPLETE,
+            vm_outcome="not_created",
+            destroy_allowed=False,
         )
         print(f"Dry run complete. Manifest and bundle are ready in {local_run_dir}")
         print(f"Latest run pointer: {latest_run_path}")
         print_final_run_summary(status_store.latest_path, local_run_dir)
         return 0
 
-    destroy_allowed = not args.keep_vm
     exit_code = 0
+    run_outcome: str | None = None
+    failure_reason: str | None = None
+    remote_status: dict[str, Any] = {}
+    remote_state = REMOTE_STATUS_UNKNOWN
+    artifact_verification = build_default_artifact_verification()
+    artifact_verification.expected_files = []
     try:
         if instance_exists(gcloud_base, args.instance_name, args.zone):
             status_store.update("running", "instance_reset", "Existing instance found; deleting it first.")
@@ -1267,107 +1514,253 @@ def main(argv: list[str] | None = None) -> int:
             manifest.remote_artifact_tarball,
         )
         if not runner_started:
-            destroy_allowed = False
+            run_outcome = RUN_OUTCOME_REMOTE_START_FAILED
+            failure_reason = RUN_OUTCOME_REMOTE_START_FAILED
             status_store.update(
-                "vm_preserved_for_inspection",
+                RUN_OUTCOME_REMOTE_START_FAILED,
                 "remote_start_integrity_failed",
                 "Remote runner launch could not be confirmed. VM preserved for inspection.",
                 remote_restart_guard=runner_guard,
-                vm_outcome="vm_preserved_for_inspection",
+                run_outcome=run_outcome,
+                failure_reason=failure_reason,
             )
             print("Remote runner launch could not be confirmed. VM preserved for inspection.")
-            return 1
-        status_store.update(
-            "running",
-            "remote_start_verified",
-            "Remote orchestration launch confirmed.",
-            remote_restart_guard=runner_guard,
-        )
+            exit_code = 1
+        else:
+            status_store.update(
+                "running",
+                "remote_start_verified",
+                "Remote orchestration launch confirmed.",
+                remote_restart_guard=runner_guard,
+            )
+        if run_outcome is None:
+            remote_status = monitor_run(
+                gcloud_base=gcloud_base,
+                args=args,
+                manifest=manifest,
+                status_store=status_store,
+            )
+            remote_state = str(remote_status.get("state", REMOTE_STATUS_UNKNOWN)).lower()
+            failure_reason = str(remote_status.get("failure_reason", "")).strip() or None
 
-        remote_status = monitor_run(
-            gcloud_base=gcloud_base,
-            args=args,
-            manifest=manifest,
-            status_store=status_store,
-        )
-
-        remote_state = str(remote_status.get("state", "failed")).lower()
-        status_store.update("running", "download", "Downloading preserved artifact tarball.", remote_status=remote_status)
+            if remote_state == "missing":
+                run_outcome = RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL
+                failure_reason = failure_reason or RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL
+                exit_code = 1
+            elif remote_state == REMOTE_STATUS_UNKNOWN:
+                exit_code = 1
 
         tarball_local = local_run_dir / "artifacts.tar.gz"
         extracted_dir = local_run_dir / "artifacts"
-        try:
-            artifact_result = download_and_extract_artifacts(
-                gcloud_base,
-                args.instance_name,
-                args.zone,
-                manifest.remote_artifact_tarball,
-                tarball_local,
-                extracted_dir,
-            )
-        except Exception as exc:
-            destroy_allowed = False
-            status_store.update(
-                "vm_preserved_for_inspection",
-                "artifact_download_failed",
-                f"Artifact download or extraction failed: {exc}",
-                vm_outcome="vm_preserved_for_inspection",
-            )
-            print(f"Artifact download or extraction failed. VM preserved for inspection: {exc}")
-            return 1
-        verified, verification_message = verify_preserved_results(extracted_dir, remote_state)
-        if verified and remote_state == "completed":
-            status_store.update(
-                "run_completed_verified",
-                "verification_passed",
-                verification_message,
-                extracted_dir=str(extracted_dir),
-                artifacts_tarball_size_bytes=artifact_result.tarball_size_bytes,
-                run_outcome="run_completed_verified",
-            )
-        elif verified:
-            status_store.update(
-                "remote_failed_artifacts_preserved",
-                "verification_passed_remote_failed",
-                verification_message,
-                extracted_dir=str(extracted_dir),
-                artifacts_tarball_size_bytes=artifact_result.tarball_size_bytes,
-                run_outcome="remote_failed_artifacts_preserved",
-            )
-        else:
-            status_store.update(
-                "run_completed_unverified",
-                "verification_failed",
-                verification_message,
-                extracted_dir=str(extracted_dir),
-                artifacts_tarball_size_bytes=artifact_result.tarball_size_bytes,
-                run_outcome="run_completed_unverified",
-            )
+        should_attempt_download = False
+        if run_outcome is None:
+            should_attempt_download = True
+        elif run_outcome != RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL:
+            try:
+                should_attempt_download = remote_artifact_exists(
+                    gcloud_base,
+                    args.instance_name,
+                    args.zone,
+                    manifest.remote_artifact_tarball,
+                )
+            except Exception:
+                should_attempt_download = False
 
-        if not verified:
-            destroy_allowed = False
+        if should_attempt_download:
+            status_store.update(
+                "running",
+                "download",
+                "Downloading preserved artifact tarball.",
+                remote_status=remote_status,
+                remote_state=remote_state,
+            )
+            try:
+                artifact_result = download_and_extract_artifacts(
+                    gcloud_base,
+                    args.instance_name,
+                    args.zone,
+                    manifest.remote_artifact_tarball,
+                    tarball_local,
+                    extracted_dir,
+                )
+                artifact_verification = inspect_preserved_artifacts(
+                    tarball_path=artifact_result.tarball_path,
+                    extracted_dir=artifact_result.extracted_dir,
+                    remote_state=remote_state,
+                )
+                status_store.update(
+                    "running",
+                    "artifact_verification",
+                    artifact_verification.verification_message,
+                    extracted_dir=str(extracted_dir),
+                    artifacts_tarball_size_bytes=artifact_result.tarball_size_bytes,
+                    artifacts_downloaded=artifact_verification.artifacts_downloaded,
+                    extraction_verified=artifact_verification.extraction_verified,
+                    expected_outputs_present=artifact_verification.expected_outputs_present,
+                    artifact_verified=artifact_verification.artifact_verified,
+                    remote_state=remote_state,
+                )
+            except Exception as exc:
+                artifact_verification = build_default_artifact_verification()
+                artifact_verification.expected_files = []
+                artifact_verification.verification_message = f"Artifact download or extraction failed: {exc}"
+                artifact_verification.tarball_exists = tarball_local.exists()
+                artifact_verification.tarball_size_bytes = tarball_local.stat().st_size if tarball_local.exists() else 0
+                status_store.update(
+                    RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+                    "artifact_download_failed",
+                    artifact_verification.verification_message,
+                    run_outcome=RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+                    failure_reason="artifact_download_failed",
+                    artifacts_downloaded=False,
+                    extraction_verified=False,
+                    expected_outputs_present=False,
+                    artifact_verified=False,
+                    remote_state=remote_state,
+                )
+                run_outcome = RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED
+                failure_reason = "artifact_download_failed"
+                exit_code = 1
 
-        if not args.keep_remote:
+        if run_outcome is None:
+            if remote_state == "completed" and artifact_verification.artifact_verified:
+                run_outcome = RUN_OUTCOME_COMPLETED_VERIFIED
+            elif remote_state == "completed":
+                run_outcome = RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED
+                failure_reason = failure_reason or "artifact_verification_failed"
+                exit_code = 1
+            elif remote_state == "failed":
+                run_outcome = RUN_OUTCOME_REMOTE_RUN_FAILED
+                failure_reason = failure_reason or "remote_run_failed"
+                exit_code = 1
+            elif artifact_verification.artifacts_downloaded:
+                run_outcome = RUN_OUTCOME_COMPLETED_UNVERIFIED
+                failure_reason = failure_reason or "remote_state_unknown"
+                exit_code = 1
+            elif remote_state == REMOTE_STATUS_UNKNOWN:
+                run_outcome = RUN_OUTCOME_REMOTE_MONITOR_FAILED
+                failure_reason = failure_reason or "remote_state_unknown"
+                exit_code = 1
+
+        if not args.keep_remote and safe_instance_exists(gcloud_base, args.instance_name, args.zone):
             ssh_command(gcloud_base, args.instance_name, args.zone, f"rm -rf {remote['run_root']}", check=False)
 
-        if remote_state != "completed":
-            print("Remote run finished with a failure state. Preserved artifacts were downloaded for inspection.")
-            exit_code = 1
-            destroy_allowed = False
-        else:
+        status_store.update(
+            run_outcome or RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE,
+            "run_terminal",
+            artifact_verification.verification_message or "Launcher reached terminal state.",
+            run_outcome=run_outcome or RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE,
+            failure_reason=failure_reason,
+            remote_status=remote_status,
+            remote_state=remote_state,
+            artifacts_downloaded=artifact_verification.artifacts_downloaded,
+            extraction_verified=artifact_verification.extraction_verified,
+            expected_outputs_present=artifact_verification.expected_outputs_present,
+            artifact_verified=artifact_verification.artifact_verified,
+        )
+
+        if run_outcome == RUN_OUTCOME_COMPLETED_VERIFIED:
             print(f"Run complete. Preserved artifacts are in {local_run_dir}")
+        elif run_outcome == RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL:
+            print("WARNING: Results were not retrieved because the VM had already disappeared.")
+        else:
+            print("WARNING: Run did not complete with verified local artifacts. VM will only be destroyed if the centralized safety guard permits it.")
+    except Exception as exc:
+        exit_code = 1
+        if run_outcome is None:
+            run_outcome = RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE
+        failure_reason = failure_reason or exc.__class__.__name__.lower()
+        status_store.update(
+            run_outcome,
+            "launcher_exception",
+            f"Launcher failed unexpectedly: {exc}",
+            run_outcome=run_outcome,
+            failure_reason=failure_reason,
+            remote_state=remote_state,
+            artifacts_downloaded=artifact_verification.artifacts_downloaded,
+            extraction_verified=artifact_verification.extraction_verified,
+            expected_outputs_present=artifact_verification.expected_outputs_present,
+            artifact_verified=artifact_verification.artifact_verified,
+        )
     finally:
-        if destroy_allowed:
+        if run_outcome is None:
+            run_outcome = RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE
+            failure_reason = failure_reason or "missing_terminal_run_outcome"
+            status_store.update(
+                run_outcome,
+                "run_terminal_fallback",
+                "Launcher reached finally without an explicit terminal outcome.",
+                run_outcome=run_outcome,
+                failure_reason=failure_reason,
+            )
+
+        instance_exists_at_end = safe_instance_exists(gcloud_base, args.instance_name, args.zone)
+        status_store.update(
+            "running",
+            "destroy_guard_check",
+            "Evaluating centralized auto-destroy guard.",
+            run_outcome=run_outcome,
+            failure_reason=failure_reason,
+            remote_state=remote_state,
+            artifacts_downloaded=artifact_verification.artifacts_downloaded,
+            extraction_verified=artifact_verification.extraction_verified,
+            expected_outputs_present=artifact_verification.expected_outputs_present,
+            artifact_verified=artifact_verification.artifact_verified,
+            instance_exists_at_end=instance_exists_at_end,
+        )
+        destroy_allowed, destroy_reason = can_auto_destroy(status_store.current_payload(), args)
+
+        if destroy_allowed and instance_exists_at_end:
             try:
-                status_store.update("running", "destroy", "Destroying VM.")
+                status_store.update("running", "destroy", "Destroying VM.", destroy_allowed=True)
                 delete_instance(gcloud_base, args.instance_name, args.zone)
-                status_store.update("vm_destroyed", "destroyed", "VM destroyed.", vm_outcome="vm_destroyed")
+                status_store.update(
+                    VM_OUTCOME_DESTROYED,
+                    "destroyed",
+                    "VM destroyed.",
+                    run_outcome=run_outcome,
+                    vm_outcome=VM_OUTCOME_DESTROYED,
+                    destroy_allowed=True,
+                    instance_exists_at_end=False,
+                )
             except Exception as exc:
-                status_store.update("vm_preserved_for_inspection", "destroy_failed", f"Failed to destroy VM: {exc}", vm_outcome="vm_preserved_for_inspection")
+                status_store.update(
+                    VM_OUTCOME_PRESERVED,
+                    "destroy_failed",
+                    f"Failed to destroy VM: {exc}",
+                    run_outcome=run_outcome,
+                    vm_outcome=VM_OUTCOME_PRESERVED,
+                    destroy_allowed=False,
+                    failure_reason=failure_reason or "destroy_failed",
+                    instance_exists_at_end=True,
+                )
                 print(f"WARNING: failed to destroy VM automatically: {exc}")
         else:
-            status_store.update("vm_preserved_for_inspection", "destroy_skipped", "VM preserved for inspection.", vm_outcome="vm_preserved_for_inspection")
-            print(f"VM preserved: {args.instance_name} in {args.zone}")
+            vm_outcome = VM_OUTCOME_ALREADY_GONE if instance_exists_at_end is False else VM_OUTCOME_PRESERVED
+            message = (
+                "VM already gone before final cleanup."
+                if vm_outcome == VM_OUTCOME_ALREADY_GONE
+                else f"VM preserved for inspection. Auto-destroy blocked: {destroy_reason}"
+            )
+            status_store.update(
+                vm_outcome,
+                "destroy_skipped",
+                message,
+                run_outcome=run_outcome,
+                vm_outcome=vm_outcome,
+                destroy_allowed=False,
+                failure_reason=failure_reason,
+                instance_exists_at_end=instance_exists_at_end,
+                remote_state=remote_state,
+                artifacts_downloaded=artifact_verification.artifacts_downloaded,
+                extraction_verified=artifact_verification.extraction_verified,
+                expected_outputs_present=artifact_verification.expected_outputs_present,
+                artifact_verified=artifact_verification.artifact_verified,
+            )
+            if vm_outcome == VM_OUTCOME_PRESERVED:
+                print(f"VM preserved: {args.instance_name} in {args.zone}")
+            else:
+                print("WARNING: VM is already gone and outputs were not verified locally.")
         print(f"Latest run pointer: {latest_run_path}")
         print_final_run_summary(status_store.latest_path, local_run_dir)
 

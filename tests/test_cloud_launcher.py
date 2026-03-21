@@ -9,8 +9,16 @@ import run_cloud_sweep
 from cloud.launch_gcp_run import (
     DatasetSpec,
     LATEST_RUN_FILE_NAME,
+    RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+    RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED,
+    RUN_OUTCOME_COMPLETED_VERIFIED,
+    RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+    VM_OUTCOME_ALREADY_GONE,
+    can_auto_destroy,
     download_and_extract_artifacts,
+    inspect_preserved_artifacts,
     LauncherStatusStore,
+    monitor_run,
     PreflightResult,
     RunManifest,
     build_remote_config,
@@ -478,6 +486,183 @@ def test_download_and_extract_artifacts_rejects_empty_tarball(tmp_path: Path, mo
         assert "is empty" in str(exc)
     else:
         raise AssertionError("Expected empty tarball to fail.")
+
+
+def test_can_auto_destroy_rejects_null_run_outcome():
+    args = argparse.Namespace(keep_vm=False)
+    allowed, reason = can_auto_destroy(
+        {
+            "run_outcome": None,
+            "artifacts_downloaded": True,
+            "artifact_verified": True,
+            "extraction_verified": True,
+            "expected_outputs_present": True,
+            "remote_state": "completed",
+        },
+        args,
+    )
+
+    assert allowed is False
+    assert "explicit success" in reason
+
+
+def test_can_auto_destroy_rejects_missing_artifacts():
+    args = argparse.Namespace(keep_vm=False)
+    allowed, reason = can_auto_destroy(
+        {
+            "run_outcome": RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "remote_state": "completed",
+        },
+        args,
+    )
+
+    assert allowed is False
+    assert "explicit success" in reason or "downloaded" in reason
+
+
+def test_inspect_preserved_artifacts_rejects_extraction_missing_expected_outputs(tmp_path: Path):
+    tarball = tmp_path / "artifacts.tar.gz"
+    tarball.write_bytes(b"non-empty")
+    extracted_dir = tmp_path / "artifacts"
+    _write_text(extracted_dir / "run_status.json", "{}")
+    _write_text(extracted_dir / "manifest.json", "{}")
+    _write_text(extracted_dir / "config.yaml", "datasets: []\n")
+    _write_text(extracted_dir / "logs" / "engine_run.log", "ok\n")
+    _write_text(extracted_dir / "Outputs" / "ES_60m" / "status.json", "{}")
+
+    verification = inspect_preserved_artifacts(
+        tarball_path=tarball,
+        extracted_dir=extracted_dir,
+        remote_state="completed",
+    )
+
+    assert verification.artifacts_downloaded is True
+    assert verification.extraction_verified is True
+    assert verification.expected_outputs_present is False
+    assert verification.artifact_verified is False
+
+
+def test_monitor_run_timeout_returns_non_success_and_never_implies_destroy(monkeypatch, tmp_path: Path):
+    run_dir = tmp_path / "cloud_results" / "test-run"
+    run_dir.mkdir(parents=True)
+    store = LauncherStatusStore(
+        run_dir,
+        run_id="test-run",
+        instance_name="strategy-sweep",
+        zone="australia-southeast2-a",
+        config_path="cloud/config.yaml",
+        local_results_dir=str(run_dir),
+        remote_run_root="/tmp/strategy_engine_runs/test-run",
+        created_utc="2026-03-20T00:00:00+00:00",
+    )
+    manifest = _make_manifest(tmp_path, [])
+    args = argparse.Namespace(instance_name="strategy-sweep", zone="australia-southeast2-a", poll_seconds=0, keep_vm=False)
+    clock = iter([0, 0, 2])
+
+    monkeypatch.setattr("cloud.launch_gcp_run.time.time", lambda: next(clock))
+    monkeypatch.setattr("cloud.launch_gcp_run.time.sleep", lambda _seconds: None)
+    monkeypatch.setattr("cloud.launch_gcp_run.describe_instance_status", lambda *args, **kwargs: "RUNNING")
+    monkeypatch.setattr("cloud.launch_gcp_run.read_remote_file", lambda *args, **kwargs: "{}")
+    monkeypatch.setattr("cloud.launch_gcp_run.read_remote_dataset_statuses", lambda *args, **kwargs: [])
+
+    remote_status = monitor_run(
+        gcloud_base=[],
+        args=args,
+        manifest=manifest,
+        status_store=store,
+        timeout_seconds=1,
+    )
+
+    assert remote_status["stage"] == "monitor_timeout"
+    assert remote_status["state"] == "unknown"
+    allowed, _reason = can_auto_destroy(
+        {
+            "run_outcome": "remote_monitor_failed",
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "remote_state": remote_status["state"],
+        },
+        argparse.Namespace(keep_vm=False),
+    )
+    assert allowed is False
+
+
+def test_can_auto_destroy_allows_only_verified_success():
+    args = argparse.Namespace(keep_vm=False)
+    allowed, reason = can_auto_destroy(
+        {
+            "run_outcome": RUN_OUTCOME_COMPLETED_VERIFIED,
+            "artifacts_downloaded": True,
+            "artifact_verified": True,
+            "extraction_verified": True,
+            "expected_outputs_present": True,
+            "remote_state": "completed",
+        },
+        args,
+    )
+
+    assert allowed is True
+    assert "verified success" in reason
+
+
+def test_can_auto_destroy_keep_vm_still_wins():
+    args = argparse.Namespace(keep_vm=True)
+    allowed, reason = can_auto_destroy(
+        {
+            "run_outcome": RUN_OUTCOME_COMPLETED_VERIFIED,
+            "artifacts_downloaded": True,
+            "artifact_verified": True,
+            "extraction_verified": True,
+            "expected_outputs_present": True,
+            "remote_state": "completed",
+        },
+        args,
+    )
+
+    assert allowed is False
+    assert "--keep-vm" in reason
+
+
+def test_terminal_failure_status_fields_can_be_persisted(tmp_path: Path):
+    run_dir = tmp_path / "cloud_results" / "test-run"
+    run_dir.mkdir(parents=True)
+    store = LauncherStatusStore(
+        run_dir,
+        run_id="test-run",
+        instance_name="strategy-sweep",
+        zone="australia-southeast2-a",
+        config_path="cloud/config.yaml",
+        local_results_dir=str(run_dir),
+        remote_run_root="/tmp/strategy_engine_runs/test-run",
+        created_utc="2026-03-20T00:00:00+00:00",
+    )
+
+    store.update(
+        RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+        "run_terminal",
+        "VM disappeared before retrieval.",
+        run_outcome=RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+        vm_outcome=VM_OUTCOME_ALREADY_GONE,
+        failure_reason="vm_missing_before_retrieval",
+        destroy_allowed=False,
+        artifacts_downloaded=False,
+        extraction_verified=False,
+        expected_outputs_present=False,
+        artifact_verified=False,
+        instance_exists_at_end=False,
+    )
+
+    payload = json.loads((run_dir / "launcher_status.json").read_text(encoding="utf-8"))
+    assert payload["run_outcome"] == RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL
+    assert payload["vm_outcome"] == VM_OUTCOME_ALREADY_GONE
+    assert payload["failure_reason"] == "vm_missing_before_retrieval"
+    assert payload["destroy_allowed"] is False
 
 
 def test_main_dry_run_stops_before_vm_creation(tmp_path: Path, monkeypatch):
