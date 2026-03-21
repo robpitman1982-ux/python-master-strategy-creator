@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+import json
+import shutil
+import uuid
+from pathlib import Path
+
+from dashboard_utils import (
+    badge_for_value,
+    build_run_choice_label,
+    choose_default_result_source,
+    classify_run_status,
+    collect_result_sources,
+    discover_launcher_run_dirs,
+    estimate_run_cost,
+    pick_best_candidate_file,
+)
+
+
+def _write_text(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _write_status(run_dir: Path, payload: dict) -> None:
+    _write_text(run_dir / "launcher_status.json", json.dumps(payload))
+
+
+def _make_workspace_temp_dir() -> Path:
+    temp_dir = Path.cwd() / ".tmp_dashboard_utils" / uuid.uuid4().hex
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    return temp_dir
+
+
+def test_discover_launcher_run_dirs_newest_first():
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        older = tmp_path / "cloud_results" / "run-older"
+        newer = tmp_path / "cloud_results" / "run-newer"
+        _write_status(older, {"run_id": "run-older"})
+        _write_status(newer, {"run_id": "run-newer"})
+
+        older_time = 1_700_000_000
+        newer_time = older_time + 60
+        import os
+
+        os.utime(older, (older_time, older_time))
+        os.utime(newer, (newer_time, newer_time))
+
+        result = discover_launcher_run_dirs(tmp_path / "cloud_results")
+
+        assert [path.name for path in result] == ["run-newer", "run-older"]
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_estimate_run_cost_uses_local_price_map():
+    record = {
+        "launcher_status": {
+            "created_utc": "2026-03-21T00:00:00+00:00",
+            "updated_utc": "2026-03-21T02:00:00+00:00",
+            "vm_outcome": "vm_preserved_for_inspection",
+            "state": "running",
+        },
+        "run_manifest": {
+            "machine_type": "n2-highcpu-96",
+            "provisioning_model": "SPOT",
+        },
+    }
+
+    estimate = estimate_run_cost(record)
+
+    assert estimate["machine_type"] == "n2-highcpu-96"
+    assert estimate["provisioning_model"] == "SPOT"
+    assert estimate["elapsed_seconds"] == 7200
+    assert round(float(estimate["estimated_total_cost"]), 2) == 3.24
+    assert estimate["billing_active"] is True
+
+
+def test_collect_result_sources_prefers_cloud_runs_with_artifacts(monkeypatch):
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        monkeypatch.chdir(tmp_path)
+        run_dir = tmp_path / "cloud_results" / "run-1"
+        _write_status(
+            run_dir,
+            {
+                "run_id": "run-1",
+                "state": "run_completed_verified",
+                "updated_utc": "2026-03-21T02:00:00+00:00",
+            },
+        )
+        _write_text(run_dir / "run_manifest.json", json.dumps({"machine_type": "n2-highcpu-96"}))
+        _write_text(run_dir / "artifacts" / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+        _write_text(tmp_path / "Outputs" / "ES_60m" / "family_summary_results.csv", "strategy_type\ntrend\n")
+
+        sources = collect_result_sources()
+        default_key = choose_default_result_source(sources)
+
+        assert any(source.category == "Cloud Runs" for source in sources)
+        assert default_key is not None
+        assert default_key.startswith("cloud::")
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_pick_best_candidate_file_prefers_master_leaderboard():
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        _write_text(tmp_path / "family_summary_results.csv", "strategy_type\ntrend\n")
+        _write_text(tmp_path / "master_leaderboard.csv", "rank\n1\n")
+
+        best = pick_best_candidate_file(tmp_path)
+
+        assert best is not None
+        assert best.name == "master_leaderboard.csv"
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_badges_and_run_classification_are_readable():
+    assert badge_for_value("run_completed_verified").startswith("🟢")
+    assert classify_run_status({"state": "dry_run_complete"}) == "dry-run"
+    label = build_run_choice_label(
+        {
+            "run_dir": Path("cloud_results/run-1"),
+            "launcher_status": {"run_id": "run-1", "state": "running", "updated_utc": "2026-03-21T02:00:00+00:00"},
+        }
+    )
+    assert "Running" in label
