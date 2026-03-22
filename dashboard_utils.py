@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,9 @@ RESULT_FILE_NAMES = [
     "family_summary_results.csv",
 ]
 
+UPLOAD_SUFFIXES = {".csv", ".parquet", ".txt", ".zip", ".gz"}
+EXPORT_SUFFIXES = {".csv", ".zip", ".json", ".gz"}
+
 HOURLY_RATE_ESTIMATES: dict[str, dict[str, float]] = {
     "n2-highcpu-96": {"STANDARD": 5.40, "SPOT": 1.62},
     "n2-highcpu-48": {"STANDARD": 2.70, "SPOT": 0.81},
@@ -25,23 +29,23 @@ HOURLY_RATE_ESTIMATES: dict[str, dict[str, float]] = {
 }
 
 BADGE_MAP = {
-    "run_completed_verified": "🟢 Verified Complete",
-    "run_completed_unverified": "🟡 Complete, Unverified",
-    "artifact_download_failed": "🔴 Artifact Download Failed",
-    "artifact_verification_failed": "🔴 Artifact Verification Failed",
-    "remote_start_failed": "🔴 Remote Start Failed",
-    "remote_monitor_failed": "🔴 Monitor Failed",
-    "remote_run_failed": "🔴 Remote Run Failed",
-    "vm_missing_before_retrieval": "🔴 VM Missing Before Retrieval",
-    "unexpected_launcher_failure": "🔴 Launcher Failure",
-    "remote_failed_artifacts_preserved": "🔴 Remote Failed, Artifacts Preserved",
-    "dry_run_complete": "⚪ Dry Run Only",
-    "vm_preserved_for_inspection": "🟠 VM Preserved",
-    "vm_already_gone": "⚫ VM Already Gone",
-    "vm_destroyed": "✅ VM Destroyed",
-    "preflight_passed": "🔵 Preflight Passed",
-    "prepared": "🔵 Prepared",
-    "running": "🟢 Running",
+    "run_completed_verified": "Verified Complete",
+    "run_completed_unverified": "Complete, Unverified",
+    "artifact_download_failed": "Artifact Download Failed",
+    "artifact_verification_failed": "Artifact Verification Failed",
+    "remote_start_failed": "Remote Start Failed",
+    "remote_monitor_failed": "Monitor Failed",
+    "remote_run_failed": "Remote Run Failed",
+    "vm_missing_before_retrieval": "VM Missing Before Retrieval",
+    "unexpected_launcher_failure": "Launcher Failure",
+    "remote_failed_artifacts_preserved": "Remote Failed, Artifacts Preserved",
+    "dry_run_complete": "Dry Run Only",
+    "vm_preserved_for_inspection": "VM Preserved",
+    "vm_already_gone": "VM Already Gone",
+    "vm_destroyed": "VM Destroyed",
+    "preflight_passed": "Preflight Passed",
+    "prepared": "Prepared",
+    "running": "Running",
 }
 
 
@@ -55,6 +59,24 @@ class ResultSource:
     run_dir: Path | None
     launcher_status: dict[str, Any]
     run_manifest: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ConsoleStoragePaths:
+    root: Path
+    uploads: Path
+    runs: Path
+    exports: Path
+    backups: Path
+
+
+@dataclass(frozen=True)
+class StorageFileEntry:
+    name: str
+    path: Path
+    size_bytes: int
+    modified_at: datetime | None
+    category: str
 
 
 def read_json_file(path: Path) -> dict[str, Any]:
@@ -76,10 +98,65 @@ def parse_timestamp(value: str | None) -> datetime | None:
         return None
 
 
+def resolve_console_storage_paths(root: Path | None = None) -> ConsoleStoragePaths:
+    if root is None:
+        env_root = os.environ.get("STRATEGY_CONSOLE_STORAGE")
+        root = Path(env_root).expanduser() if env_root else Path.home() / "strategy_console_storage"
+    root = root.expanduser()
+    return ConsoleStoragePaths(
+        root=root,
+        uploads=root / "uploads",
+        runs=root / "runs",
+        exports=root / "exports",
+        backups=root / "backups",
+    )
+
+
+def _sorted_files(directory: Path, *, allowed_suffixes: set[str] | None = None) -> list[StorageFileEntry]:
+    if not directory.exists():
+        return []
+
+    payload: list[StorageFileEntry] = []
+    for path in directory.iterdir():
+        if not path.is_file():
+            continue
+        if allowed_suffixes is not None and path.suffix.lower() not in allowed_suffixes:
+            continue
+        stat = path.stat()
+        payload.append(
+            StorageFileEntry(
+                name=path.name,
+                path=path,
+                size_bytes=int(stat.st_size),
+                modified_at=datetime.fromtimestamp(stat.st_mtime, UTC),
+                category=directory.name,
+            )
+        )
+    return sorted(payload, key=lambda item: item.modified_at or datetime.min.replace(tzinfo=UTC), reverse=True)
+
+
+def list_uploaded_datasets(storage: ConsoleStoragePaths | None = None) -> list[StorageFileEntry]:
+    paths = storage or resolve_console_storage_paths()
+    return _sorted_files(paths.uploads, allowed_suffixes=UPLOAD_SUFFIXES)
+
+
+def list_export_files(storage: ConsoleStoragePaths | None = None) -> list[StorageFileEntry]:
+    paths = storage or resolve_console_storage_paths()
+    return _sorted_files(paths.exports, allowed_suffixes=EXPORT_SUFFIXES)
+
+
 def discover_launcher_run_dirs(results_root: Path = Path("cloud_results")) -> list[Path]:
     if not results_root.exists():
         return []
     run_dirs = [path for path in results_root.iterdir() if path.is_dir() and (path / "launcher_status.json").exists()]
+    return sorted(run_dirs, key=lambda path: path.stat().st_mtime, reverse=True)
+
+
+def discover_storage_run_dirs(storage: ConsoleStoragePaths | None = None) -> list[Path]:
+    paths = storage or resolve_console_storage_paths()
+    if not paths.runs.exists():
+        return []
+    run_dirs = [path for path in paths.runs.iterdir() if path.is_dir()]
     return sorted(run_dirs, key=lambda path: path.stat().st_mtime, reverse=True)
 
 
@@ -99,24 +176,58 @@ def collect_launcher_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
     return payload
 
 
+def _resolve_outputs_dir(run_dir: Path) -> Path | None:
+    candidates = [
+        run_dir / "artifacts" / "Outputs",
+        run_dir / "Outputs",
+        run_dir / "outputs",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def load_launcher_run_record(run_dir: Path) -> dict[str, Any]:
     launcher_status = read_json_file(run_dir / "launcher_status.json")
     run_manifest = read_json_file(run_dir / "run_manifest.json")
     artifact_status = read_json_file(run_dir / "artifacts" / "run_status.json")
     dataset_statuses = collect_launcher_dataset_statuses(run_dir)
-    outputs_dir = run_dir / "artifacts" / "Outputs"
+    outputs_dir = _resolve_outputs_dir(run_dir)
     return {
         "run_dir": run_dir,
         "launcher_status": launcher_status,
         "run_manifest": run_manifest,
         "artifact_status": artifact_status,
         "dataset_statuses": dataset_statuses,
-        "outputs_dir": outputs_dir if outputs_dir.exists() else None,
+        "outputs_dir": outputs_dir,
     }
 
 
 def collect_launcher_run_records(results_root: Path = Path("cloud_results")) -> list[dict[str, Any]]:
     return [load_launcher_run_record(run_dir) for run_dir in discover_launcher_run_dirs(results_root)]
+
+
+def collect_console_run_records(
+    *,
+    storage: ConsoleStoragePaths | None = None,
+    repo_results_root: Path = Path("cloud_results"),
+) -> list[dict[str, Any]]:
+    paths = storage or resolve_console_storage_paths()
+    records: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+
+    for run_dir in discover_storage_run_dirs(paths):
+        records.append(load_launcher_run_record(run_dir))
+        seen.add(run_dir.resolve())
+
+    for run_dir in discover_launcher_run_dirs(repo_results_root):
+        resolved = run_dir.resolve()
+        if resolved in seen:
+            continue
+        records.append(load_launcher_run_record(run_dir))
+
+    return sorted(records, key=lambda record: record["run_dir"].stat().st_mtime, reverse=True)
 
 
 def humanize_token(value: str | None) -> str:
@@ -138,8 +249,10 @@ def billing_status_for_launcher(launcher_status: dict[str, Any]) -> str:
     instance_exists_at_end = launcher_status.get("instance_exists_at_end")
     artifact_verified = bool(launcher_status.get("artifact_verified"))
 
-    if vm_outcome == "vm_destroyed" or instance_exists_at_end is False:
-        return "stopped" if artifact_verified or vm_outcome == "vm_destroyed" else "maybe_stopped"
+    if vm_outcome == "vm_destroyed":
+        return "stopped"
+    if instance_exists_at_end is False:
+        return "stopped" if artifact_verified else "maybe_stopped"
     if vm_outcome == "vm_preserved_for_inspection" and instance_exists_at_end is True:
         return "still_running"
     if vm_outcome == "vm_already_gone":
@@ -174,9 +287,7 @@ def classify_run_status(launcher_status: dict[str, Any]) -> str:
         return "running"
     if vm_outcome == "vm_preserved_for_inspection":
         return "preserved"
-    if state == "run_completed_verified" or run_outcome == "run_completed_verified":
-        return "completed"
-    if state == "run_completed_unverified" or run_outcome == "run_completed_unverified":
+    if run_outcome in {"run_completed_verified", "run_completed_unverified"}:
         return "completed"
     if run_outcome in {
         "artifact_download_failed",
@@ -202,21 +313,29 @@ def build_run_choice_label(record: dict[str, Any]) -> str:
     updated = status.get("updated_utc", "unknown")
     category = classify_run_status(status)
     prefix_map = {
-        "running": "🟢 Running",
-        "completed": "✅ Completed",
-        "preserved": "🟠 Preserved",
-        "failed": "🔴 Failed",
-        "dry-run": "⚪ Dry Run",
-        "unknown": "⚪ Unknown",
+        "running": "Running",
+        "completed": "Completed",
+        "preserved": "Preserved",
+        "failed": "Failed",
+        "dry-run": "Dry Run",
+        "unknown": "Unknown",
     }
-    prefix = prefix_map.get(category, "⚪ Unknown")
+    prefix = prefix_map.get(category, "Unknown")
     return f"{run_id} | {prefix} | {updated}"
 
 
 def format_bytes(num_bytes: int | float | None) -> str:
     if not isinstance(num_bytes, (int, float)) or num_bytes <= 0:
         return "Pending"
-    return f"{num_bytes / (1024 * 1024):.1f} MB"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(num_bytes)
+    unit = units[0]
+    for candidate in units:
+        unit = candidate
+        if value < 1024 or candidate == units[-1]:
+            break
+        value /= 1024
+    return f"{value:.1f} {unit}"
 
 
 def format_duration(seconds: float | int | None) -> str:
@@ -236,6 +355,12 @@ def format_currency(value: float | None) -> str:
     if value is None:
         return "Unknown"
     return f"${value:,.2f}"
+
+
+def format_datetime(value: datetime | None) -> str:
+    if value is None:
+        return "Unknown"
+    return value.astimezone(UTC).isoformat(timespec="seconds")
 
 
 def infer_provisioning_model(record: dict[str, Any]) -> str:
@@ -265,9 +390,7 @@ def estimate_run_cost(record: dict[str, Any]) -> dict[str, Any]:
         hourly_rate = next(iter(pricing.values()))
 
     total_cost = None if hourly_rate is None else hourly_rate * (elapsed_seconds / 3600)
-    vm_outcome = str(launcher_status.get("vm_outcome", "")).strip()
-    billing_active = vm_outcome != "vm_destroyed" and str(launcher_status.get("state", "")).strip() != "dry_run_complete"
-
+    billing_active = billing_status_for_launcher(launcher_status) == "still_running"
     return {
         "machine_type": machine_type or "unknown",
         "provisioning_model": provisioning_model,
@@ -343,10 +466,27 @@ def pick_best_candidate_file(base: Path | None) -> Path | None:
     return None
 
 
-def collect_result_sources(results_root: Path = Path("cloud_results")) -> list[ResultSource]:
+def load_log_tail(run_dir: Path, line_count: int = 60) -> str:
+    candidates = [
+        run_dir / "artifacts" / "logs" / "engine_run.log",
+        run_dir / "logs" / "engine_run.log",
+        run_dir / "engine_run.log",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            lines = candidate.read_text(encoding="utf-8", errors="replace").splitlines()
+            return "\n".join(lines[-line_count:]) or "(log is empty)"
+    return ""
+
+
+def collect_result_sources(
+    results_root: Path = Path("cloud_results"),
+    *,
+    storage: ConsoleStoragePaths | None = None,
+) -> list[ResultSource]:
     sources: list[ResultSource] = []
 
-    for record in collect_launcher_run_records(results_root):
+    for record in collect_console_run_records(storage=storage, repo_results_root=results_root):
         run_dir = record["run_dir"]
         outputs_dir = record["outputs_dir"]
         status = record["launcher_status"]
@@ -393,20 +533,6 @@ def collect_result_sources(results_root: Path = Path("cloud_results")) -> list[R
                 run_manifest={},
             )
         )
-        for directory in sorted(outputs_root.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True):
-            if directory.is_dir():
-                sources.append(
-                    ResultSource(
-                        key=f"local::{directory}",
-                        category="Local Outputs",
-                        label=f"{directory.name} | local dataset output",
-                        base_path=directory,
-                        outputs_dir=directory,
-                        run_dir=None,
-                        launcher_status={},
-                        run_manifest={},
-                    )
-                )
     return sources
 
 
