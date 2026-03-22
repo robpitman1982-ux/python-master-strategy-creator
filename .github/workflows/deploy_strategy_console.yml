@@ -34,7 +34,7 @@ jobs:
           # Required GitHub Secrets:
           # STRATEGY_CONSOLE_HOST
           # STRATEGY_CONSOLE_USER
-          # STRATEGY_CONSOLE_PORT (optional, defaults to 22)
+          # STRATEGY_CONSOLE_PORT
           # STRATEGY_CONSOLE_SSH_KEY
           ssh -p "${STRATEGY_CONSOLE_PORT:-22}" "${STRATEGY_CONSOLE_USER}@${STRATEGY_CONSOLE_HOST}" \
             "cd ~/python-master-strategy-creator && ./scripts/update_console.sh"
