@@ -8,7 +8,9 @@ from pathlib import Path
 from dashboard_utils import (
     badge_for_value,
     billing_status_for_launcher,
+    build_test_run_readiness,
     build_run_choice_label,
+    canonical_runs_root,
     choose_default_result_source,
     classify_run_status,
     collect_console_run_records,
@@ -48,6 +50,11 @@ def test_resolve_console_storage_paths_uses_expected_layout():
     assert paths.runs == root / "runs"
     assert paths.exports == root / "exports"
     assert paths.backups == root / "backups"
+
+
+def test_canonical_runs_root_points_to_storage_runs():
+    root = Path("/tmp/strategy_console_storage")
+    assert canonical_runs_root(resolve_console_storage_paths(root)) == root / "runs"
 
 
 def test_discover_launcher_run_dirs_newest_first():
@@ -142,9 +149,32 @@ def test_collect_console_run_records_prefers_storage_runs(monkeypatch):
         os.utime(storage.runs / "run-storage", (1_700_000_060, 1_700_000_060))
         os.utime(tmp_path / "cloud_results" / "run-repo", (1_700_000_000, 1_700_000_000))
 
-        records = collect_console_run_records(storage=storage, repo_results_root=tmp_path / "cloud_results")
+        records = collect_console_run_records(
+            storage=storage,
+            repo_results_root=tmp_path / "cloud_results",
+            include_legacy_fallback=True,
+        )
 
         assert [record["launcher_status"].get("run_id") for record in records] == ["run-storage", "run-repo"]
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_collect_console_run_records_can_disable_legacy_fallback(monkeypatch):
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        monkeypatch.chdir(tmp_path)
+        storage = resolve_console_storage_paths(tmp_path / "strategy_console_storage")
+        _write_status(storage.runs / "run-storage", {"run_id": "run-storage"})
+        _write_status(tmp_path / "cloud_results" / "run-repo", {"run_id": "run-repo"})
+
+        records = collect_console_run_records(
+            storage=storage,
+            repo_results_root=tmp_path / "cloud_results",
+            include_legacy_fallback=False,
+        )
+
+        assert [record["launcher_status"].get("run_id") for record in records] == ["run-storage"]
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
 
@@ -235,3 +265,19 @@ def test_billing_status_for_launcher_distinguishes_preserved_and_stopped():
 def test_operator_action_summary_prefers_persisted_action():
     assert operator_action_summary({"operator_action": "inspect VM and download artifacts manually"}) == "inspect VM and download artifacts manually"
     assert "No manual action required" in operator_action_summary({"run_outcome": "run_completed_verified"})
+
+
+def test_build_test_run_readiness_reports_ready_when_storage_and_dataset_exist():
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        storage = resolve_console_storage_paths(tmp_path / "strategy_console_storage")
+        storage.uploads.mkdir(parents=True, exist_ok=True)
+        storage.runs.mkdir(parents=True, exist_ok=True)
+        storage.exports.mkdir(parents=True, exist_ok=True)
+        _write_text(storage.uploads / "ES_60m.csv", "a,b\n1,2\n")
+
+        readiness = build_test_run_readiness(storage=storage, run_records=[], uploaded_datasets=list_uploaded_datasets(storage))
+
+        assert readiness.state == "ready"
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)

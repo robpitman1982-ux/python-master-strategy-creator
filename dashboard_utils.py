@@ -79,6 +79,13 @@ class StorageFileEntry:
     category: str
 
 
+@dataclass(frozen=True)
+class ReadinessReport:
+    state: str
+    summary: str
+    checks: list[tuple[str, bool]]
+
+
 def read_json_file(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -110,6 +117,11 @@ def resolve_console_storage_paths(root: Path | None = None) -> ConsoleStoragePat
         exports=root / "exports",
         backups=root / "backups",
     )
+
+
+def canonical_runs_root(storage: ConsoleStoragePaths | None = None) -> Path:
+    paths = storage or resolve_console_storage_paths()
+    return paths.runs
 
 
 def _sorted_files(directory: Path, *, allowed_suffixes: set[str] | None = None) -> list[StorageFileEntry]:
@@ -212,6 +224,7 @@ def collect_console_run_records(
     *,
     storage: ConsoleStoragePaths | None = None,
     repo_results_root: Path = Path("cloud_results"),
+    include_legacy_fallback: bool = False,
 ) -> list[dict[str, Any]]:
     paths = storage or resolve_console_storage_paths()
     records: list[dict[str, Any]] = []
@@ -221,11 +234,12 @@ def collect_console_run_records(
         records.append(load_launcher_run_record(run_dir))
         seen.add(run_dir.resolve())
 
-    for run_dir in discover_launcher_run_dirs(repo_results_root):
-        resolved = run_dir.resolve()
-        if resolved in seen:
-            continue
-        records.append(load_launcher_run_record(run_dir))
+    if include_legacy_fallback or not records:
+        for run_dir in discover_launcher_run_dirs(repo_results_root):
+            resolved = run_dir.resolve()
+            if resolved in seen:
+                continue
+            records.append(load_launcher_run_record(run_dir))
 
     return sorted(records, key=lambda record: record["run_dir"].stat().st_mtime, reverse=True)
 
@@ -274,6 +288,33 @@ def operator_action_summary(launcher_status: dict[str, Any]) -> str:
     if run_outcome in {"artifact_download_failed", "artifact_verification_failed", "remote_monitor_failed"}:
         return "Artifacts are incomplete locally. Use recovery commands below."
     return "Review the latest launcher status before taking action."
+
+
+def build_test_run_readiness(
+    *,
+    storage: ConsoleStoragePaths | None = None,
+    run_records: list[dict[str, Any]] | None = None,
+    uploaded_datasets: list[StorageFileEntry] | None = None,
+) -> ReadinessReport:
+    paths = storage or resolve_console_storage_paths()
+    records = run_records if run_records is not None else collect_console_run_records(storage=paths)
+    datasets = uploaded_datasets if uploaded_datasets is not None else list_uploaded_datasets(paths)
+
+    checks = [
+        ("storage root exists", paths.root.exists()),
+        ("uploads directory exists", paths.uploads.exists()),
+        ("runs directory exists", paths.runs.exists()),
+        ("exports directory exists", paths.exports.exists()),
+        ("at least one dataset uploaded", len(datasets) > 0),
+        ("run metadata readable", records is not None),
+    ]
+    passed = sum(1 for _, ok in checks if ok)
+
+    if passed == len(checks):
+        return ReadinessReport("ready", "Console looks ready for tonight's test run.", checks)
+    if passed >= max(1, len(checks) - 2):
+        return ReadinessReport("partially ready", "Console is mostly ready, but a few checks still need attention.", checks)
+    return ReadinessReport("not ready", "Console is missing key prerequisites for tonight's test run.", checks)
 
 
 def classify_run_status(launcher_status: dict[str, Any]) -> str:
@@ -483,10 +524,15 @@ def collect_result_sources(
     results_root: Path = Path("cloud_results"),
     *,
     storage: ConsoleStoragePaths | None = None,
+    include_legacy_fallback: bool = False,
 ) -> list[ResultSource]:
     sources: list[ResultSource] = []
 
-    for record in collect_console_run_records(storage=storage, repo_results_root=results_root):
+    for record in collect_console_run_records(
+        storage=storage,
+        repo_results_root=results_root,
+        include_legacy_fallback=include_legacy_fallback,
+    ):
         run_dir = record["run_dir"]
         outputs_dir = record["outputs_dir"]
         status = record["launcher_status"]

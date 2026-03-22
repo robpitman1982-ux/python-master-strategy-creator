@@ -11,7 +11,9 @@ import streamlit as st
 from dashboard_utils import (
     badge_for_value,
     billing_status_for_launcher,
+    build_test_run_readiness,
     build_run_choice_label,
+    canonical_runs_root,
     collect_console_run_records,
     estimate_run_cost,
     format_bytes,
@@ -106,9 +108,10 @@ st.markdown(
 
 runtime = dashboard_runtime_metadata()
 storage = resolve_console_storage_paths()
-run_records = collect_console_run_records(storage=storage, repo_results_root=Path("cloud_results"))
+run_records = collect_console_run_records(storage=storage, repo_results_root=Path("cloud_results"), include_legacy_fallback=False)
 uploaded_datasets = list_uploaded_datasets(storage)
 export_files = list_export_files(storage)
+readiness = build_test_run_readiness(storage=storage, run_records=run_records, uploaded_datasets=uploaded_datasets)
 
 run_options = {build_run_choice_label(record): record for record in run_records}
 dataset_options = {entry.name: entry for entry in uploaded_datasets}
@@ -124,6 +127,9 @@ st.sidebar.code(
     )
 )
 st.sidebar.caption(f"storage root: {storage.root}")
+st.sidebar.caption(f"uploads: {storage.uploads}")
+st.sidebar.caption(f"runs: {canonical_runs_root(storage)}")
+st.sidebar.caption(f"exports: {storage.exports}")
 
 selected_run_label = st.sidebar.selectbox("Selected run", list(run_options) or ["No runs found"])
 selected_dataset_label = st.sidebar.selectbox("Selected dataset", list(dataset_options) or ["No uploads found"])
@@ -168,6 +174,23 @@ top_metrics[3].metric("Artifact Verified", "yes" if selected_status.get("artifac
 top_metrics[4].metric("Machine Type", str(selected_manifest.get("machine_type") or selected_status.get("machine_type") or "unknown"))
 top_metrics[5].metric("Bundle Size", format_bytes(selected_status.get("bundle_size_bytes")))
 
+st.subheader("Tonight Test Run")
+readiness_cols = st.columns([1.1, 1.4, 1.4])
+readiness_cols[0].metric("Readiness", readiness.state)
+readiness_cols[1].metric("Selected Dataset", selected_dataset.name if selected_dataset is not None else "none")
+readiness_cols[2].metric("Selected Run", selected_status.get("run_id", "none") if selected_run else "none")
+st.write(readiness.summary)
+
+checklist_lines = []
+for label, ok in readiness.checks:
+    checklist_lines.append(f"[{'x' if ok else ' '}] {label}")
+st.code("\n".join(checklist_lines))
+
+st.caption(
+    "Canonical storage paths: "
+    f"uploads `{storage.uploads}` | runs `{canonical_runs_root(storage)}` | exports `{storage.exports}`"
+)
+
 left, right = st.columns([1.1, 1.4])
 
 with left:
@@ -198,7 +221,7 @@ with right:
     if run_records:
         st.dataframe(_records_table(run_records), use_container_width=True, hide_index=True)
     else:
-        st.warning("No launcher-managed runs found in storage or repo-local results.")
+        st.warning(f"No launcher-managed runs found in canonical runs storage: {canonical_runs_root(storage)}")
 
     st.subheader("Run Detail")
     if selected_run:
