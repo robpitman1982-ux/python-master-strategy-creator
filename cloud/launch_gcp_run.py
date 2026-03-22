@@ -1168,24 +1168,33 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     else:
         billing_message = "no"
 
-    print("=" * 60)
-    print("Final Run Summary")
-    print("=" * 60)
-    print(f"Run ID:              {status.get('run_id', local_run_dir.name)}")
-    print(f"Local Results Path:  {local_run_dir}")
-    print(f"Run Outcome:         {run_outcome}")
-    print(f"VM Outcome:          {vm_outcome}")
-    print(f"Artifact Downloaded: {'yes' if artifacts_downloaded else 'no'}")
-    print(f"Artifact Verified:   {'yes' if artifact_verified else 'no'}")
-    print(f"Destroy Allowed:     {'yes' if destroy_allowed else 'no'}")
-    print(f"Billing should now be stopped: {billing_message}")
+    outputs_dir = local_run_dir / "artifacts" / "Outputs"
+    results_location = outputs_dir if outputs_dir.exists() else local_run_dir
+
+    print("=============================")
+    print("STRATEGY ENGINE RUN COMPLETE")
+    print("=============================")
+    print(f"Run ID: {status.get('run_id', local_run_dir.name)}")
+    print(f"Local Results Path: {local_run_dir}")
+    print(f"Run Outcome: {run_outcome}")
+    print(f"Artifacts downloaded: {'YES' if artifacts_downloaded else 'NO'}")
+    print(f"Artifacts verified: {'YES' if artifact_verified else 'NO'}")
+    print(f"VM outcome: {vm_outcome}")
+    print(f"Destroy allowed: {'YES' if destroy_allowed else 'NO'}")
+    print(f"Billing stopped: {billing_message.upper()}")
+    print(f"Results location: {results_location}")
     if status.get("failure_reason"):
-        print(f"Failure Reason:      {status['failure_reason']}")
-    if run_outcome != RUN_OUTCOME_DRY_RUN_COMPLETE and run_outcome != RUN_OUTCOME_COMPLETED_VERIFIED:
+        print(f"Failure reason: {status['failure_reason']}")
+    if vm_outcome == VM_OUTCOME_PRESERVED:
+        print("VM preserved for inspection. Destroy manually if finished.")
+    if run_outcome not in {RUN_OUTCOME_DRY_RUN_COMPLETE, RUN_OUTCOME_COMPLETED_VERIFIED}:
+        print("RUN STATUS: FAILED")
+        print("Artifacts incomplete or unverified.")
+        print(f"Inspect logs in: {local_run_dir}")
         print("WARNING: Run did not complete verified artifact retrieval.")
         print("VM was preserved or may have already disappeared.")
         print("Do not trust this run's outputs until checked manually.")
-    print("=" * 60)
+    print("=============================")
 
 
 def create_remote_runner_file(run_dir: Path) -> Path:
