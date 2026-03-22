@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from paths import CONSOLE_SELECTION_PATH, CONSOLE_STORAGE_ROOT, EXPORTS_DIR, LEGACY_RESULTS_DIR, RUN_STATUS_PATH, UPLOADS_DIR
 
 RESULT_FILE_NAMES = [
     "master_leaderboard.csv",
@@ -107,8 +107,7 @@ def parse_timestamp(value: str | None) -> datetime | None:
 
 def resolve_console_storage_paths(root: Path | None = None) -> ConsoleStoragePaths:
     if root is None:
-        env_root = os.environ.get("STRATEGY_CONSOLE_STORAGE")
-        root = Path(env_root).expanduser() if env_root else Path.home() / "strategy_console_storage"
+        root = CONSOLE_STORAGE_ROOT
     root = root.expanduser()
     return ConsoleStoragePaths(
         root=root,
@@ -157,7 +156,24 @@ def list_export_files(storage: ConsoleStoragePaths | None = None) -> list[Storag
     return _sorted_files(paths.exports, allowed_suffixes=EXPORT_SUFFIXES)
 
 
-def discover_launcher_run_dirs(results_root: Path = Path("cloud_results")) -> list[Path]:
+def read_console_selection(path: Path = CONSOLE_SELECTION_PATH) -> list[str]:
+    payload = read_json_file(path)
+    selected = payload.get("selected_datasets", [])
+    if isinstance(selected, list):
+        return [str(item) for item in selected]
+    return []
+
+
+def write_console_selection(selected_datasets: list[str], path: Path = CONSOLE_SELECTION_PATH) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"selected_datasets": selected_datasets}, indent=2), encoding="utf-8")
+
+
+def read_console_run_status(path: Path = RUN_STATUS_PATH) -> dict[str, Any]:
+    return read_json_file(path)
+
+
+def discover_launcher_run_dirs(results_root: Path = LEGACY_RESULTS_DIR) -> list[Path]:
     if not results_root.exists():
         return []
     run_dirs = [path for path in results_root.iterdir() if path.is_dir() and (path / "launcher_status.json").exists()]
@@ -202,10 +218,14 @@ def _resolve_outputs_dir(run_dir: Path) -> Path | None:
 
 def load_launcher_run_record(run_dir: Path) -> dict[str, Any]:
     launcher_status = read_json_file(run_dir / "launcher_status.json")
+    if not launcher_status:
+        launcher_status = read_json_file(run_dir / "metadata.json")
     run_manifest = read_json_file(run_dir / "run_manifest.json")
     artifact_status = read_json_file(run_dir / "artifacts" / "run_status.json")
     dataset_statuses = collect_launcher_dataset_statuses(run_dir)
     outputs_dir = _resolve_outputs_dir(run_dir)
+    if outputs_dir is None and (run_dir / "leaderboard.csv").exists():
+        outputs_dir = run_dir
     return {
         "run_dir": run_dir,
         "launcher_status": launcher_status,
@@ -216,14 +236,14 @@ def load_launcher_run_record(run_dir: Path) -> dict[str, Any]:
     }
 
 
-def collect_launcher_run_records(results_root: Path = Path("cloud_results")) -> list[dict[str, Any]]:
+def collect_launcher_run_records(results_root: Path = LEGACY_RESULTS_DIR) -> list[dict[str, Any]]:
     return [load_launcher_run_record(run_dir) for run_dir in discover_launcher_run_dirs(results_root)]
 
 
 def collect_console_run_records(
     *,
     storage: ConsoleStoragePaths | None = None,
-    repo_results_root: Path = Path("cloud_results"),
+    repo_results_root: Path = LEGACY_RESULTS_DIR,
     include_legacy_fallback: bool = False,
 ) -> list[dict[str, Any]]:
     paths = storage or resolve_console_storage_paths()
@@ -449,6 +469,18 @@ def parse_dataset_identity(dataset_name: str) -> tuple[str, str]:
     return market, timeframe
 
 
+def parse_dataset_filename(filename: str) -> dict[str, str]:
+    stem = Path(filename).stem
+    parts = stem.split("_")
+    market = parts[0] if parts else "Unknown"
+    timeframe = next((part for part in parts if part.endswith(("m", "h")) or part == "daily"), "unknown")
+    return {
+        "filename": filename,
+        "market": market,
+        "timeframe": timeframe,
+    }
+
+
 def normalize_dataset_status(status: dict[str, Any]) -> dict[str, Any]:
     dataset = str(status.get("dataset", "Unknown"))
     market, timeframe = parse_dataset_identity(dataset)
@@ -521,7 +553,7 @@ def load_log_tail(run_dir: Path, line_count: int = 60) -> str:
 
 
 def collect_result_sources(
-    results_root: Path = Path("cloud_results"),
+    results_root: Path = LEGACY_RESULTS_DIR,
     *,
     storage: ConsoleStoragePaths | None = None,
     include_legacy_fallback: bool = False,

@@ -19,10 +19,11 @@ from typing import Any
 import yaml
 
 from modules.config_loader import load_config
+from paths import REPO_DATA_DIR, REPO_ROOT as SHARED_REPO_ROOT, RUNS_DIR, UPLOADS_DIR
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RESULTS_ROOT = REPO_ROOT / "cloud_results"
+REPO_ROOT = SHARED_REPO_ROOT
+DEFAULT_RESULTS_ROOT = RUNS_DIR
 DEFAULT_CONFIG = REPO_ROOT / "cloud" / "config_es_all_timeframes_gcp96.yaml"
 DEFAULT_ZONE = "australia-southeast2-a"
 DEFAULT_MACHINE_TYPE = "n2-highcpu-96"
@@ -308,7 +309,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--zone", default=DEFAULT_ZONE)
     parser.add_argument("--machine-type", default=DEFAULT_MACHINE_TYPE)
     parser.add_argument("--project", default=None, help="Optional GCP project override.")
-    parser.add_argument("--results-root", default=str(DEFAULT_RESULTS_ROOT.relative_to(REPO_ROOT)))
+    parser.add_argument("--results-root", default=str(DEFAULT_RESULTS_ROOT))
     parser.add_argument("--poll-seconds", type=int, default=60)
     parser.add_argument("--boot-disk-size", default=DEFAULT_BOOT_DISK_SIZE)
     parser.add_argument("--image-family", default=DEFAULT_IMAGE_FAMILY)
@@ -538,9 +539,7 @@ def resolve_required_datasets(config: dict[str, Any], repo_root: Path) -> list[D
 
     resolved: list[DatasetSpec] = []
     for entry in datasets:
-        local_path = Path(str(entry.get("path", "")))
-        if not local_path.is_absolute():
-            local_path = (repo_root / local_path).resolve()
+        local_path = resolve_dataset_path(str(entry.get("path", "")))
         if not local_path.exists():
             raise FileNotFoundError(f"Dataset not found: {local_path}")
         if not local_path.is_file():
@@ -560,6 +559,31 @@ def resolve_required_datasets(config: dict[str, Any], repo_root: Path) -> list[D
             )
         )
     return resolved
+
+
+def resolve_dataset_path(path: str) -> Path:
+    raw = str(path or "").strip()
+    if not raw:
+        raise FileNotFoundError("Dataset path is empty.")
+
+    candidate = Path(raw).expanduser()
+    if candidate.is_absolute():
+        if candidate.exists():
+            return candidate.resolve()
+        raise FileNotFoundError(f"Dataset not found: {candidate}")
+
+    uploads_candidate = (UPLOADS_DIR / candidate.name).resolve()
+    if uploads_candidate.exists():
+        return uploads_candidate
+
+    repo_data_candidate = (REPO_DATA_DIR / candidate.name).resolve()
+    if repo_data_candidate.exists():
+        return repo_data_candidate
+
+    raise FileNotFoundError(
+        "Dataset not found. Attempted paths: "
+        f"{uploads_candidate} ; {repo_data_candidate}"
+    )
 
 
 def build_remote_config(config: dict[str, Any], datasets: list[DatasetSpec]) -> dict[str, Any]:

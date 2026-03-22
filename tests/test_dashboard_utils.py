@@ -21,6 +21,7 @@ from dashboard_utils import (
     list_export_files,
     list_uploaded_datasets,
     operator_action_summary,
+    parse_dataset_filename,
     pick_best_candidate_file,
     resolve_console_storage_paths,
 )
@@ -114,6 +115,13 @@ def test_list_uploaded_datasets_returns_expected_files():
         assert [entry.name for entry in entries] == ["ES_60m.csv"]
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_parse_dataset_filename_extracts_market_and_timeframe():
+    parsed = parse_dataset_filename("ES_60m_2008_2026_tradestation.csv")
+
+    assert parsed["market"] == "ES"
+    assert parsed["timeframe"] == "60m"
 
 
 def test_list_export_files_returns_expected_files():

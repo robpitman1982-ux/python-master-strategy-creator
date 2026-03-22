@@ -30,6 +30,7 @@ from cloud.launch_gcp_run import (
     make_run_id,
     parse_status_json,
     remote_paths_for_run,
+    resolve_dataset_path,
     run_preflight,
     resolve_required_datasets,
     should_restart_remote_orchestration,
@@ -85,6 +86,21 @@ def test_resolve_required_datasets_only_uses_config_entries(tmp_path: Path):
 
     assert [dataset.file_name for dataset in datasets] == ["ES_60m.csv", "ES_15m.csv"]
     assert all("unused.csv" != dataset.file_name for dataset in datasets)
+
+
+def test_resolve_dataset_path_prefers_console_uploads_over_repo_data(tmp_path: Path, monkeypatch):
+    uploads_dir = tmp_path / "strategy_console_storage" / "uploads"
+    repo_data_dir = tmp_path / "Data"
+    _write_text(uploads_dir / "ES_60m.csv", "upload\n")
+    _write_text(repo_data_dir / "ES_60m.csv", "repo\n")
+
+    monkeypatch.setattr("cloud.launch_gcp_run.UPLOADS_DIR", uploads_dir)
+    monkeypatch.setattr("cloud.launch_gcp_run.REPO_DATA_DIR", repo_data_dir)
+    monkeypatch.setattr("cloud.launch_gcp_run.REPO_ROOT", tmp_path)
+
+    resolved = resolve_dataset_path("ES_60m.csv")
+
+    assert resolved == (uploads_dir / "ES_60m.csv").resolve()
 
 
 def test_create_input_bundle_includes_only_selected_datasets(tmp_path: Path):

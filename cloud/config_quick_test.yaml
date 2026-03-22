@@ -2,7 +2,7 @@
 # Estimated runtime: 30-40 minutes on c-8 droplet (~$0.05)
 
 datasets:
-  - path: "Data/ES_60m_2008_2026_tradestation.csv"
+  - path: "ES_60m_2008_2026_tradestation.csv"
     market: "ES"
     timeframe: "60m"
 

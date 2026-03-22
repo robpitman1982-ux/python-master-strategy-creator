@@ -3,8 +3,6 @@ from __future__ import annotations
 import socket
 import subprocess
 from datetime import UTC, datetime
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -22,9 +20,14 @@ from dashboard_utils import (
     list_uploaded_datasets,
     load_log_tail,
     operator_action_summary,
+    parse_dataset_filename,
     pick_best_candidate_file,
+    read_console_run_status,
+    read_console_selection,
     resolve_console_storage_paths,
+    write_console_selection,
 )
+from paths import EXPORTS_DIR, LEGACY_RESULTS_DIR, RUNS_DIR, UPLOADS_DIR
 
 
 @st.cache_resource
@@ -65,15 +68,25 @@ def _records_table(records: list[dict]) -> pd.DataFrame:
 def _storage_files_table(entries: list) -> pd.DataFrame:
     rows = []
     for entry in entries:
+        dataset_info = parse_dataset_filename(entry.name)
         rows.append(
             {
                 "filename": entry.name,
                 "size": format_bytes(entry.size_bytes),
+                "market": dataset_info["market"],
+                "timeframe": dataset_info["timeframe"],
                 "modified_utc": format_datetime(entry.modified_at),
                 "path": str(entry.path),
             }
         )
     return pd.DataFrame(rows)
+
+
+def render_table(df: pd.DataFrame) -> None:
+    try:
+        st.dataframe(df, use_container_width=True)
+    except Exception:
+        st.code(df.to_string(index=False))
 
 
 def _read_leaderboard_preview(run_record: dict, limit: int = 12) -> pd.DataFrame | None:
@@ -108,10 +121,15 @@ st.markdown(
 
 runtime = dashboard_runtime_metadata()
 storage = resolve_console_storage_paths()
-run_records = collect_console_run_records(storage=storage, repo_results_root=Path("cloud_results"), include_legacy_fallback=False)
+run_records = collect_console_run_records(
+    storage=storage,
+    repo_results_root=LEGACY_RESULTS_DIR,
+    include_legacy_fallback=False,
+)
 uploaded_datasets = list_uploaded_datasets(storage)
 export_files = list_export_files(storage)
 readiness = build_test_run_readiness(storage=storage, run_records=run_records, uploaded_datasets=uploaded_datasets)
+console_run_status = read_console_run_status()
 
 run_options = {build_run_choice_label(record): record for record in run_records}
 dataset_options = {entry.name: entry for entry in uploaded_datasets}
@@ -132,10 +150,15 @@ st.sidebar.caption(f"runs: {canonical_runs_root(storage)}")
 st.sidebar.caption(f"exports: {storage.exports}")
 
 selected_run_label = st.sidebar.selectbox("Selected run", list(run_options) or ["No runs found"])
-selected_dataset_label = st.sidebar.selectbox("Selected dataset", list(dataset_options) or ["No uploads found"])
+selected_dataset_names = st.sidebar.multiselect(
+    "Datasets for run",
+    list(dataset_options),
+    default=[name for name in read_console_selection() if name in dataset_options] or list(dataset_options)[:1],
+)
+write_console_selection(selected_dataset_names)
 
 selected_run = run_options.get(selected_run_label)
-selected_dataset = dataset_options.get(selected_dataset_label)
+selected_dataset = dataset_options.get(selected_dataset_names[0]) if selected_dataset_names else None
 
 if selected_run:
     selected_status = selected_run["launcher_status"]
@@ -177,7 +200,7 @@ top_metrics[5].metric("Bundle Size", format_bytes(selected_status.get("bundle_si
 st.subheader("Tonight Test Run")
 readiness_cols = st.columns([1.1, 1.4, 1.4])
 readiness_cols[0].metric("Readiness", readiness.state)
-readiness_cols[1].metric("Selected Dataset", selected_dataset.name if selected_dataset is not None else "none")
+readiness_cols[1].metric("Selected Dataset", ", ".join(selected_dataset_names) if selected_dataset_names else "none")
 readiness_cols[2].metric("Selected Run", selected_status.get("run_id", "none") if selected_run else "none")
 st.write(readiness.summary)
 
@@ -188,7 +211,7 @@ st.code("\n".join(checklist_lines))
 
 st.caption(
     "Canonical storage paths: "
-    f"uploads `{storage.uploads}` | runs `{canonical_runs_root(storage)}` | exports `{storage.exports}`"
+    f"uploads `{UPLOADS_DIR}` | runs `{RUNS_DIR}` | exports `{EXPORTS_DIR}`"
 )
 
 left, right = st.columns([1.1, 1.4])
@@ -203,7 +226,7 @@ with left:
 
     st.subheader("Uploaded Datasets")
     if uploaded_datasets:
-        st.dataframe(_storage_files_table(uploaded_datasets), use_container_width=True, hide_index=True)
+        render_table(_storage_files_table(uploaded_datasets))
     else:
         st.info(f"No uploaded datasets found in {storage.uploads}")
 
@@ -212,14 +235,26 @@ with left:
 
     st.subheader("Exports")
     if export_files:
-        st.dataframe(_storage_files_table(export_files), use_container_width=True, hide_index=True)
+        render_table(_storage_files_table(export_files))
     else:
         st.info(f"No export files found in {storage.exports}")
+
+    st.subheader("System Health")
+    health_rows = pd.DataFrame(
+        [
+            {"check": "Uploads directory OK", "status": "yes" if UPLOADS_DIR.exists() else "no"},
+            {"check": "Runs directory OK", "status": "yes" if RUNS_DIR.exists() else "no"},
+            {"check": "Exports directory OK", "status": "yes" if EXPORTS_DIR.exists() else "no"},
+            {"check": "Dataset count", "status": str(len(uploaded_datasets))},
+            {"check": "Latest run status", "status": console_run_status.get("run_state", "unknown")},
+        ]
+    )
+    render_table(health_rows)
 
 with right:
     st.subheader("Run History")
     if run_records:
-        st.dataframe(_records_table(run_records), use_container_width=True, hide_index=True)
+        render_table(_records_table(run_records))
     else:
         st.warning(f"No launcher-managed runs found in canonical runs storage: {canonical_runs_root(storage)}")
 
@@ -253,7 +288,7 @@ st.subheader("Leaderboard Preview")
 if selected_run and selected_outputs_dir:
     leaderboard_preview = _read_leaderboard_preview(selected_run)
     if leaderboard_preview is not None and not leaderboard_preview.empty:
-        st.dataframe(leaderboard_preview, use_container_width=True, hide_index=True)
+        render_table(leaderboard_preview)
     else:
         st.info("No leaderboard candidate file is available for the selected run.")
 else:

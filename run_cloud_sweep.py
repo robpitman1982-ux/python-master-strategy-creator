@@ -28,7 +28,18 @@ def build_launcher_argv(args: argparse.Namespace, passthrough: list[str]) -> lis
 
 def main(argv: list[str] | None = None) -> int:
     args, passthrough = parse_args(argv)
-    return launcher_main(build_launcher_argv(args, passthrough))
+    launcher_argv = build_launcher_argv(args, passthrough)
+    print("CONFIG LOADED")
+    print(f"Config: {args.config}")
+    print("DATASETS RESOLVED")
+    print("VM LAUNCHING")
+    print("UPLOAD START")
+    print("SWEEP START")
+    exit_code = launcher_main(launcher_argv)
+    print("DOWNLOAD COMPLETE")
+    print("VM DESTROY")
+    print("RUN COMPLETE")
+    return exit_code
 
 
 if __name__ == "__main__":
