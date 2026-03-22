@@ -3,11 +3,10 @@ Description=Strategy Engine Dashboard
 After=network.target
 
 [Service]
-User=root
-WorkingDirectory=/root/python-master-strategy-creator
-ExecStart=/root/python-master-strategy-creator/scripts/start_dashboard.sh
+User=robpitman1982
+WorkingDirectory=/home/robpitman1982/python-master-strategy-creator
+ExecStart=/home/robpitman1982/python-master-strategy-creator/scripts/start_dashboard.sh
 Restart=always
-RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
