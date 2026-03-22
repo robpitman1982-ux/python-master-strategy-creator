@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import socket
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
 import streamlit as st
@@ -13,8 +16,38 @@ from dashboard_utils import (
 )
 
 
+@st.cache_resource
+def dashboard_runtime_metadata() -> dict[str, str]:
+    started_at = datetime.now(UTC).isoformat(timespec="seconds")
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        commit = "unknown"
+    return {
+        "commit": commit,
+        "hostname": socket.gethostname(),
+        "started_at": started_at,
+    }
+
+
 st.set_page_config(page_title="Strategy Engine Monitor", layout="wide")
 st.title("Strategy Sweep Monitor")
+
+runtime = dashboard_runtime_metadata()
+st.sidebar.title("Console VM")
+st.sidebar.code(
+    "\n".join(
+        [
+            f"commit: {runtime['commit']}",
+            f"hostname: {runtime['hostname']}",
+            f"dashboard started: {runtime['started_at']}",
+        ]
+    )
+)
 
 records = collect_launcher_run_records(Path("cloud_results"))
 if not records:
