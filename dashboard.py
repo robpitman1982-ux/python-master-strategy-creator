@@ -9,10 +9,12 @@ import streamlit as st
 
 from dashboard_utils import (
     badge_for_value,
+    billing_status_for_launcher,
     build_run_choice_label,
     collect_launcher_run_records,
     estimate_run_cost,
     format_bytes,
+    operator_action_summary,
 )
 
 
@@ -74,10 +76,7 @@ summary_cols[3].metric("Artifact Verified", "yes" if status.get("artifact_verifi
 
 detail_cols = st.columns(4)
 detail_cols[0].metric("Destroy Allowed", "yes" if status.get("destroy_allowed") else "no")
-detail_cols[1].metric(
-    "Billing Likely Stopped",
-    "yes" if vm_outcome == "vm_destroyed" or run_outcome == "dry_run_complete" else "no" if status.get("instance_exists_at_end") else "unknown",
-)
+detail_cols[1].metric("Billing Status", billing_status_for_launcher(status))
 detail_cols[2].metric("Bundle Size", format_bytes(status.get("bundle_size_bytes")))
 detail_cols[3].metric("Machine Type", str(manifest.get("machine_type") or status.get("machine_type") or "unknown"))
 
@@ -93,6 +92,12 @@ if not outputs_dir or not outputs_dir.exists():
 if status.get("failure_reason"):
     st.info(f"Failure reason: {status['failure_reason']}")
 
+st.subheader("Operator Actions")
+st.write(operator_action_summary(status))
+recovery_commands = status.get("recovery_commands") or []
+if recovery_commands:
+    st.code("\n".join(recovery_commands))
+
 cost = estimate_run_cost(record)
 st.write(
     f"Run ID: `{status.get('run_id', run_dir.name)}`  \n"
@@ -100,6 +105,8 @@ st.write(
     f"Stage: `{status.get('stage', 'unknown')}`  \n"
     f"Message: `{status.get('message', '')}`  \n"
     f"Updated UTC: `{status.get('updated_utc', 'unknown')}`  \n"
+    f"Destroy Reason: `{status.get('destroy_reason', 'unknown')}`  \n"
+    f"Billing Should Be Stopped: `{status.get('billing_should_be_stopped', 'unknown')}`  \n"
     f"Estimated Cost: `{cost['estimated_total_cost'] if cost['estimated_total_cost'] is not None else 'unknown'}`"
 )
 

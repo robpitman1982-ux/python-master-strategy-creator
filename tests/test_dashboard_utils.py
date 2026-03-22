@@ -7,12 +7,14 @@ from pathlib import Path
 
 from dashboard_utils import (
     badge_for_value,
+    billing_status_for_launcher,
     build_run_choice_label,
     choose_default_result_source,
     classify_run_status,
     collect_result_sources,
     discover_launcher_run_dirs,
     estimate_run_cost,
+    operator_action_summary,
     pick_best_candidate_file,
 )
 
@@ -128,3 +130,14 @@ def test_badges_and_run_classification_are_readable():
         }
     )
     assert "Running" in label
+
+
+def test_billing_status_for_launcher_distinguishes_preserved_and_stopped():
+    assert billing_status_for_launcher({"vm_outcome": "vm_destroyed"}) == "stopped"
+    assert billing_status_for_launcher({"vm_outcome": "vm_preserved_for_inspection", "instance_exists_at_end": True}) == "still_running"
+    assert billing_status_for_launcher({"vm_outcome": "vm_already_gone", "artifact_verified": False}) == "maybe_stopped"
+
+
+def test_operator_action_summary_prefers_persisted_action():
+    assert operator_action_summary({"operator_action": "inspect VM and download artifacts manually"}) == "inspect VM and download artifacts manually"
+    assert "No manual action required" in operator_action_summary({"run_outcome": "run_completed_verified"})

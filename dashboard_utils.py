@@ -133,6 +133,36 @@ def badge_for_value(value: str | None) -> str:
     return humanize_token(text)
 
 
+def billing_status_for_launcher(launcher_status: dict[str, Any]) -> str:
+    vm_outcome = str(launcher_status.get("vm_outcome", "")).strip()
+    instance_exists_at_end = launcher_status.get("instance_exists_at_end")
+    artifact_verified = bool(launcher_status.get("artifact_verified"))
+
+    if vm_outcome == "vm_destroyed" or instance_exists_at_end is False:
+        return "stopped" if artifact_verified or vm_outcome == "vm_destroyed" else "maybe_stopped"
+    if vm_outcome == "vm_preserved_for_inspection" and instance_exists_at_end is True:
+        return "still_running"
+    if vm_outcome == "vm_already_gone":
+        return "maybe_stopped"
+    return "unknown"
+
+
+def operator_action_summary(launcher_status: dict[str, Any]) -> str:
+    action = str(launcher_status.get("operator_action") or "").strip()
+    if action:
+        return action
+
+    run_outcome = str(launcher_status.get("run_outcome") or "").strip()
+    vm_outcome = str(launcher_status.get("vm_outcome") or "").strip()
+    if run_outcome == "run_completed_verified":
+        return "Latest run is verified. No manual action required."
+    if vm_outcome == "vm_preserved_for_inspection":
+        return "VM is still running. Download artifacts or inspect remotely, then delete the instance."
+    if run_outcome in {"artifact_download_failed", "artifact_verification_failed", "remote_monitor_failed"}:
+        return "Artifacts are incomplete locally. Use recovery commands below."
+    return "Review the latest launcher status before taking action."
+
+
 def classify_run_status(launcher_status: dict[str, Any]) -> str:
     state = str(launcher_status.get("state", "")).strip()
     run_outcome = str(launcher_status.get("run_outcome", "")).strip()

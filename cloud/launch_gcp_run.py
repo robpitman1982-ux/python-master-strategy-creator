@@ -135,6 +135,16 @@ class ArtifactVerificationResult:
     verification_message: str = ""
 
 
+@dataclass(frozen=True)
+class DestroyDecision:
+    destroy_allowed: bool
+    destroy_reason: str
+    instance_exists_at_end: bool | None
+    billing_should_be_stopped: bool | None
+    operator_action: str
+    recovery_commands: list[str]
+
+
 RUN_OUTCOME_DRY_RUN_COMPLETE = "dry_run_complete"
 RUN_OUTCOME_COMPLETED_VERIFIED = "run_completed_verified"
 RUN_OUTCOME_COMPLETED_UNVERIFIED = "run_completed_unverified"
@@ -200,11 +210,18 @@ class LauncherStatusStore:
             "vm_outcome": None,
             "failure_reason": None,
             "destroy_allowed": False,
+            "destroy_reason": None,
             "artifacts_downloaded": False,
             "artifact_verified": False,
             "extraction_verified": False,
             "expected_outputs_present": False,
             "instance_exists_at_end": None,
+            "billing_should_be_stopped": None,
+            "operator_action": None,
+            "recovery_commands": [],
+            "remote_artifact_exists": None,
+            "final_retrieval_attempted": False,
+            "final_retrieval_success": False,
         }
 
     def current_payload(self) -> dict[str, Any]:
@@ -1140,6 +1157,82 @@ def can_auto_destroy(status: dict[str, Any], args: argparse.Namespace) -> tuple[
     return True, "verified success with local artifacts present"
 
 
+def build_recovery_commands(
+    *,
+    instance_name: str,
+    zone: str,
+    remote_status_path: str,
+    remote_tarball_path: str,
+    local_run_dir: Path,
+) -> list[str]:
+    return [
+        f"gcloud compute ssh {instance_name} --zone={zone}",
+        f"gcloud compute ssh {instance_name} --zone={zone} --command=\"cat {remote_status_path}\"",
+        f"gcloud compute scp {instance_name}:{remote_tarball_path} \"{local_run_dir / 'artifacts.tar.gz'}\" --zone={zone}",
+        f"gcloud compute instances delete {instance_name} --zone={zone} --quiet",
+    ]
+
+
+def build_destroy_decision(
+    *,
+    status: dict[str, Any],
+    args: argparse.Namespace,
+    instance_exists_at_end: bool | None,
+    remote_status_path: str,
+    remote_tarball_path: str,
+    local_run_dir: Path,
+) -> DestroyDecision:
+    destroy_allowed, destroy_reason = can_auto_destroy(status, args)
+    run_outcome = str(status.get("run_outcome") or "").strip()
+    remote_artifact_exists = status.get("remote_artifact_exists")
+    recovery_commands = build_recovery_commands(
+        instance_name=args.instance_name,
+        zone=args.zone,
+        remote_status_path=remote_status_path,
+        remote_tarball_path=remote_tarball_path,
+        local_run_dir=local_run_dir,
+    )
+
+    if destroy_allowed:
+        return DestroyDecision(
+            destroy_allowed=True,
+            destroy_reason=destroy_reason,
+            instance_exists_at_end=instance_exists_at_end,
+            billing_should_be_stopped=True,
+            operator_action="none",
+            recovery_commands=[],
+        )
+
+    if instance_exists_at_end is False:
+        return DestroyDecision(
+            destroy_allowed=False,
+            destroy_reason="instance already gone",
+            instance_exists_at_end=False,
+            billing_should_be_stopped=True,
+            operator_action="check local artifacts only",
+            recovery_commands=[],
+        )
+
+    if args.keep_vm:
+        operator_action = "download artifacts or inspect remotely, then delete the instance manually"
+    elif remote_artifact_exists:
+        operator_action = "inspect VM and download artifacts manually"
+    elif run_outcome == RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL:
+        operator_action = "check local artifacts only"
+    else:
+        operator_action = "inspect VM and download artifacts manually"
+
+    billing_should_be_stopped = False if instance_exists_at_end else None
+    return DestroyDecision(
+        destroy_allowed=False,
+        destroy_reason=destroy_reason,
+        instance_exists_at_end=instance_exists_at_end,
+        billing_should_be_stopped=billing_should_be_stopped,
+        operator_action=operator_action,
+        recovery_commands=recovery_commands if instance_exists_at_end else [],
+    )
+
+
 def build_local_run_dir(results_root: Path, run_id: str) -> Path:
     run_dir = results_root / sanitize_run_token(run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -1160,13 +1253,16 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     artifacts_downloaded = bool(status.get("artifacts_downloaded"))
     artifact_verified = bool(status.get("artifact_verified"))
     destroy_allowed = bool(status.get("destroy_allowed"))
-    instance_exists_at_end = status.get("instance_exists_at_end")
-    if run_outcome == RUN_OUTCOME_DRY_RUN_COMPLETE or vm_outcome == VM_OUTCOME_DESTROYED:
-        billing_message = "yes"
-    elif instance_exists_at_end is False:
-        billing_message = "unknown"
+    billing_should_be_stopped = status.get("billing_should_be_stopped")
+    destroy_reason = str(status.get("destroy_reason") or "").strip()
+    operator_action = str(status.get("operator_action") or "").strip()
+    recovery_commands = status.get("recovery_commands") or []
+    if billing_should_be_stopped is True:
+        billing_message = "YES"
+    elif billing_should_be_stopped is False:
+        billing_message = "NO"
     else:
-        billing_message = "no"
+        billing_message = "UNKNOWN"
 
     outputs_dir = local_run_dir / "artifacts" / "Outputs"
     results_location = outputs_dir if outputs_dir.exists() else local_run_dir
@@ -1181,12 +1277,18 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     print(f"Artifacts verified: {'YES' if artifact_verified else 'NO'}")
     print(f"VM outcome: {vm_outcome}")
     print(f"Destroy allowed: {'YES' if destroy_allowed else 'NO'}")
-    print(f"Billing stopped: {billing_message.upper()}")
+    print(f"Destroy reason: {destroy_reason or 'unknown'}")
+    print(f"Billing stopped: {billing_message}")
+    print(f"Operator action: {operator_action or 'unknown'}")
     print(f"Results location: {results_location}")
     if status.get("failure_reason"):
         print(f"Failure reason: {status['failure_reason']}")
     if vm_outcome == VM_OUTCOME_PRESERVED:
         print("VM preserved for inspection. Destroy manually if finished.")
+        if recovery_commands:
+            print("Recovery options:")
+            for index, command in enumerate(recovery_commands, start=1):
+                print(f"{index}. {command}")
     if run_outcome not in {RUN_OUTCOME_DRY_RUN_COMPLETE, RUN_OUTCOME_COMPLETED_VERIFIED}:
         print("RUN STATUS: FAILED")
         print("Artifacts incomplete or unverified.")
@@ -1474,6 +1576,9 @@ def main(argv: list[str] | None = None) -> int:
     remote_state = REMOTE_STATUS_UNKNOWN
     artifact_verification = build_default_artifact_verification()
     artifact_verification.expected_files = []
+    remote_artifact_exists_flag: bool | None = None
+    final_retrieval_attempted = False
+    final_retrieval_success = False
     try:
         if instance_exists(gcloud_base, args.instance_name, args.zone):
             status_store.update("running", "instance_reset", "Existing instance found; deleting it first.")
@@ -1566,22 +1671,25 @@ def main(argv: list[str] | None = None) -> int:
             should_attempt_download = True
         elif run_outcome != RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL:
             try:
-                should_attempt_download = remote_artifact_exists(
+                remote_artifact_exists_flag = remote_artifact_exists(
                     gcloud_base,
                     args.instance_name,
                     args.zone,
                     manifest.remote_artifact_tarball,
                 )
+                should_attempt_download = bool(remote_artifact_exists_flag)
             except Exception:
+                remote_artifact_exists_flag = None
                 should_attempt_download = False
 
         if should_attempt_download:
             status_store.update(
                 "running",
-                "download",
+                "artifact_download",
                 "Downloading preserved artifact tarball.",
                 remote_status=remote_status,
                 remote_state=remote_state,
+                remote_artifact_exists=remote_artifact_exists_flag,
             )
             try:
                 artifact_result = download_and_extract_artifacts(
@@ -1608,6 +1716,7 @@ def main(argv: list[str] | None = None) -> int:
                     expected_outputs_present=artifact_verification.expected_outputs_present,
                     artifact_verified=artifact_verification.artifact_verified,
                     remote_state=remote_state,
+                    remote_artifact_exists=True,
                 )
             except Exception as exc:
                 artifact_verification = build_default_artifact_verification()
@@ -1626,6 +1735,7 @@ def main(argv: list[str] | None = None) -> int:
                     expected_outputs_present=False,
                     artifact_verified=False,
                     remote_state=remote_state,
+                    remote_artifact_exists=remote_artifact_exists_flag,
                 )
                 run_outcome = RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED
                 failure_reason = "artifact_download_failed"
@@ -1666,6 +1776,7 @@ def main(argv: list[str] | None = None) -> int:
             extraction_verified=artifact_verification.extraction_verified,
             expected_outputs_present=artifact_verification.expected_outputs_present,
             artifact_verified=artifact_verification.artifact_verified,
+            remote_artifact_exists=remote_artifact_exists_flag,
         )
 
         if run_outcome == RUN_OUTCOME_COMPLETED_VERIFIED:
@@ -1690,6 +1801,7 @@ def main(argv: list[str] | None = None) -> int:
             extraction_verified=artifact_verification.extraction_verified,
             expected_outputs_present=artifact_verification.expected_outputs_present,
             artifact_verified=artifact_verification.artifact_verified,
+            remote_artifact_exists=remote_artifact_exists_flag,
         )
     finally:
         if run_outcome is None:
@@ -1704,6 +1816,79 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         instance_exists_at_end = safe_instance_exists(gcloud_base, args.instance_name, args.zone)
+        if remote_artifact_exists_flag is None and instance_exists_at_end:
+            try:
+                remote_artifact_exists_flag = remote_artifact_exists(
+                    gcloud_base,
+                    args.instance_name,
+                    args.zone,
+                    manifest.remote_artifact_tarball,
+                )
+            except Exception:
+                remote_artifact_exists_flag = None
+
+        should_retry_retrieval = (
+            instance_exists_at_end is True
+            and remote_artifact_exists_flag is True
+            and not artifact_verification.artifact_verified
+            and run_outcome != RUN_OUTCOME_DRY_RUN_COMPLETE
+        )
+        if should_retry_retrieval:
+            final_retrieval_attempted = True
+            status_store.update(
+                "running",
+                "artifact_download_retry",
+                "Attempting one final artifact retrieval before preserve decision.",
+                run_outcome=run_outcome,
+                remote_artifact_exists=remote_artifact_exists_flag,
+                final_retrieval_attempted=True,
+            )
+            try:
+                artifact_result = download_and_extract_artifacts(
+                    gcloud_base,
+                    args.instance_name,
+                    args.zone,
+                    manifest.remote_artifact_tarball,
+                    local_run_dir / "artifacts.tar.gz",
+                    local_run_dir / "artifacts",
+                )
+                artifact_verification = inspect_preserved_artifacts(
+                    tarball_path=artifact_result.tarball_path,
+                    extracted_dir=artifact_result.extracted_dir,
+                    remote_state=remote_state,
+                )
+                final_retrieval_success = artifact_verification.artifact_verified
+                if final_retrieval_success and remote_state == "completed":
+                    run_outcome = RUN_OUTCOME_COMPLETED_VERIFIED
+                    failure_reason = None
+                    exit_code = 0
+                status_store.update(
+                    "running",
+                    "artifact_verification_retry",
+                    artifact_verification.verification_message,
+                    run_outcome=run_outcome,
+                    failure_reason=failure_reason,
+                    artifacts_downloaded=artifact_verification.artifacts_downloaded,
+                    extraction_verified=artifact_verification.extraction_verified,
+                    expected_outputs_present=artifact_verification.expected_outputs_present,
+                    artifact_verified=artifact_verification.artifact_verified,
+                    remote_artifact_exists=remote_artifact_exists_flag,
+                    final_retrieval_attempted=True,
+                    final_retrieval_success=final_retrieval_success,
+                )
+            except Exception as exc:
+                final_retrieval_success = False
+                status_store.update(
+                    "running",
+                    "artifact_download_retry_failed",
+                    f"Final artifact retrieval attempt failed: {exc}",
+                    run_outcome=run_outcome,
+                    failure_reason=failure_reason,
+                    remote_artifact_exists=remote_artifact_exists_flag,
+                    final_retrieval_attempted=True,
+                    final_retrieval_success=False,
+                )
+
         status_store.update(
             "running",
             "destroy_guard_check",
@@ -1716,12 +1901,31 @@ def main(argv: list[str] | None = None) -> int:
             expected_outputs_present=artifact_verification.expected_outputs_present,
             artifact_verified=artifact_verification.artifact_verified,
             instance_exists_at_end=instance_exists_at_end,
+            remote_artifact_exists=remote_artifact_exists_flag,
+            final_retrieval_attempted=final_retrieval_attempted,
+            final_retrieval_success=final_retrieval_success,
         )
-        destroy_allowed, destroy_reason = can_auto_destroy(status_store.current_payload(), args)
+        destroy_decision = build_destroy_decision(
+            status=status_store.current_payload(),
+            args=args,
+            instance_exists_at_end=instance_exists_at_end,
+            remote_status_path=manifest.remote_status_path,
+            remote_tarball_path=manifest.remote_artifact_tarball,
+            local_run_dir=local_run_dir,
+        )
 
-        if destroy_allowed and instance_exists_at_end:
+        if destroy_decision.destroy_allowed and instance_exists_at_end:
             try:
-                status_store.update("running", "destroy", "Destroying VM.", destroy_allowed=True)
+                status_store.update(
+                    "running",
+                    "destroy",
+                    "Destroying VM.",
+                    destroy_allowed=True,
+                    destroy_reason=destroy_decision.destroy_reason,
+                    billing_should_be_stopped=destroy_decision.billing_should_be_stopped,
+                    operator_action=destroy_decision.operator_action,
+                    recovery_commands=destroy_decision.recovery_commands,
+                )
                 delete_instance(gcloud_base, args.instance_name, args.zone)
                 status_store.update(
                     VM_OUTCOME_DESTROYED,
@@ -1730,7 +1934,14 @@ def main(argv: list[str] | None = None) -> int:
                     run_outcome=run_outcome,
                     vm_outcome=VM_OUTCOME_DESTROYED,
                     destroy_allowed=True,
+                    destroy_reason=destroy_decision.destroy_reason,
                     instance_exists_at_end=False,
+                    billing_should_be_stopped=True,
+                    operator_action="none",
+                    recovery_commands=[],
+                    remote_artifact_exists=remote_artifact_exists_flag,
+                    final_retrieval_attempted=final_retrieval_attempted,
+                    final_retrieval_success=final_retrieval_success,
                 )
             except Exception as exc:
                 status_store.update(
@@ -1740,8 +1951,15 @@ def main(argv: list[str] | None = None) -> int:
                     run_outcome=run_outcome,
                     vm_outcome=VM_OUTCOME_PRESERVED,
                     destroy_allowed=False,
+                    destroy_reason=f"destroy failed: {exc}",
                     failure_reason=failure_reason or "destroy_failed",
                     instance_exists_at_end=True,
+                    billing_should_be_stopped=False,
+                    operator_action="inspect VM and download artifacts manually",
+                    recovery_commands=destroy_decision.recovery_commands,
+                    remote_artifact_exists=remote_artifact_exists_flag,
+                    final_retrieval_attempted=final_retrieval_attempted,
+                    final_retrieval_success=final_retrieval_success,
                 )
                 print(f"WARNING: failed to destroy VM automatically: {exc}")
         else:
@@ -1749,7 +1967,7 @@ def main(argv: list[str] | None = None) -> int:
             message = (
                 "VM already gone before final cleanup."
                 if vm_outcome == VM_OUTCOME_ALREADY_GONE
-                else f"VM preserved for inspection. Auto-destroy blocked: {destroy_reason}"
+                else f"VM preserved for inspection. Auto-destroy blocked: {destroy_decision.destroy_reason}"
             )
             status_store.update(
                 vm_outcome,
@@ -1758,6 +1976,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_outcome=run_outcome,
                 vm_outcome=vm_outcome,
                 destroy_allowed=False,
+                destroy_reason=destroy_decision.destroy_reason,
                 failure_reason=failure_reason,
                 instance_exists_at_end=instance_exists_at_end,
                 remote_state=remote_state,
@@ -1765,6 +1984,12 @@ def main(argv: list[str] | None = None) -> int:
                 extraction_verified=artifact_verification.extraction_verified,
                 expected_outputs_present=artifact_verification.expected_outputs_present,
                 artifact_verified=artifact_verification.artifact_verified,
+                billing_should_be_stopped=destroy_decision.billing_should_be_stopped,
+                operator_action=destroy_decision.operator_action,
+                recovery_commands=destroy_decision.recovery_commands,
+                remote_artifact_exists=remote_artifact_exists_flag,
+                final_retrieval_attempted=final_retrieval_attempted,
+                final_retrieval_success=final_retrieval_success,
             )
             if vm_outcome == VM_OUTCOME_PRESERVED:
                 print(f"VM preserved: {args.instance_name} in {args.zone}")

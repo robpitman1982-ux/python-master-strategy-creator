@@ -7,6 +7,7 @@ from pathlib import Path
 
 import run_cloud_sweep
 from cloud.launch_gcp_run import (
+    DestroyDecision,
     DatasetSpec,
     LATEST_RUN_FILE_NAME,
     RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
@@ -14,6 +15,7 @@ from cloud.launch_gcp_run import (
     RUN_OUTCOME_COMPLETED_VERIFIED,
     RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
     VM_OUTCOME_ALREADY_GONE,
+    build_destroy_decision,
     can_auto_destroy,
     download_and_extract_artifacts,
     inspect_preserved_artifacts,
@@ -627,6 +629,102 @@ def test_can_auto_destroy_keep_vm_still_wins():
 
     assert allowed is False
     assert "--keep-vm" in reason
+
+
+def test_build_destroy_decision_allows_verified_success():
+    decision = build_destroy_decision(
+        status={
+            "run_outcome": RUN_OUTCOME_COMPLETED_VERIFIED,
+            "artifacts_downloaded": True,
+            "artifact_verified": True,
+            "extraction_verified": True,
+            "expected_outputs_present": True,
+            "remote_state": "completed",
+            "remote_artifact_exists": True,
+        },
+        args=argparse.Namespace(keep_vm=False, instance_name="strategy-sweep", zone="australia-southeast2-a"),
+        instance_exists_at_end=True,
+        remote_status_path="/tmp/run_status.json",
+        remote_tarball_path="/tmp/artifacts.tar.gz",
+        local_run_dir=Path("cloud_results/test-run"),
+    )
+
+    assert isinstance(decision, DestroyDecision)
+    assert decision.destroy_allowed is True
+    assert decision.billing_should_be_stopped is True
+    assert decision.operator_action == "none"
+
+
+def test_build_destroy_decision_preserves_when_keep_vm_requested():
+    decision = build_destroy_decision(
+        status={
+            "run_outcome": RUN_OUTCOME_COMPLETED_VERIFIED,
+            "artifacts_downloaded": True,
+            "artifact_verified": True,
+            "extraction_verified": True,
+            "expected_outputs_present": True,
+            "remote_state": "completed",
+            "remote_artifact_exists": True,
+        },
+        args=argparse.Namespace(keep_vm=True, instance_name="strategy-sweep", zone="australia-southeast2-a"),
+        instance_exists_at_end=True,
+        remote_status_path="/tmp/run_status.json",
+        remote_tarball_path="/tmp/artifacts.tar.gz",
+        local_run_dir=Path("cloud_results/test-run"),
+    )
+
+    assert decision.destroy_allowed is False
+    assert decision.billing_should_be_stopped is False
+    assert "delete the instance manually" in decision.operator_action
+
+
+def test_build_destroy_decision_handles_instance_already_gone():
+    decision = build_destroy_decision(
+        status={
+            "run_outcome": RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "remote_state": "missing",
+            "remote_artifact_exists": False,
+        },
+        args=argparse.Namespace(keep_vm=False, instance_name="strategy-sweep", zone="australia-southeast2-a"),
+        instance_exists_at_end=False,
+        remote_status_path="/tmp/run_status.json",
+        remote_tarball_path="/tmp/artifacts.tar.gz",
+        local_run_dir=Path("cloud_results/test-run"),
+    )
+
+    assert decision.destroy_allowed is False
+    assert decision.destroy_reason == "instance already gone"
+    assert decision.billing_should_be_stopped is True
+    assert decision.operator_action == "check local artifacts only"
+    assert decision.recovery_commands == []
+
+
+def test_build_destroy_decision_includes_recovery_commands_for_preserved_vm():
+    decision = build_destroy_decision(
+        status={
+            "run_outcome": RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "remote_state": "failed",
+            "remote_artifact_exists": True,
+        },
+        args=argparse.Namespace(keep_vm=False, instance_name="strategy-sweep", zone="australia-southeast2-a"),
+        instance_exists_at_end=True,
+        remote_status_path="/tmp/run_status.json",
+        remote_tarball_path="/tmp/artifacts.tar.gz",
+        local_run_dir=Path("cloud_results/test-run"),
+    )
+
+    assert decision.destroy_allowed is False
+    assert decision.billing_should_be_stopped is False
+    assert "download artifacts manually" in decision.operator_action
+    assert any("gcloud compute ssh strategy-sweep" in command for command in decision.recovery_commands)
 
 
 def test_terminal_failure_status_fields_can_be_persisted(tmp_path: Path):
