@@ -22,10 +22,11 @@ UPLOAD_SUFFIXES = {".csv", ".parquet", ".txt", ".zip", ".gz"}
 EXPORT_SUFFIXES = {".csv", ".zip", ".json", ".gz"}
 
 HOURLY_RATE_ESTIMATES: dict[str, dict[str, float]] = {
-    "n2-highcpu-96": {"STANDARD": 5.40, "SPOT": 1.62},
-    "n2-highcpu-48": {"STANDARD": 2.70, "SPOT": 0.81},
-    "n2-highcpu-32": {"STANDARD": 1.80, "SPOT": 0.54},
-    "n2-highcpu-16": {"STANDARD": 0.90, "SPOT": 0.27},
+    "n2-highcpu-96": {"STANDARD": 3.31, "SPOT": 0.72},
+    "n2-highcpu-48": {"STANDARD": 1.66, "SPOT": 0.36},
+    "n2-highcpu-32": {"STANDARD": 1.10, "SPOT": 0.24},
+    "n2-highcpu-16": {"STANDARD": 0.55, "SPOT": 0.12},
+    "n2-highcpu-8":  {"STANDARD": 0.28, "SPOT": 0.06},
 }
 
 BADGE_MAP = {
@@ -619,3 +620,80 @@ def choose_default_result_source(sources: list[ResultSource]) -> str | None:
         if source.category == "Cloud Runs" and source.outputs_dir and source.outputs_dir.exists():
             return source.key
     return sources[0].key if sources else None
+
+
+def format_duration_short(seconds: float | int | None) -> str:
+    """Compact duration: '1h 23m', '45m', '30s'."""
+    if not isinstance(seconds, (int, float)) or seconds <= 0:
+        return "—"
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, sec = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m"
+    return f"{sec}s"
+
+
+def status_color(category: str) -> str:
+    """Return a CSS class name for a run status category."""
+    mapping = {
+        "running": "status-info",
+        "completed": "status-success",
+        "preserved": "status-warning",
+        "failed": "status-error",
+        "dry-run": "status-neutral",
+        "unknown": "status-neutral",
+    }
+    return mapping.get(category, "status-neutral")
+
+
+def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
+    """Load all result files from a run's outputs directory.
+
+    Returns a dict with keys: leaderboard, portfolio, correlation, yearly, returns.
+    Values are DataFrames or None if the file is missing or unreadable.
+    """
+    import pandas as pd  # local import to avoid hard dependency at module level
+
+    result: dict[str, Any] = {
+        "leaderboard": None,
+        "portfolio": None,
+        "correlation": None,
+        "yearly": None,
+        "returns": None,
+    }
+    if outputs_dir is None or not outputs_dir.exists():
+        return result
+
+    files = detect_result_files(outputs_dir)
+
+    def _safe_csv(path: Path | None) -> Any:
+        if path is None or not path.exists():
+            return None
+        try:
+            return pd.read_csv(path)
+        except Exception:
+            return None
+
+    def _safe_parquet(path: Path | None) -> Any:
+        if path is None or not path.exists():
+            return None
+        try:
+            return pd.read_parquet(path, engine="pyarrow")
+        except Exception:
+            try:
+                return pd.read_csv(path)
+            except Exception:
+                return None
+
+    # Prefer master_leaderboard, fall back to family files
+    lb_path = files.get("master_leaderboard.csv") or files.get("family_leaderboard_results.csv") or files.get("family_summary_results.csv")
+    result["leaderboard"] = _safe_csv(lb_path)
+    result["portfolio"] = _safe_csv(files.get("portfolio_review_table.csv"))
+    result["correlation"] = _safe_csv(files.get("correlation_matrix.csv"))
+    result["yearly"] = _safe_csv(files.get("yearly_stats_breakdown.csv"))
+    result["returns"] = _safe_csv(files.get("strategy_returns.csv"))
+
+    return result
