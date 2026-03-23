@@ -29,16 +29,11 @@ def build_launcher_argv(args: argparse.Namespace, passthrough: list[str]) -> lis
 def main(argv: list[str] | None = None) -> int:
     args, passthrough = parse_args(argv)
     launcher_argv = build_launcher_argv(args, passthrough)
-    print("CONFIG LOADED")
-    print(f"Config: {args.config}")
-    print("DATASETS RESOLVED")
-    print("VM LAUNCHING")
-    print("UPLOAD START")
-    print("SWEEP START")
+    print(f"Starting sweep with config: {args.config}")
+    if args.dry_run:
+        print("Mode: DRY RUN (no VM will be created)")
     exit_code = launcher_main(launcher_argv)
-    print("DOWNLOAD COMPLETE")
-    print("VM DESTROY")
-    print("RUN COMPLETE")
+    print(f"Launcher finished with exit code: {exit_code}")
     return exit_code
 
 
