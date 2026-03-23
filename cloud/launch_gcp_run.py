@@ -25,7 +25,7 @@ from paths import REPO_DATA_DIR, REPO_ROOT as SHARED_REPO_ROOT, RUNS_DIR, UPLOAD
 REPO_ROOT = SHARED_REPO_ROOT
 DEFAULT_RESULTS_ROOT = RUNS_DIR
 DEFAULT_CONFIG = REPO_ROOT / "cloud" / "config_es_all_timeframes_gcp96.yaml"
-DEFAULT_ZONE = "australia-southeast2-a"
+DEFAULT_ZONE = "us-central1-a"
 DEFAULT_MACHINE_TYPE = "n2-highcpu-96"
 DEFAULT_INSTANCE_NAME = "strategy-sweep"
 DEFAULT_BOOT_DISK_SIZE = "120GB"
@@ -1513,6 +1513,19 @@ def main(argv: list[str] | None = None) -> int:
     gcloud_base = build_gcloud_base(preflight.gcloud_bin, preflight.project_id)
     config = load_config(config_path)
     datasets = preflight.datasets
+
+    # Allow YAML config to override cloud VM settings (zone, machine_type, etc.)
+    cloud_cfg = config.get("cloud", {})
+    if "zone" in cloud_cfg and args.zone == DEFAULT_ZONE:
+        args.zone = cloud_cfg["zone"]
+    if "machine_type" in cloud_cfg and args.machine_type == DEFAULT_MACHINE_TYPE:
+        args.machine_type = cloud_cfg["machine_type"]
+    if "provisioning_model" in cloud_cfg and args.provisioning_model == "SPOT":
+        args.provisioning_model = cloud_cfg["provisioning_model"]
+    if "boot_disk_size" in cloud_cfg and args.boot_disk_size == DEFAULT_BOOT_DISK_SIZE:
+        args.boot_disk_size = cloud_cfg["boot_disk_size"]
+    if "image_family" in cloud_cfg and args.image_family == DEFAULT_IMAGE_FAMILY:
+        args.image_family = cloud_cfg["image_family"]
     remote_config = build_remote_config(config, datasets)
 
     run_id = make_run_id(args.instance_name)
