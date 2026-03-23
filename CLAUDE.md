@@ -167,6 +167,7 @@ Key sections:
 - [x] Strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — fixed via GCP Cloud Shell set-service-account --scopes=cloud-platform; also authenticated with personal gcloud account
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a — now us-central1-a; also configurable per YAML via cloud.zone
 - [x] run_cloud_sweep.py printed misleading stage labels unconditionally — fixed, wrapper now only prints config and exit code
+- [x] Remote runner Python drift could break pinned dependencies — launcher now bootstraps python3.12 explicitly for remote GCP venv creation
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -195,6 +196,7 @@ Key sections:
 - [ ] Dashboard: equity curve per strategy from trade-level data
 - [ ] Dashboard LargeUtf8 Arrow decoding error — Parquet viewer can't read newer pyarrow format on strategy-console
 - [ ] Python 3.14 on strategy-console causes numpy issues — dashboard venv may be unhealthy
+- [ ] Quick real-run validation still needed after Session 22 python3.12 remote bootstrap fix
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -249,4 +251,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-23 — Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
+2026-03-23 — Session 22: Remote python3.12 bootstrap fix for GCP runner quick tests

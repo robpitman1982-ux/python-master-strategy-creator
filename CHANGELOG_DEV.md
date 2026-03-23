@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-03-23 - Session 22: Remote Python bootstrap fix for GCP quick runs
+
+**What was done**:
+- Confirmed the quick-test failure was in remote dependency bootstrap, not engine logic
+- Confirmed the preserved remote `run_status.json` failed at `stage=pip`
+- Traced the `numpy==2.1.4` install failure to a remote Python version mismatch during VM bootstrap
+- Updated the launcher-generated remote runner to install and use `python3.12` explicitly for virtual environment creation
+- Added explicit remote environment logging for `python3`, `python3.12`, `python`, and `pip` before dependency installation
+- Added a dedicated `python_bootstrap` failure state when `python3.12` is unavailable on the remote VM
+- Added local launcher tests covering the generated `python3.12` bootstrap path and environment logging
+
+**Verified**:
+- Local smoke and launcher validation to follow immediately after the runner bootstrap change
+- Next operational step is a quick dry run followed by a quick real GCP validation run
+
+**Next session priorities**:
+1. Confirm the quick real run gets past `python_bootstrap` and `pip` on the sweep VM
+2. Verify the engine starts successfully on the remote VM with the pinned Python 3.12 environment
+3. Review preserved logs/artifacts only if the quick run still fails
+
+---
+
 ## 2026-03-23 — Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
 
 **What was done**:
