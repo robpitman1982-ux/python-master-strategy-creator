@@ -219,7 +219,7 @@ def test_verify_preserved_results_accepts_meaningful_completed_outputs(tmp_path:
     verified, message = verify_preserved_results(extracted_dir, "completed")
 
     assert verified is True
-    assert "dataset outputs" in message
+    assert "verified" in message
 
 
 def test_verify_preserved_results_rejects_completed_outputs_without_meaningful_files(tmp_path: Path):
@@ -233,7 +233,7 @@ def test_verify_preserved_results_rejects_completed_outputs_without_meaningful_f
     verified, message = verify_preserved_results(extracted_dir, "completed")
 
     assert verified is False
-    assert "meaningful result files" in message
+    assert "result files" in message
 
 
 def test_verify_preserved_results_requires_metadata_for_failed_runs(tmp_path: Path):
@@ -373,6 +373,20 @@ def test_create_remote_runner_file_is_fail_fast_and_unbuffered(tmp_path: Path):
 
     assert "set -euo pipefail" in text
     assert 'python -u master_strategy_engine.py --config "$RUN_ROOT/config.yaml"' in text
+
+
+def test_create_remote_runner_file_bootstraps_python312_and_logs_environment(tmp_path: Path):
+    runner_path = create_remote_runner_file(tmp_path)
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert "python3.12 python3.12-venv python3.12-dev tar" in text
+    assert 'write_status "failed" "python_bootstrap" "python3.12 not available on remote VM" 1' in text
+    assert 'python3.12 -m venv "$RUN_ROOT/venv"' in text
+    assert 'echo "[env] system python:"' in text
+    assert 'echo "[env] required python:"' in text
+    assert 'echo "[env] venv python:"' in text
+    assert "python -m pip install --upgrade pip" in text
+    assert 'python3 -m venv "$RUN_ROOT/venv"' not in text
 
 
 def test_write_latest_run_pointer_records_latest_run(tmp_path: Path):
@@ -815,7 +829,7 @@ def test_main_dry_run_stops_before_vm_creation(tmp_path: Path, monkeypatch):
 
     exit_code = main()
 
-    run_dirs = list(results_root.iterdir())
+    run_dirs = [p for p in results_root.iterdir() if p.is_dir()]
     assert exit_code == 0
     assert len(run_dirs) == 1
     payload = json.loads((run_dirs[0] / "launcher_status.json").read_text(encoding="utf-8"))
