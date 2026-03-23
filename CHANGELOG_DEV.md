@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-03-23 — Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
+
+**What was done**:
+- Fixed strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — resolved via GCP Cloud Shell `set-service-account --scopes=cloud-platform`; also authenticated strategy-console gcloud CLI with personal account as a fallback
+- Migrated DEFAULT_ZONE from australia-southeast2-a to us-central1-a for better SPOT pricing and availability
+- Made cloud zone/machine_type/provisioning_model/boot_disk_size/image_family configurable via YAML `cloud:` section — no more Python edits for region changes; CLI flags still override
+- Added `cloud:` section to `config_quick_test.yaml` and `config_es_all_timeframes_gcp96.yaml`
+- Fixed misleading stage labels in run_cloud_sweep.py wrapper (was printing VM LAUNCHING, SWEEP START, etc. unconditionally even on dry runs and early failures)
+- Confirmed `paths.py` auto-detects `~/strategy_console_storage` without needing the env var set
+- Cleaned up stale repo files: Windows path artifact (`ersRobDocumentsGIT Repospython-master-strategy-creator`), `QUICKFIX_TASKS.md`
+- Improved GitHub Actions deploy workflow with static IP setup instructions as comments, clear secret requirements
+- Updated CLAUDE.md: added `paths.py` to structure, new Deployment section, Session 21 fixes and new known issues
+
+**Key discoveries**:
+- The failed run (strategy-sweep-20260322T200637Z) was caused by insufficient VM auth scopes, not quota or code issues
+- N2 CPU quotas are already 200 in us-central1, us-east1, us-east4, us-east5, us-south1, us-west4
+- General CPU quota in us-central1 is 200 (199 available)
+- SPOT pricing in US regions is significantly cheaper than Australia
+
+**Verified**:
+- Dry run passes with us-central1-a zone
+- Dataset resolution from uploads/ directory works correctly
+- gcloud auth working on strategy-console after personal login
+
+**Next session priorities**:
+1. Confirm quick test run completed successfully with real results
+2. Run full ES 60m sweep across all strategy families
+3. Run multi-timeframe sweep (daily, 60m, 30m, 15m)
+4. Fix dashboard LargeUtf8 Arrow error
+5. Reserve static IP for strategy-console and update GitHub secret
+6. Begin multi-region parallel sweep architecture
+
+---
+
 ## 2026-03-21 - Session 14: One-click GCP sweep wrapper + automatic VM lifecycle polish
 
 **What was done**:
