@@ -15,6 +15,7 @@ from dashboard_utils import (
     collect_console_run_records,
     detect_result_files,
     estimate_run_cost,
+    fetch_live_dataset_statuses,
     format_bytes,
     format_currency,
     format_datetime,
@@ -222,7 +223,10 @@ with tab_monitor:
 
     # ── Dataset progress ─────────────────────────────────────────────────────
 
-    dataset_statuses = selected_run.get("dataset_statuses", []) if selected_run else []
+    if selected_run and selected_run_dir:
+        dataset_statuses = fetch_live_dataset_statuses(selected_run_dir)
+    else:
+        dataset_statuses = []
 
     if dataset_statuses:
         st.subheader("Dataset Progress")

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from paths import CONSOLE_SELECTION_PATH, CONSOLE_STORAGE_ROOT, EXPORTS_DIR, LEGACY_RESULTS_DIR, RUN_STATUS_PATH, UPLOADS_DIR
+
+log = logging.getLogger(__name__)
 
 RESULT_FILE_NAMES = [
     "master_leaderboard.csv",
@@ -203,6 +207,69 @@ def collect_launcher_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
             if status:
                 payload.append(status)
     return payload
+
+
+def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
+    """Fetch per-dataset status.json files from the active compute VM via SSH.
+
+    During an active run the status files only exist on the compute VM, not on
+    the console VM.  This function:
+    1. Reads run_manifest.json for instance_name, zone, run_id, and datasets.
+    2. Reads launcher_status.json to confirm the run is still active (state == "running").
+    3. If active: SSHs into the compute VM and cats each dataset's status.json.
+    4. If completed or manifest missing: falls back to collect_launcher_dataset_statuses().
+
+    SSH commands use a 10-second timeout and fail gracefully (returns [] on error).
+    """
+    manifest = read_json_file(run_dir / "run_manifest.json")
+    launcher_status = read_json_file(run_dir / "launcher_status.json")
+
+    state = str(launcher_status.get("state", "")).strip()
+    is_active = state == "running"
+
+    if not is_active or not manifest:
+        return collect_launcher_dataset_statuses(run_dir)
+
+    instance_name = str(manifest.get("instance_name", "")).strip()
+    zone = str(manifest.get("zone", "")).strip()
+    run_id = str(manifest.get("run_id", "")).strip()
+    datasets = manifest.get("datasets", [])
+
+    if not instance_name or not zone or not run_id or not isinstance(datasets, list):
+        return collect_launcher_dataset_statuses(run_dir)
+
+    remote_base = f"/tmp/strategy_engine_runs/{run_id}/repo/Outputs"
+    results: list[dict[str, Any]] = []
+
+    for ds in datasets:
+        # dataset entries may be dicts with a 'name' key, or plain strings
+        if isinstance(ds, dict):
+            ds_name = str(ds.get("name") or ds.get("output_dir") or "").strip()
+        else:
+            ds_name = str(ds).strip()
+        if not ds_name:
+            continue
+
+        remote_path = f"{remote_base}/{ds_name}/status.json"
+        cmd = [
+            "gcloud", "compute", "ssh", instance_name,
+            f"--zone={zone}",
+            f"--command=cat {remote_path}",
+            "--quiet",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if proc.returncode == 0 and proc.stdout.strip():
+                status = json.loads(proc.stdout.strip())
+                results.append(status)
+        except Exception as exc:
+            log.warning("SSH status fetch failed for %s/%s: %s", instance_name, ds_name, exc)
+
+    if results:
+        return results
+
+    # SSH returned nothing (VM not ready yet) — fall back to local
+    return collect_launcher_dataset_statuses(run_dir)
 
 
 def _resolve_outputs_dir(run_dir: Path) -> Path | None:

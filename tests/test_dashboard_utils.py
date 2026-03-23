@@ -298,3 +298,45 @@ def test_load_promoted_candidates_missing():
         assert load_promoted_candidates(tmp_path) is None
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_fetch_live_dataset_statuses_fallback():
+    """When no manifest exists, falls back to collect_launcher_dataset_statuses (local path)."""
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        from dashboard_utils import fetch_live_dataset_statuses
+
+        # Run dir with no manifest → should fall back and return [] (no local status files either)
+        run_dir = tmp_path / "run-no-manifest"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        _write_text(run_dir / "launcher_status.json", json.dumps({"state": "running"}))
+        # No run_manifest.json present → manifest will be {}
+
+        result = fetch_live_dataset_statuses(run_dir)
+
+        assert isinstance(result, list)
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_fetch_live_dataset_statuses_completed_uses_local():
+    """When launcher state is not 'running', returns local artifacts (no SSH)."""
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        from dashboard_utils import fetch_live_dataset_statuses
+
+        run_dir = tmp_path / "run-completed"
+        status_file = run_dir / "artifacts" / "Outputs" / "ES_60m" / "status.json"
+        _write_text(status_file, json.dumps({"dataset": "ES_60m", "progress_pct": 100}))
+        _write_text(run_dir / "launcher_status.json", json.dumps({"state": "completed"}))
+        _write_text(run_dir / "run_manifest.json", json.dumps({
+            "instance_name": "test-vm", "zone": "us-central1-a",
+            "run_id": "test-run", "datasets": [{"name": "ES_60m"}],
+        }))
+
+        result = fetch_live_dataset_statuses(run_dir)
+
+        assert len(result) == 1
+        assert result[0]["dataset"] == "ES_60m"
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
