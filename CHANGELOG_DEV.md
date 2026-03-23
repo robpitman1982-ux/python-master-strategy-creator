@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-23 — Session 24: Dashboard Overhaul + ES 60m Full Sweep Config
+
+**What was done**:
+- Created `cloud/config_es_60m_full_sweep.yaml`: ES 60m, all 3 families (trend/MR/breakout), 94 workers, n2-highcpu-96 SPOT us-central1-a
+- Updated `cloud/config_quick_test.yaml` machine type to n2-highcpu-8 (right-sized for 7 workers)
+- Overhauled `dashboard.py` with 3-tab layout:
+  - Tab 1 "Control Panel": status cards, active run progress, run history table, selected run detail expander with log tail
+  - Tab 2 "Results Explorer": leaderboard table, portfolio review, correlation heatmap (plotly), yearly PnL bar chart, equity curves
+  - Tab 3 "System": storage overview, health checks, storage paths, quick action commands, available configs list
+  - Professional CSS: gradient banner, metric card styling, status color classes, clean tab formatting
+- Updated `dashboard_utils.py`: added `format_duration_short()`, `status_color()`, `load_strategy_results()` (with parquet→CSV fallback fixing LargeUtf8 error); updated SPOT pricing to actual rates
+- Added `run_cloud_sweep.py` `_ensure_console_storage_env()`: auto-detects `~/strategy_console_storage`, no env var prefix needed
+- Created `scripts/setup_dashboard_venv.sh`: clean venv setup, prefers python3.12, pins numpy<2.2
+- Created `scripts/strategy-dashboard.service`: systemd unit with env var and venv ExecStart path
+
+**Next session priorities**:
+1. Run full ES 60m all-families sweep: `python3 run_cloud_sweep.py --config cloud/config_es_60m_full_sweep.yaml`
+2. Analyze results in the new dashboard (Tab 2 — Results Explorer)
+3. Multi-timeframe expansion (daily, 30m, 15m) once 60m confirmed
+4. Reserve static IP for strategy-console
+5. GitHub Actions auto-deploy
+
+---
+
 ## 2026-03-23 - Session 22: Remote Python bootstrap fix for GCP quick runs
 
 **What was done**:

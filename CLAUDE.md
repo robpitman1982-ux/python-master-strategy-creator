@@ -26,10 +26,13 @@
 python-master-strategy-creator/
 ├── master_strategy_engine.py           # Main orchestrator — runs all families
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
-├── dashboard.py                        # Streamlit operations + research dashboard
-├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, and result sources
-├── run_cloud_sweep.py                  # One-click Windows-friendly wrapper around cloud.launch_gcp_run
+├── dashboard.py                        # Streamlit 3-tab dashboard: Control Panel, Results Explorer, System
+├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, result loading
+├── run_cloud_sweep.py                  # One-click wrapper around cloud.launch_gcp_run (auto-detects storage path)
 ├── paths.py                            # Shared path constants: REPO_ROOT, UPLOADS_DIR, RUNS_DIR, CONSOLE_STORAGE_ROOT (auto-detected)
+├── scripts/
+│   ├── setup_dashboard_venv.sh        # One-time venv setup for strategy-console (picks python3.12/3.11)
+│   └── strategy-dashboard.service     # systemd service file for the Streamlit dashboard
 ├── tests/
 │   ├── __init__.py
 │   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
@@ -65,11 +68,12 @@ python-master-strategy-creator/
 │   ├── launch_gcp_run.py       # Windows-first Python launcher: manifest → bundle → upload → monitor → tarball download → cleanup
 │   ├── gcp_startup.sh          # VM boot script: install, clone, wait for data, run engine, copy outputs
 │   ├── GCP_WINDOWS_RUNBOOK.md  # Single-command Windows guide for the new launcher
-│   ├── config_full_es.yaml     # Full ES sweep config
-│   ├── config_quick_test.yaml  # Quick test config
+│   ├── config_full_es.yaml              # Full ES sweep config (legacy)
+│   ├── config_quick_test.yaml           # Quick test config (mean_reversion only, n2-highcpu-8)
+│   ├── config_es_60m_full_sweep.yaml    # ES 60m all 3 families, 94 workers, n2-highcpu-96 SPOT
 │   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core DigitalOcean config
-│   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Iowa SPOT config (zone/machine configurable via YAML cloud: section)
-│   └── SETUP.md                # DigitalOcean setup guide
+│   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Iowa SPOT config
+│   └── SETUP.md                         # DigitalOcean setup guide
 ├── Dockerfile
 ├── requirements.txt
 ├── .dockerignore
@@ -193,9 +197,10 @@ Key sections:
 
 ### Dashboard / monitoring
 - [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (launcher summary, VM billing awareness, cost estimate, dataset progress, best candidates), Results Explorer (guided source selection, leaderboard/correlations/equity curves), Prop Firm Simulator (connected to selected result source)
-- [ ] Dashboard: equity curve per strategy from trade-level data
-- [ ] Dashboard LargeUtf8 Arrow decoding error — Parquet viewer can't read newer pyarrow format on strategy-console
-- [ ] Python 3.14 on strategy-console causes numpy issues — dashboard venv may be unhealthy
+- [x] Dashboard overhaul — 3-tab layout (Control Panel, Results Explorer, System), card metrics, plotly charts
+- [x] Dashboard LargeUtf8 Arrow error — load_strategy_results() wraps all parquet reads in try/except with CSV fallback
+- [x] Python 3.14 / numpy issues — scripts/setup_dashboard_venv.sh pins numpy<2.2, uses python3.12 preferred
+- [ ] Dashboard: equity curve per strategy from trade-level data (equity curves now shown from strategy_returns.csv)
 - [ ] Quick real-run validation still needed after Session 22 python3.12 remote bootstrap fix
 
 ### Prop firm system (System 2 — in progress)
@@ -251,4 +256,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-23 — Session 22: Remote python3.12 bootstrap fix for GCP runner quick tests
+2026-03-23 — Session 24: Dashboard overhaul, ES 60m full sweep config, storage auto-detect, venv setup
