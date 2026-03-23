@@ -1,5 +1,26 @@
 name: Deploy Strategy Console
 
+# Triggers on every push to main, pulling the latest code onto the
+# strategy-console VM and restarting the dashboard service.
+#
+# REQUIRED GitHub Secrets (repo → Settings → Secrets → Actions):
+#   STRATEGY_CONSOLE_SSH_KEY  — private key whose public half is in
+#                               ~/.ssh/authorized_keys on strategy-console
+#   STRATEGY_CONSOLE_HOST     — external IP of strategy-console VM
+#                               (reserve a static IP first — see below)
+#   STRATEGY_CONSOLE_USER     — OS login username (e.g. robpitman1982)
+#   STRATEGY_CONSOLE_PORT     — SSH port (leave unset to default to 22)
+#
+# STATIC IP SETUP (run once from GCP Cloud Shell):
+#   gcloud compute addresses create strategy-console-ip --region=us-central1
+#   gcloud compute instances delete-access-config strategy-console \
+#     --zone=us-central1-c --access-config-name="External NAT"
+#   gcloud compute instances add-access-config strategy-console \
+#     --zone=us-central1-c \
+#     --address=$(gcloud compute addresses describe strategy-console-ip \
+#                 --region=us-central1 --format="get(address)")
+#   Then update STRATEGY_CONSOLE_HOST secret with the reserved IP.
+
 on:
   push:
     branches:
@@ -31,10 +52,5 @@ jobs:
           STRATEGY_CONSOLE_USER: ${{ secrets.STRATEGY_CONSOLE_USER }}
           STRATEGY_CONSOLE_PORT: ${{ secrets.STRATEGY_CONSOLE_PORT }}
         run: |
-          # Required GitHub Secrets:
-          # STRATEGY_CONSOLE_HOST
-          # STRATEGY_CONSOLE_USER
-          # STRATEGY_CONSOLE_PORT
-          # STRATEGY_CONSOLE_SSH_KEY
           ssh -p "${STRATEGY_CONSOLE_PORT:-22}" "${STRATEGY_CONSOLE_USER}@${STRATEGY_CONSOLE_HOST}" \
             "cd ~/python-master-strategy-creator && ./scripts/update_console.sh"
