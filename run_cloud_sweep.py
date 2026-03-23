@@ -58,6 +58,18 @@ def main(argv: list[str] | None = None) -> int:
         print("Mode: DRY RUN (no VM will be created)")
     exit_code = launcher_main(launcher_argv)
     print(f"Launcher finished with exit code: {exit_code}")
+
+    if not args.dry_run:
+        try:
+            from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+            ul = aggregate_ultimate_leaderboard()
+            if not ul.empty:
+                print(f"\n✅ Ultimate leaderboard updated: {len(ul)} strategies across all runs")
+            else:
+                print("\n⚠️  No accepted strategies found across any runs")
+        except Exception as e:
+            print(f"\n⚠️  Ultimate leaderboard update failed: {e}")
+
     return exit_code
 
 
