@@ -15,6 +15,7 @@
 - Added explicit remote environment logging for `python3`, `python3.12`, `python`, and `pip` before dependency installation
 - Added a dedicated `python_bootstrap` failure state when `python3.12` is unavailable on the remote VM
 - Added local launcher tests covering the generated `python3.12` bootstrap path and environment logging
+- Corrected `requirements.txt` from unavailable `numpy==2.1.4` to installable `numpy==2.1.3` after the rerun proved the VM was already on Python 3.12
 
 **Verified**:
 - Local smoke and launcher validation to follow immediately after the runner bootstrap change
