@@ -5,6 +5,23 @@
 
 ---
 
+## 2026-03-24 — Session 26: Dashboard Status Fix + Ultimate Leaderboard
+
+**What was done**:
+- Fixed Live Monitor: `fetch_live_dataset_statuses()` added to `dashboard_utils.py` — SSHs into the compute VM via `gcloud compute ssh` during active runs to read per-dataset `status.json` in real time; falls back to local artifacts for completed runs
+- Created `modules/ultimate_leaderboard.py`: cross-run strategy aggregator — scans all `strategy_console_storage/runs/*/artifacts/Outputs/master_leaderboard.csv`, filters to `accepted_final == True`, deduplicates by (strategy_type, dataset, name, filters) keeping highest PF, ranks by quality flag → net PnL → PF, writes `ultimate_leaderboard.csv`
+- Added Ultimate Leaderboard tab to dashboard (5th tab, between Results and Run History): KPI strip, multi-select filters, sortable table, details expander, 120s cache with Refresh button
+- Auto-runs ultimate leaderboard aggregation after sweep completion in `run_cloud_sweep.py` (skipped on dry runs)
+- Tests: 57 passing (42 in smoke+dashboard_utils+ultimate_leaderboard suites)
+
+**Next session priorities**:
+1. Analyse all-timeframe ES results via Ultimate Leaderboard tab
+2. Filter summary and analysis (document all filters in filters.py)
+3. Multi-VM parallel orchestration design
+4. CL (crude oil) data export and sweep
+
+---
+
 ## 2026-03-24 — Session 25: All-Timeframe Config + Status Fix + Dashboard Live Monitor
 
 **What was done**:

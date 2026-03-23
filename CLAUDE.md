@@ -51,6 +51,7 @@ python-master-strategy-creator/
 │   ├── refiner.py                     # Refinement engine (parallel parameter sweep)
 │   ├── portfolio_evaluator.py         # Portfolio metrics, Monte Carlo, stress tests
 │   ├── prop_firm_simulator.py         # Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
+│   ├── ultimate_leaderboard.py        # Cross-run strategy aggregator: deduplicates and ranks accepted strategies from all runs
 │   └── strategy_types/
 │       ├── __init__.py
 │       ├── base_strategy_type.py      # Abstract base — all families implement this
@@ -268,5 +269,9 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
+**Ultimate leaderboard**: `~/strategy_console_storage/ultimate_leaderboard.csv` — written by `modules/ultimate_leaderboard.py` after every sweep and viewable in the dashboard's 5th tab.
+
+**Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
+
 ## Last updated
-2026-03-24 — Session 25: status.json first-update fix, load_promoted_candidates test, quick commands section
+2026-03-24 — Session 26: Live Monitor SSH status, ultimate leaderboard module + dashboard tab, auto-update after sweep
