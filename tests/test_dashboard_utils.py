@@ -248,7 +248,7 @@ def test_estimate_run_cost_uses_local_price_map():
     assert estimate["machine_type"] == "n2-highcpu-96"
     assert estimate["provisioning_model"] == "SPOT"
     assert estimate["elapsed_seconds"] == 7200
-    assert round(float(estimate["estimated_total_cost"]), 2) == 3.24
+    assert round(float(estimate["estimated_total_cost"]), 2) == 1.44  # $0.72/hr SPOT × 2h
     assert estimate["billing_active"] is True
 
 
