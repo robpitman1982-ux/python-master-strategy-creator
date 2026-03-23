@@ -170,8 +170,8 @@ def render_table(df: pd.DataFrame) -> None:
 
 # ─── TABS ──────────────────────────────────────────────────────────────────────
 
-tab_monitor, tab_results, tab_history, tab_system = st.tabs(
-    ["🔴 Live Monitor", "📊 Results", "🗂️ Run History", "⚙️ System"]
+tab_monitor, tab_results, tab_ultimate, tab_history, tab_system = st.tabs(
+    ["🔴 Live Monitor", "📊 Results", "🏆 Ultimate Leaderboard", "🗂️ Run History", "⚙️ System"]
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -465,7 +465,120 @@ with tab_results:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — RUN HISTORY
+# TAB 3 — ULTIMATE LEADERBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+with tab_ultimate:
+
+    @st.cache_data(ttl=120)
+    def _load_ultimate_leaderboard() -> pd.DataFrame:
+        try:
+            from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+            return aggregate_ultimate_leaderboard()
+        except Exception as exc:
+            return pd.DataFrame({"error": [str(exc)]})
+
+    col_refresh, col_spacer = st.columns([1, 5])
+    with col_refresh:
+        if st.button("🔄 Refresh", key="ul_refresh"):
+            _load_ultimate_leaderboard.clear()
+
+    ul_df = _load_ultimate_leaderboard()
+
+    if ul_df.empty or "error" in ul_df.columns:
+        if "error" in ul_df.columns:
+            st.error(f"Error loading ultimate leaderboard: {ul_df['error'].iloc[0]}")
+        else:
+            st.info("No accepted strategies found across any runs. Run a sweep first.")
+    else:
+        # ── KPI strip ────────────────────────────────────────────────────────
+        total_strats  = len(ul_df)
+        robust_count  = int((ul_df.get("quality_flag", pd.Series()) == "ROBUST").sum()) if "quality_flag" in ul_df.columns else 0
+        unique_datasets = ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
+        runs_scanned  = ul_df["run_id"].nunique() if "run_id" in ul_df.columns else 0
+
+        u1, u2, u3, u4 = st.columns(4)
+        u1.metric("Total Strategies", total_strats)
+        u2.metric("ROBUST", robust_count)
+        u3.metric("Unique Datasets", unique_datasets)
+        u4.metric("Runs Scanned", runs_scanned)
+
+        st.divider()
+
+        # ── Filters ──────────────────────────────────────────────────────────
+        filtered = ul_df.copy()
+
+        f1, f2, f3, f4 = st.columns(4)
+        with f1:
+            if "strategy_type" in filtered.columns:
+                types_all = sorted(filtered["strategy_type"].dropna().unique().tolist())
+                sel_types = st.multiselect("Strategy type", types_all, default=types_all, key="ul_types")
+                if sel_types:
+                    filtered = filtered[filtered["strategy_type"].isin(sel_types)]
+        with f2:
+            if "dataset" in filtered.columns:
+                ds_all = sorted(filtered["dataset"].dropna().unique().tolist())
+                sel_ds = st.multiselect("Dataset", ds_all, default=ds_all, key="ul_ds")
+                if sel_ds:
+                    filtered = filtered[filtered["dataset"].isin(sel_ds)]
+        with f3:
+            if "quality_flag" in filtered.columns:
+                qf_all = sorted(filtered["quality_flag"].dropna().unique().tolist())
+                sel_qf = st.multiselect("Quality flag", qf_all, default=qf_all, key="ul_qf")
+                if sel_qf:
+                    filtered = filtered[filtered["quality_flag"].isin(sel_qf)]
+        with f4:
+            pf_col = "leader_pf" if "leader_pf" in filtered.columns else (
+                "profit_factor" if "profit_factor" in filtered.columns else None
+            )
+            if pf_col:
+                max_pf = float(pd.to_numeric(filtered[pf_col], errors="coerce").max() or 5.0)
+                min_pf_filter = st.slider("Min PF", 0.0, max_pf, 1.0, 0.05, key="ul_pf")
+                filtered = filtered[pd.to_numeric(filtered[pf_col], errors="coerce").fillna(0) >= min_pf_filter]
+
+        st.caption(f"Showing {len(filtered)} of {total_strats} strategies")
+
+        # ── Main table ───────────────────────────────────────────────────────
+        display_cols = [c for c in [
+            "rank", "strategy_type", "dataset", "leader_strategy_name", "quality_flag",
+            "leader_pf", "is_pf", "oos_pf", "leader_net_pnl", "leader_trades",
+            "recent_12m_pf", "run_id",
+        ] if c in filtered.columns]
+
+        if display_cols:
+            disp = filtered[display_cols].copy()
+            for num_col in ["leader_pf", "is_pf", "oos_pf", "recent_12m_pf"]:
+                if num_col in disp.columns:
+                    disp[num_col] = pd.to_numeric(disp[num_col], errors="coerce").round(2)
+            if "leader_net_pnl" in disp.columns:
+                disp["leader_net_pnl"] = pd.to_numeric(disp["leader_net_pnl"], errors="coerce").apply(
+                    lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                )
+            st.dataframe(disp, use_container_width=True)
+        else:
+            render_table(filtered.head(50))
+
+        # ── Details expander ─────────────────────────────────────────────────
+        with st.expander("Strategy details", expanded=False):
+            rank_options = filtered["rank"].tolist() if "rank" in filtered.columns else []
+            if rank_options:
+                sel_rank = st.selectbox("Select rank", rank_options, key="ul_detail_rank")
+                row = filtered[filtered["rank"] == sel_rank]
+                if not row.empty:
+                    r = row.iloc[0]
+                    st.markdown(f"**Strategy**: `{r.get('leader_strategy_name', '—')}`")
+                    st.markdown(f"**Type / Dataset**: `{r.get('strategy_type', '—')}` / `{r.get('dataset', '—')}`")
+                    st.markdown(f"**Quality flag**: `{r.get('quality_flag', '—')}`")
+                    st.markdown(f"**Filter combination**: `{r.get('best_combo_filter_class_names', '—')}`")
+                    st.markdown(f"**Discovered in run**: `{r.get('run_id', '—')}`")
+                    st.markdown(f"**Source file**: `{r.get('source_file', '—')}`")
+                    st.markdown(f"**Discovered at**: `{r.get('discovered_at', '—')}`")
+            else:
+                st.info("No strategies match the current filters.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — RUN HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
 with tab_history:
