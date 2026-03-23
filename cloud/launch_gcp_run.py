@@ -1386,7 +1386,12 @@ def launch_remote_runner(
         gcloud_base,
         instance_name,
         zone,
-        f"chmod +x {clean_runner_path} && nohup sudo bash {clean_runner_path} {clean_run_root} > {clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null &",
+        (
+            f"mkdir -p {clean_run_root}/logs && "
+            f"chmod +x {clean_runner_path} && "
+            f"nohup sudo bash {clean_runner_path} {clean_run_root} > "
+            f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null &"
+        ),
     )
 
 

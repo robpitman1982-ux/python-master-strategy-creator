@@ -26,6 +26,7 @@ from cloud.launch_gcp_run import (
     build_remote_config,
     create_input_bundle,
     create_remote_runner_file,
+    launch_remote_runner,
     main,
     make_run_id,
     parse_status_json,
@@ -387,6 +388,28 @@ def test_create_remote_runner_file_bootstraps_python312_and_logs_environment(tmp
     assert 'echo "[env] venv python:"' in text
     assert "python -m pip install --upgrade pip" in text
     assert 'python3 -m venv "$RUN_ROOT/venv"' not in text
+
+
+def test_launch_remote_runner_creates_log_dir_before_nohup(monkeypatch):
+    captured: dict[str, str] = {}
+
+    def _fake_ssh_command(gcloud_base, instance_name, zone, command, check=True):
+        captured["command"] = command
+        return None
+
+    monkeypatch.setattr("cloud.launch_gcp_run.ssh_command", _fake_ssh_command)
+
+    launch_remote_runner(
+        ["gcloud"],
+        "strategy-sweep",
+        "us-central1-a",
+        "/tmp/strategy_engine_runs/test-run/remote_runner.sh",
+        "/tmp/strategy_engine_runs/test-run",
+    )
+
+    command = captured["command"]
+    assert "mkdir -p /tmp/strategy_engine_runs/test-run/logs" in command
+    assert "nohup sudo bash /tmp/strategy_engine_runs/test-run/remote_runner.sh /tmp/strategy_engine_runs/test-run > /tmp/strategy_engine_runs/test-run/logs/runner_stdout.log 2>&1 < /dev/null &" in command
 
 
 def test_write_latest_run_pointer_records_latest_run(tmp_path: Path):
