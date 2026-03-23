@@ -440,8 +440,21 @@ if [ ! -f "$BUNDLE_PATH" ]; then
     exit 1
 fi
 
-if ! sudo apt-get update -qq || ! sudo apt-get install -y -qq python3 python3-pip python3-venv tar >/dev/null 2>&1; then
-    write_status "failed" "bootstrap" "Failed installing system packages" 1
+write_status "running" "python_bootstrap" "Installing python3.12 runtime and venv tooling"
+if ! sudo apt-get update -qq; then
+    write_status "failed" "python_bootstrap" "Failed updating apt metadata for python3.12 bootstrap" 1
+    preserve_outputs
+    exit 1
+fi
+
+if ! sudo apt-get install -y -qq python3.12 python3.12-venv python3.12-dev tar >/dev/null 2>&1; then
+    write_status "failed" "python_bootstrap" "python3.12 not available on remote VM" 1
+    preserve_outputs
+    exit 1
+fi
+
+if ! command -v python3.12 >/dev/null 2>&1; then
+    write_status "failed" "python_bootstrap" "python3.12 not available on remote VM" 1
     preserve_outputs
     exit 1
 fi
@@ -488,20 +501,38 @@ then
     exit 1
 fi
 
-write_status "running" "validated" "Inputs validated; creating virtual environment"
+echo "[env] system python:"
+command -v python3 || true
+python3 --version || true
+
+echo "[env] required python:"
+command -v python3.12 || true
+python3.12 --version || true
+
+write_status "running" "validated" "Inputs validated; creating virtual environment with python3.12"
 rm -rf "$RUN_ROOT/venv"
-if ! python3 -m venv "$RUN_ROOT/venv"; then
-    write_status "failed" "venv" "Failed creating virtual environment" 1
+if ! python3.12 -m venv "$RUN_ROOT/venv"; then
+    write_status "failed" "python_bootstrap" "Failed creating virtual environment with python3.12" 1
     preserve_outputs
     exit 1
 fi
 source "$RUN_ROOT/venv/bin/activate"
 
+echo "[env] venv python:"
+python --version || true
+pip --version || true
+
+if ! python -m pip install --upgrade pip >/dev/null 2>&1; then
+    write_status "failed" "pip" "Failed upgrading pip in remote virtual environment" 1
+    preserve_outputs
+    exit 1
+fi
+
 PIP_EXIT=0
 if [ -f "$REPO_DIR/requirements.txt" ]; then
-    pip install --quiet -r "$REPO_DIR/requirements.txt" || PIP_EXIT=$?
+    python -m pip install --quiet -r "$REPO_DIR/requirements.txt" || PIP_EXIT=$?
 else
-    pip install --quiet numpy pandas pyyaml pytest || PIP_EXIT=$?
+    python -m pip install --quiet numpy pandas pyyaml pytest || PIP_EXIT=$?
 fi
 if [ "$PIP_EXIT" -ne 0 ]; then
     write_status "failed" "pip" "Dependency installation failed" "$PIP_EXIT"
@@ -539,7 +570,19 @@ def resolve_required_datasets(config: dict[str, Any], repo_root: Path) -> list[D
 
     resolved: list[DatasetSpec] = []
     for entry in datasets:
-        local_path = resolve_dataset_path(str(entry.get("path", "")))
+        path_str = str(entry.get("path", ""))
+        try:
+            local_path = resolve_dataset_path(path_str)
+        except FileNotFoundError:
+            candidate = Path(path_str)
+            if not candidate.is_absolute():
+                repo_relative = (repo_root / candidate).resolve()
+                if repo_relative.exists():
+                    local_path = repo_relative
+                else:
+                    raise
+            else:
+                raise
         if not local_path.exists():
             raise FileNotFoundError(f"Dataset not found: {local_path}")
         if not local_path.is_file():
