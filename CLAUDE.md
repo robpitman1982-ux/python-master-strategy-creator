@@ -29,6 +29,7 @@ python-master-strategy-creator/
 ├── dashboard.py                        # Streamlit operations + research dashboard
 ├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, and result sources
 ├── run_cloud_sweep.py                  # One-click Windows-friendly wrapper around cloud.launch_gcp_run
+├── paths.py                            # Shared path constants: REPO_ROOT, UPLOADS_DIR, RUNS_DIR, CONSOLE_STORAGE_ROOT (auto-detected)
 ├── tests/
 │   ├── __init__.py
 │   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
@@ -67,7 +68,7 @@ python-master-strategy-creator/
 │   ├── config_full_es.yaml     # Full ES sweep config
 │   ├── config_quick_test.yaml  # Quick test config
 │   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core DigitalOcean config
-│   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Melbourne SPOT config
+│   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Iowa SPOT config (zone/machine configurable via YAML cloud: section)
 │   └── SETUP.md                # DigitalOcean setup guide
 ├── Dockerfile
 ├── requirements.txt
@@ -163,6 +164,9 @@ Key sections:
 - [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (22 tests total across smoke + cloud launcher coverage)
 - [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
 - [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
+- [x] Strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — fixed via GCP Cloud Shell set-service-account --scopes=cloud-platform; also authenticated with personal gcloud account
+- [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a — now us-central1-a; also configurable per YAML via cloud.zone
+- [x] run_cloud_sweep.py printed misleading stage labels unconditionally — fixed, wrapper now only prints config and exit code
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable — now in config.yaml with multi-dataset loop support
@@ -177,7 +181,7 @@ Key sections:
 - [x] Timeframe-aware refinement grids — hold_bars auto-scales with bar duration (5m → 12×, daily → 0.154×)
 - [x] Hybrid filter parameter scaling — SMA/ATR/momentum lookbacks scale per timeframe in sweep phase too
 - [x] 48-core cloud config created — cloud/config_es_all_timeframes_48core.yaml (4 datasets, 46 workers)
-- [x] 96-core GCP cloud config created — cloud/config_es_all_timeframes_gcp96.yaml (4 datasets, 94 workers, Melbourne SPOT)
+- [x] 96-core GCP cloud config created — cloud/config_es_all_timeframes_gcp96.yaml (4 datasets, 94 workers, Iowa SPOT us-central1-a)
 - [x] Memory estimation + auto-throttle — warns/reduces workers if parallel RAM estimate exceeds budget
 - [x] GCP automation scripts — run_gcp_job.ps1 / run_gcp_job.sh: fully unattended create → upload → poll → download → DESTROY
 - [x] GCP automation bug fixes (Session 9) — SCP tilde/paths, gcloud.cmd, user detection, race condition, log clearing, cwd
@@ -189,6 +193,8 @@ Key sections:
 ### Dashboard / monitoring
 - [x] Streamlit dashboard (dashboard.py) — Cloud Monitor (launcher summary, VM billing awareness, cost estimate, dataset progress, best candidates), Results Explorer (guided source selection, leaderboard/correlations/equity curves), Prop Firm Simulator (connected to selected result source)
 - [ ] Dashboard: equity curve per strategy from trade-level data
+- [ ] Dashboard LargeUtf8 Arrow decoding error — Parquet viewer can't read newer pyarrow format on strategy-console
+- [ ] Python 3.14 on strategy-console causes numpy issues — dashboard venv may be unhealthy
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -207,6 +213,8 @@ Key sections:
 - [x] Config file (YAML/TOML) instead of hardcoded constants — config.yaml created
 - [ ] Integrate status.json polling into run_cloud_job.py wait loop
 - [ ] Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
+- [ ] No static IP on strategy-console — IP changes on restart; reserve via gcloud compute addresses create
+- [ ] status.json first-update delay — fix: `if done == 1 or done % step == 0` instead of `if done % step == 0`
 
 ## Coding standards
 
@@ -228,5 +236,17 @@ Key sections:
 6. Update CLAUDE.md (especially the issues list) and CHANGELOG_DEV.md
 7. Commit and push to GitHub
 
+## Deployment
+
+**Strategy Console**: GCP e2-micro, us-central1-c — always-on VM serving the Streamlit dashboard on port 8501 via systemd `strategy-dashboard` service. No static IP yet — update `STRATEGY_CONSOLE_HOST` secret if IP changes after restart.
+
+**Compute VMs**: n2-highcpu-96 SPOT, us-central1-a (configurable via `cloud:` section in each sweep YAML). Created on demand, destroyed after results download.
+
+**GitHub Actions**: auto-deploy on push to main via `.github/workflows/deploy_strategy_console.yml`. Requires secrets: `STRATEGY_CONSOLE_SSH_KEY`, `STRATEGY_CONSOLE_HOST`, `STRATEGY_CONSOLE_USER`.
+
+**Dashboard**: `streamlit run dashboard.py` or `sudo systemctl restart strategy-dashboard` on the console VM.
+
+**Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
+
 ## Last updated
-2026-03-21 — Session 14: One-click GCP wrapper, latest-run pointer, and final automatic VM lifecycle polish
+2026-03-23 — Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
