@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-24 — Session 25: All-Timeframe Config + Status Fix + Dashboard Live Monitor
+
+**What was done**:
+- Added `cloud/config_es_all_timeframes_96core.yaml`: ES daily/60m/30m/15m, all 3 families (trend/MR/breakout), 94 workers, n2-highcpu-96 SPOT us-central1-a
+- Fixed `modules/progress.py` status.json first-update delay: added `done == 1` condition so the first completed task is written immediately instead of waiting for the first `step` boundary
+- Dashboard overhaul — 4-tab layout (Live Monitor / Results / Run History / System):
+  - **Live Monitor**: KPI strip (active/total/promoted/elapsed), per-dataset progress bars with family pills, promoted candidates table, log tail, 30s auto-refresh
+  - **Results**: equity curves (Plotly dark theme), annual PnL bar chart with OOS divider, correlation heatmap
+  - **Run History**: all runs table with dataset column, run detail expander
+  - **System**: storage overview, health checks, quick action commands
+- Added `load_promoted_candidates()` to `dashboard_utils.py`: loads promoted_candidates.csv from a run outputs directory, returns None if not found
+- Added `test_load_promoted_candidates_missing` to `tests/test_dashboard_utils.py` — 72 tests total, all passing
+- Added Quick Commands section to CLAUDE.md with canonical sweep command
+- Marked status.json first-update delay as fixed in CLAUDE.md known issues
+
+**Next session priorities**:
+1. Launch ES all-timeframes sweep: `python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml`
+2. Monitor via Live Monitor tab in the dashboard (http://35.232.131.181:8501)
+3. Analyze results in Results Explorer (Tab 2) once sweep completes
+4. Reserve static IP for strategy-console
+5. Multi-timeframe data exports (NQ, CL) from TradeStation
+
+---
+
 ## 2026-03-23 — Session 24: Dashboard Overhaul + ES 60m Full Sweep Config
 
 **What was done**:

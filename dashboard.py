@@ -23,6 +23,7 @@ from dashboard_utils import (
     list_export_files,
     list_uploaded_datasets,
     load_log_tail,
+    load_promoted_candidates,
     load_strategy_results,
     operator_action_summary,
     parse_dataset_filename,
@@ -35,105 +36,79 @@ from dashboard_utils import (
 )
 from paths import EXPORTS_DIR, LEGACY_RESULTS_DIR, RUNS_DIR, UPLOADS_DIR
 
-# ─── Page config ─────────────────────────────────────────────────────────────
+# ─── Page config ──────────────────────────────────────────────────────────────
 
 st.set_page_config(page_title="Strategy Console", layout="wide", page_icon="📈")
 
-st.markdown(
-    """
-    <style>
-    .block-container {padding-top: 1.5rem; padding-bottom: 3rem;}
+st.markdown("""
+<style>
+.block-container {padding-top: 1.2rem; padding-bottom: 3rem;}
 
-    /* Banner */
-    .console-banner {
-        padding: 1.25rem 1.5rem;
-        border-radius: 16px;
-        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-        color: #f8fafc;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-    }
-    .console-banner h1 { margin: 0; font-size: 2rem; letter-spacing: -0.5px; }
-    .console-banner p { margin: 0.4rem 0 0 0; opacity: 0.85; font-size: 1rem; }
+.console-banner {
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    color: #f8fafc;
+    margin-bottom: 1.2rem;
+}
+.console-banner h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.5px; }
+.console-banner p  { margin: 0.3rem 0 0 0; opacity: 0.8; font-size: 0.9rem; }
 
-    /* Status badges */
-    .status-success { color: #00e676; font-weight: bold; }
-    .status-warning { color: #ffab00; font-weight: bold; }
-    .status-error { color: #ff1744; font-weight: bold; }
-    .status-info { color: #448aff; font-weight: bold; }
-    .status-neutral { color: #90a4ae; font-weight: bold; }
+.status-success { color: #00e676; font-weight: bold; }
+.status-warning { color: #ffab00; font-weight: bold; }
+.status-error   { color: #ff1744; font-weight: bold; }
+.status-info    { color: #448aff; font-weight: bold; }
+.status-neutral { color: #90a4ae; font-weight: bold; }
 
-    /* Quality flag chips */
-    .flag-robust { background: #1b5e20; color: #a5d6a7; padding: 2px 8px; border-radius: 8px; font-size: 0.8rem; }
-    .flag-stable { background: #0d47a1; color: #90caf9; padding: 2px 8px; border-radius: 8px; font-size: 0.8rem; }
-    .flag-marginal { background: #e65100; color: #ffcc80; padding: 2px 8px; border-radius: 8px; font-size: 0.8rem; }
-    .flag-broken { background: #b71c1c; color: #ef9a9a; padding: 2px 8px; border-radius: 8px; font-size: 0.8rem; }
+.flag-robust   { background:#1b5e20; color:#a5d6a7; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-stable   { background:#0d47a1; color:#90caf9; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-marginal { background:#e65100; color:#ffcc80; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-broken   { background:#b71c1c; color:#ef9a9a; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
 
-    /* Metric cards */
-    div[data-testid="metric-container"] {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border: 1px solid #2a2a4a;
-        border-radius: 12px;
-        padding: 0.75rem;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
+div[data-testid="metric-container"] {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid #2a2a4a;
+    border-radius: 12px;
+    padding: 0.75rem;
+}
 
-    /* Sidebar */
-    [data-testid="stSidebar"] { background: #0f1923; }
+[data-testid="stSidebar"] { background: #0f1923; }
+.stTabs [data-baseweb="tab"] { font-size: 0.95rem; font-weight: 600; }
+.dataframe { font-size: 0.82rem; }
+</style>
+""", unsafe_allow_html=True)
 
-    /* Tabs */
-    .stTabs [data-baseweb="tab"] { font-size: 1rem; font-weight: 600; }
-
-    /* Table */
-    .dataframe { font-size: 0.82rem; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ─── Runtime metadata ─────────────────────────────────────────────────────────
+# ─── Runtime metadata ──────────────────────────────────────────────────────────
 
 @st.cache_resource
 def dashboard_runtime_metadata() -> dict[str, str]:
     started_at = datetime.now(UTC).isoformat(timespec="seconds")
     try:
         commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            text=True,
-            stderr=subprocess.DEVNULL,
+            ["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL
         ).strip()
     except Exception:
         commit = "unknown"
-    return {
-        "commit": commit,
-        "hostname": socket.gethostname(),
-        "started_at": started_at,
-    }
+    return {"commit": commit, "hostname": socket.gethostname(), "started_at": started_at}
 
 
-# ─── Data loading ─────────────────────────────────────────────────────────────
+# ─── Data loading ──────────────────────────────────────────────────────────────
 
 runtime = dashboard_runtime_metadata()
 storage = resolve_console_storage_paths()
 run_records = collect_console_run_records(
-    storage=storage,
-    repo_results_root=LEGACY_RESULTS_DIR,
-    include_legacy_fallback=False,
+    storage=storage, repo_results_root=LEGACY_RESULTS_DIR, include_legacy_fallback=False,
 )
 uploaded_datasets = list_uploaded_datasets(storage)
 export_files = list_export_files(storage)
 console_run_status = read_console_run_status()
-
 run_options = {build_run_choice_label(record): record for record in run_records}
 
-
-# ─── Sidebar ─────────────────────────────────────────────────────────────────
+# ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 st.sidebar.markdown("## Strategy Console")
 st.sidebar.code(
-    f"commit: {runtime['commit']}\n"
-    f"host:   {runtime['hostname']}\n"
-    f"up:     {runtime['started_at']}",
+    f"commit: {runtime['commit']}\nhost:   {runtime['hostname']}\nup:     {runtime['started_at']}",
 )
 st.sidebar.divider()
 
@@ -146,51 +121,45 @@ dataset_options = {entry.name: entry for entry in uploaded_datasets}
 selected_dataset_names = st.sidebar.multiselect(
     "Datasets for run",
     list(dataset_options),
-    default=[name for name in read_console_selection() if name in dataset_options] or list(dataset_options)[:1],
+    default=[n for n in read_console_selection() if n in dataset_options] or list(dataset_options)[:1],
 )
 write_console_selection(selected_dataset_names)
 
 selected_run = run_options.get(selected_run_label)
 
 if selected_run:
-    selected_status = selected_run["launcher_status"]
-    selected_manifest = selected_run["run_manifest"]
-    selected_run_dir = selected_run["run_dir"]
+    selected_status      = selected_run["launcher_status"]
+    selected_manifest    = selected_run["run_manifest"]
+    selected_run_dir     = selected_run["run_dir"]
     selected_outputs_dir = selected_run["outputs_dir"]
-    run_outcome = str(selected_status.get("run_outcome") or "unknown")
-    vm_outcome = str(selected_status.get("vm_outcome") or "unknown")
-    billing_status = billing_status_for_launcher(selected_status)
+    run_outcome      = str(selected_status.get("run_outcome") or "unknown")
+    vm_outcome       = str(selected_status.get("vm_outcome") or "unknown")
+    billing_status   = billing_status_for_launcher(selected_status)
     operator_summary = operator_action_summary(selected_status)
-    run_category = classify_run_status(selected_status)
+    run_category     = classify_run_status(selected_status)
 else:
-    selected_status = {}
-    selected_manifest = {}
-    selected_run_dir = None
-    selected_outputs_dir = None
-    run_outcome = "unknown"
-    vm_outcome = "unknown"
-    billing_status = "unknown"
-    operator_summary = "No runs available yet."
+    selected_status = {}; selected_manifest = {}
+    selected_run_dir = None; selected_outputs_dir = None
+    run_outcome = vm_outcome = "unknown"
+    billing_status = "unknown"; operator_summary = "No runs available yet."
     run_category = "unknown"
 
+is_running = (run_category == "running")
 
-# ─── Banner ───────────────────────────────────────────────────────────────────
+# ─── Banner ────────────────────────────────────────────────────────────────────
 
-st.markdown(
-    f"""
-    <div class="console-banner">
-        <h1>📈 Strategy Console</h1>
-        <p>Latest: <strong>{badge_for_value(run_outcome)}</strong> &nbsp;|&nbsp;
-           VM: <strong>{badge_for_value(vm_outcome)}</strong> &nbsp;|&nbsp;
-           Billing: <strong>{billing_status}</strong> &nbsp;|&nbsp;
-           {operator_summary}</p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+run_id_display = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "—")
+st.markdown(f"""
+<div class="console-banner">
+    <h1>📈 Strategy Console</h1>
+    <p>Run: <strong>{run_id_display}</strong> &nbsp;|&nbsp;
+       Outcome: <strong>{badge_for_value(run_outcome)}</strong> &nbsp;|&nbsp;
+       VM: <strong>{badge_for_value(vm_outcome)}</strong> &nbsp;|&nbsp;
+       Billing: <strong>{billing_status}</strong></p>
+</div>
+""", unsafe_allow_html=True)
 
-
-# ─── Helper renderers ─────────────────────────────────────────────────────────
+# ─── Helpers ───────────────────────────────────────────────────────────────────
 
 def render_table(df: pd.DataFrame) -> None:
     try:
@@ -198,306 +167,406 @@ def render_table(df: pd.DataFrame) -> None:
     except Exception:
         st.code(df.to_string(index=False))
 
+# ─── TABS ──────────────────────────────────────────────────────────────────────
 
-def _records_table(records: list[dict]) -> pd.DataFrame:
-    rows = []
-    for record in records:
-        status = record["launcher_status"]
-        cost_info = estimate_run_cost(record)
-        cost_str = format_currency(cost_info["estimated_total_cost"]) if cost_info["estimated_total_cost"] is not None else "—"
-        cat = classify_run_status(status)
-        rows.append({
-            "Run ID": status.get("run_id", record["run_dir"].name),
-            "Updated (UTC)": status.get("updated_utc", "unknown"),
-            "Status": cat.upper(),
-            "Run Outcome": badge_for_value(status.get("run_outcome")),
-            "VM Outcome": badge_for_value(status.get("vm_outcome")),
-            "Est. Cost": cost_str,
-        })
-    return pd.DataFrame(rows)
-
-
-def _storage_files_table(entries: list) -> pd.DataFrame:
-    rows = []
-    for entry in entries:
-        info = parse_dataset_filename(entry.name)
-        rows.append({
-            "Filename": entry.name,
-            "Size": format_bytes(entry.size_bytes),
-            "Market": info["market"],
-            "Timeframe": info["timeframe"],
-            "Modified (UTC)": format_datetime(entry.modified_at),
-        })
-    return pd.DataFrame(rows)
-
-
-def _leaderboard_table(df: pd.DataFrame) -> pd.DataFrame:
-    """Select and rename key columns for display."""
-    keep = []
-    col_map = {
-        "strategy_name": "Strategy", "family": "Family",
-        "profit_factor": "PF", "is_profit_factor": "IS PF", "oos_profit_factor": "OOS PF",
-        "net_pnl": "Net PnL", "total_trades": "Trades",
-        "quality_flag": "Quality", "consistency_flag": "Consistency",
-    }
-    for src, dst in col_map.items():
-        if src in df.columns:
-            keep.append((src, dst))
-    if not keep:
-        return df.head(20)
-    out = df[[src for src, _ in keep]].copy()
-    out.columns = [dst for _, dst in keep]
-    return out.head(20)
-
-
-# ─── TABS ─────────────────────────────────────────────────────────────────────
-
-tab_control, tab_results, tab_system = st.tabs(["🖥️ Control Panel", "📊 Results Explorer", "⚙️ System"])
-
+tab_monitor, tab_results, tab_history, tab_system = st.tabs(
+    ["🔴 Live Monitor", "📊 Results", "🗂️ Run History", "⚙️ System"]
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Control Panel
+# TAB 1 — LIVE MONITOR
 # ══════════════════════════════════════════════════════════════════════════════
 
-with tab_control:
+with tab_monitor:
 
-    # Top status cards
-    cost_info = estimate_run_cost(selected_run) if selected_run else {}
-    cost_display = format_currency(cost_info.get("estimated_total_cost")) if cost_info.get("estimated_total_cost") is not None else "—"
+    if is_running:
+        st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
 
-    # Count accepted strategies from best candidate file
-    strat_count = "—"
-    if selected_run and selected_outputs_dir:
+    # ── Top KPI row ──────────────────────────────────────────────────────────
+
+    cost_info    = estimate_run_cost(selected_run) if selected_run else {}
+    elapsed_sec  = float(cost_info.get("elapsed_seconds") or 0)
+    hourly_rate  = cost_info.get("hourly_rate")
+    total_cost   = cost_info.get("estimated_total_cost")
+    machine_type = cost_info.get("machine_type", "unknown")
+
+    if is_running and selected_status.get("created_utc"):
         try:
-            best = pick_best_candidate_file(selected_outputs_dir)
-            if best and best.exists():
-                strat_count = str(len(pd.read_csv(best)))
+            from datetime import timezone
+            created = datetime.fromisoformat(str(selected_status["created_utc"]).replace("Z", "+00:00"))
+            elapsed_sec = (datetime.now(timezone.utc) - created).total_seconds()
+            if hourly_rate:
+                total_cost = hourly_rate * (elapsed_sec / 3600)
         except Exception:
             pass
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Latest Run", badge_for_value(run_outcome))
-    c2.metric("VM Status", badge_for_value(vm_outcome))
-    c3.metric("Est. Cost", cost_display)
-    c4.metric("Strategies Found", strat_count)
+    cost_str    = f"${total_cost:.2f}" if total_cost is not None else "—"
+    elapsed_str = format_duration_short(elapsed_sec)
+    rate_str    = f"${hourly_rate:.2f}/hr" if hourly_rate else "—"
 
-    # Active run section
-    if run_category == "running":
-        st.divider()
-        st.subheader("Active Run")
-        dataset_statuses = selected_run.get("dataset_statuses", []) if selected_run else []
-        if dataset_statuses:
-            for ds in dataset_statuses:
-                pct = float(ds.get("progress_pct", 0) or 0)
-                st.write(f"**{ds.get('market','?')} {ds.get('timeframe','?')}** — {ds.get('current_family','?')} / {ds.get('current_stage','?')}")
-                st.progress(min(pct / 100.0, 1.0))
-                eta = ds.get("eta_seconds", 0)
-                elapsed = ds.get("elapsed_seconds", 0)
-                st.caption(f"Elapsed: {format_duration_short(elapsed)} | ETA: {format_duration_short(eta)}")
-        else:
-            st.info("Run is active — waiting for first status update.")
-        machine = str(selected_manifest.get("machine_type") or selected_status.get("machine_type") or "unknown")
-        zone = str(selected_manifest.get("zone") or selected_status.get("zone") or "unknown")
-        st.caption(f"Machine: `{machine}` in `{zone}`")
+    k1, k2, k3, k4 = st.columns(4)
+    with k1:
+        status_emoji = "🟢" if is_running else ("✅" if run_category == "completed" else "⚪")
+        st.metric("Status", f"{status_emoji} {run_category.upper()}")
+    with k2:
+        st.metric("Elapsed Time", elapsed_str)
+    with k3:
+        st.metric("Est. SPOT Cost", cost_str,
+                  delta=rate_str if is_running else None, delta_color="inverse")
+    with k4:
+        machine_label = (machine_type.replace("n2-highcpu-", "") + " vCPU"
+                         if "highcpu" in machine_type else machine_type)
+        st.metric("VM", machine_label)
 
-    # Run history
     st.divider()
-    st.subheader("Run History")
-    if run_records:
-        render_table(_records_table(run_records))
+
+    # ── Dataset progress ─────────────────────────────────────────────────────
+
+    dataset_statuses = selected_run.get("dataset_statuses", []) if selected_run else []
+
+    if dataset_statuses:
+        st.subheader("Dataset Progress")
+        all_families = ["trend", "mean_reversion", "breakout"]
+        fam_emoji    = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥"}
+
+        total_families = len(dataset_statuses) * len(all_families)
+        done_families  = sum(len(ds.get("families_completed", [])) for ds in dataset_statuses)
+        overall_pct    = (done_families / total_families * 100) if total_families else 0
+
+        st.markdown(f"**Overall: {done_families} / {total_families} families complete ({overall_pct:.0f}%)**")
+        st.progress(min(overall_pct / 100.0, 1.0))
+        st.markdown("")
+
+        for ds in dataset_statuses:
+            pct       = float(ds.get("progress_pct", 0) or 0)
+            market    = ds.get("market", ds.get("dataset", "?"))
+            timeframe = ds.get("timeframe", "?")
+            cur_fam   = ds.get("current_family", "?")
+            cur_stage = ds.get("current_stage", "?")
+            completed = ds.get("families_completed", [])
+            eta_sec   = float(ds.get("eta_seconds", 0) or 0)
+            el_sec    = float(ds.get("elapsed_seconds", 0) or 0)
+            is_done   = pct >= 100 or cur_stage == "DONE"
+            is_active = not is_done and pct > 0
+
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                icon = "✅" if is_done else ("🔵" if is_active else "⏳")
+                st.markdown(f"**{icon} {market} {timeframe}**")
+                st.progress(min(pct / 100.0, 1.0))
+                pill_html = ""
+                for fam in all_families:
+                    e = fam_emoji.get(fam, "•")
+                    if fam in completed:
+                        pill_html += (f'<span style="background:#1b5e20;color:#a5d6a7;'
+                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
+                                      f'{e} {fam} ✓</span>')
+                    elif fam == cur_fam and not is_done:
+                        pill_html += (f'<span style="background:#0d47a1;color:#90caf9;'
+                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
+                                      f'⚙️ {fam} ({cur_stage})</span>')
+                    else:
+                        pill_html += (f'<span style="background:#1a2634;color:#546e7a;'
+                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
+                                      f'{e} {fam}</span>')
+                st.markdown(pill_html, unsafe_allow_html=True)
+            with col_b:
+                if is_done:
+                    st.markdown("**Done ✅**")
+                elif is_active:
+                    st.markdown(f"**ETA** {format_duration_short(eta_sec)}")
+                    st.caption(f"Elapsed {format_duration_short(el_sec)}")
+                else:
+                    st.markdown("*Queued*")
+            st.markdown("")
+
+    elif is_running:
+        st.info("Run is active — waiting for first status update.")
     else:
-        st.warning(f"No launcher-managed runs found in: `{canonical_runs_root(storage)}`")
+        st.info("No active run. Select a run from the sidebar or start a new sweep.")
 
-    # Selected run detail
-    if selected_run:
-        with st.expander("Selected Run Detail", expanded=(run_category in {"failed", "preserved"})):
-            run_id = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "?")
-            st.markdown(
-                f"**Run ID**: `{run_id}`  \n"
-                f"**Path**: `{selected_run_dir}`  \n"
-                f"**Updated**: `{selected_status.get('updated_utc', 'unknown')}`  \n"
-                f"**Destroy Reason**: `{selected_status.get('destroy_reason', 'unknown')}`  \n"
-                f"**Operator Action**: `{selected_status.get('operator_action', 'unknown')}`  \n"
-                f"**Bundle Size**: `{format_bytes(selected_status.get('bundle_size_bytes'))}`  \n"
-                f"**Machine**: `{selected_manifest.get('machine_type') or 'unknown'}` in `{selected_manifest.get('zone') or 'unknown'}`"
-            )
+    # ── Promoted candidates feed ──────────────────────────────────────────────
 
-            recovery_commands = selected_status.get("recovery_commands") or []
-            if recovery_commands:
-                st.caption("Recovery commands")
-                st.code("\n".join(recovery_commands), language="bash")
+    st.divider()
+    st.subheader("Promoted Candidates")
+    st.caption("Strategies that passed the promotion gate — populated as each family completes.")
 
-            log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
-            st.caption("Engine log (last 20 lines)")
-            if log_tail:
-                lines = log_tail.splitlines()
-                st.code("\n".join(lines[-20:]), language="text")
+    if selected_outputs_dir:
+        candidates_df = load_promoted_candidates(selected_outputs_dir)
+        if candidates_df is not None and not candidates_df.empty:
+            col_map = {
+                "strategy_name":   "Strategy",
+                "strategy_type":   "Family",
+                "profit_factor":   "PF",
+                "is_pf":           "IS PF",
+                "oos_pf":          "OOS PF",
+                "net_pnl":         "Net PnL ($)",
+                "total_trades":    "Trades",
+                "trades_per_year": "Trades/yr",
+                "quality_flag":    "Quality",
+                "dataset":         "Dataset",
+            }
+            existing = {k: v for k, v in col_map.items() if k in candidates_df.columns}
+            if existing:
+                disp = candidates_df[list(existing.keys())].copy()
+                disp.columns = list(existing.values())
+                for col in ["PF", "IS PF", "OOS PF", "Trades/yr"]:
+                    if col in disp.columns:
+                        disp[col] = pd.to_numeric(disp[col], errors="coerce").round(2)
+                if "Net PnL ($)" in disp.columns:
+                    disp["Net PnL ($)"] = pd.to_numeric(disp["Net PnL ($)"], errors="coerce").apply(
+                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                    )
+                st.dataframe(disp, use_container_width=True, height=min(400, 36 + len(disp) * 35))
+                st.caption(f"{len(candidates_df)} candidates promoted across all completed families")
             else:
-                st.info("No engine log found for this run yet.")
+                render_table(candidates_df.head(20))
+        elif is_running:
+            st.info("No candidates yet — families still running.")
+        else:
+            st.info("No promoted candidates file found for this run.")
+    else:
+        st.info("Select a run with results to see promoted candidates.")
+
+    with st.expander("Engine log (last 30 lines)", expanded=False):
+        log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
+        if log_tail:
+            st.code("\n".join(log_tail.splitlines()[-30:]), language="text")
+        else:
+            st.info("No engine log found yet.")
+
+    if is_running:
+        st.caption("🔄 Auto-refreshes every 30 seconds while run is active.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Results Explorer
+# TAB 2 — RESULTS
 # ══════════════════════════════════════════════════════════════════════════════
 
 with tab_results:
 
     if not selected_run or not selected_outputs_dir:
-        st.info("Select a completed run from the sidebar to view its results.")
+        st.info("Select a completed run from the sidebar to view results.")
     else:
         results = load_strategy_results(selected_outputs_dir)
-        run_id = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "?")
+        run_id  = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "?")
         st.caption(f"Results from: `{run_id}` → `{selected_outputs_dir}`")
 
-        # Leaderboard
         st.subheader("Strategy Leaderboard")
         if results["leaderboard"] is not None:
             lb = results["leaderboard"]
-            render_table(_leaderboard_table(lb))
-            st.caption(f"{len(lb)} strategies in leaderboard")
+            col_map = {
+                "strategy_name": "Strategy", "leader_strategy_name": "Strategy",
+                "strategy_type": "Family",
+                "profit_factor": "PF", "leader_pf": "PF",
+                "is_pf": "IS PF", "oos_pf": "OOS PF",
+                "net_pnl": "Net PnL", "leader_net_pnl": "Net PnL",
+                "total_trades": "Trades", "leader_trades": "Trades",
+                "quality_flag": "Quality", "accepted_final": "Accepted",
+                "dataset": "Dataset",
+            }
+            existing = {k: v for k, v in col_map.items() if k in lb.columns}
+            if existing:
+                disp = lb[list(existing.keys())].copy()
+                disp.columns = list(existing.values())
+                seen: dict[str, int] = {}
+                new_cols = []
+                for c in disp.columns:
+                    if c in seen:
+                        seen[c] += 1; new_cols.append(f"{c}.{seen[c]}")
+                    else:
+                        seen[c] = 0; new_cols.append(c)
+                disp.columns = new_cols
+            else:
+                disp = lb.head(20)
+            render_table(disp)
+            st.caption(f"{len(lb)} strategies")
         else:
-            st.info("No leaderboard file found for this run.")
+            st.info("No leaderboard file found.")
 
-        # Portfolio review
         if results["portfolio"] is not None:
             st.divider()
             st.subheader("Portfolio Review")
             render_table(results["portfolio"])
 
-        # Correlation matrix heatmap
-        if results["correlation"] is not None:
-            st.divider()
-            st.subheader("Correlation Matrix")
-            try:
-                import plotly.express as px
-                corr_df = results["correlation"].set_index(results["correlation"].columns[0]) if results["correlation"].columns[0] not in ["", "Unnamed: 0"] else results["correlation"].set_index(results["correlation"].columns[0])
-                fig = px.imshow(
-                    corr_df,
-                    color_continuous_scale="RdBu_r",
-                    zmin=-1, zmax=1,
-                    text_auto=".2f",
-                    title="Strategy Return Correlations",
-                )
-                fig.update_layout(height=400)
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception as e:
-                render_table(results["correlation"])
-                st.caption(f"Could not render heatmap: {e}")
-
-        # Yearly performance
-        if results["yearly"] is not None:
-            st.divider()
-            st.subheader("Yearly Performance")
-            yearly_df = results["yearly"]
-            try:
-                import plotly.express as px
-                year_col = next((c for c in yearly_df.columns if "year" in c.lower()), yearly_df.columns[0])
-                value_cols = [c for c in yearly_df.columns if c != year_col]
-                fig = px.bar(
-                    yearly_df.melt(id_vars=year_col, value_vars=value_cols, var_name="Strategy", value_name="PnL"),
-                    x=year_col, y="PnL", color="Strategy", barmode="group",
-                    title="Annual PnL by Strategy",
-                )
-                oos_year = 2019
-                fig.add_vline(x=str(oos_year), line_dash="dash", line_color="orange",
-                              annotation_text="OOS start", annotation_position="top right")
-                st.plotly_chart(fig, use_container_width=True)
-            except Exception:
-                render_table(yearly_df)
-
-        # Equity curves
         if results["returns"] is not None:
             st.divider()
             st.subheader("Equity Curves")
             returns_df = results["returns"]
             try:
-                import plotly.express as px
-                date_col = next((c for c in returns_df.columns if "date" in c.lower() or "time" in c.lower()), None)
-                strat_cols = [c for c in returns_df.columns if c != date_col] if date_col else returns_df.columns.tolist()
-                if date_col:
-                    cumulative = returns_df[[date_col] + strat_cols].copy()
+                import plotly.graph_objects as go
+                date_col  = next((c for c in returns_df.columns if "date" in c.lower() or "time" in c.lower()), None)
+                strat_cols = [c for c in returns_df.columns if c != date_col] if date_col else []
+                if date_col and strat_cols:
+                    fig = go.Figure()
                     for col in strat_cols:
-                        cumulative[col] = pd.to_numeric(cumulative[col], errors="coerce").fillna(0).cumsum()
-                    fig = px.line(
-                        cumulative.melt(id_vars=date_col, value_vars=strat_cols, var_name="Strategy", value_name="Cumulative PnL"),
-                        x=date_col, y="Cumulative PnL", color="Strategy",
-                        title="Cumulative PnL Over Time",
-                    )
+                        cumsum = pd.to_numeric(returns_df[col], errors="coerce").fillna(0).cumsum()
+                        fig.add_trace(go.Scatter(x=returns_df[date_col], y=cumsum,
+                                                  mode="lines", name=col.split("_")[-1], line=dict(width=2)))
+                    fig.add_vline(x="2019-01-01", line_dash="dash", line_color="orange",
+                                  annotation_text="OOS start")
+                    fig.update_layout(title="Cumulative PnL", template="plotly_dark", height=400,
+                                      legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                                      margin=dict(l=40, r=20, t=60, b=40))
                     st.plotly_chart(fig, use_container_width=True)
-                else:
-                    render_table(returns_df.head(100))
             except Exception as e:
                 render_table(returns_df.head(50))
                 st.caption(f"Chart error: {e}")
 
+        if results["yearly"] is not None:
+            st.divider()
+            st.subheader("Annual PnL by Strategy")
+            yearly_df = results["yearly"]
+            try:
+                import plotly.express as px
+                year_col = next((c for c in yearly_df.columns if "year" in c.lower()), yearly_df.columns[0])
+                pnl_col  = next((c for c in yearly_df.columns if "pnl" in c.lower()), None)
+                name_col = next((c for c in yearly_df.columns if "name" in c.lower() or "strategy" in c.lower()), None)
+                if pnl_col and name_col:
+                    yearly_df = yearly_df.copy()
+                    yearly_df["_color"] = pd.to_numeric(yearly_df[pnl_col], errors="coerce").apply(
+                        lambda x: "Profit" if x >= 0 else "Loss"
+                    )
+                    fig = px.bar(yearly_df, x=year_col, y=pnl_col, color="_color",
+                                 facet_col=name_col if yearly_df[name_col].nunique() > 1 else None,
+                                 color_discrete_map={"Profit": "#00e676", "Loss": "#ff1744"},
+                                 template="plotly_dark", title="Annual PnL",
+                                 labels={pnl_col: "PnL ($)", year_col: "Year"})
+                    fig.add_vline(x=2018.5, line_dash="dash", line_color="orange",
+                                  annotation_text="OOS →", annotation_position="top left")
+                    fig.update_layout(height=350, showlegend=False, margin=dict(l=40, r=20, t=60, b=40))
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    render_table(yearly_df)
+            except Exception:
+                render_table(yearly_df)
+
+        if results["correlation"] is not None:
+            st.divider()
+            st.subheader("Strategy Correlation")
+            try:
+                import plotly.express as px
+                corr_df = results["correlation"].copy()
+                idx_col = corr_df.columns[0]
+                corr_df = corr_df.set_index(idx_col)
+                corr_df.index   = [i.split("_ES_")[-1] if "_ES_" in str(i) else str(i)[-30:] for i in corr_df.index]
+                corr_df.columns = [c.split("_ES_")[-1] if "_ES_" in str(c) else str(c)[-30:] for c in corr_df.columns]
+                fig = px.imshow(corr_df, color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
+                                text_auto=".2f", template="plotly_dark")
+                fig.update_layout(height=350, margin=dict(l=40, r=20, t=40, b=40))
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                render_table(results["correlation"])
+                st.caption(f"Heatmap error: {e}")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — System
+# TAB 3 — RUN HISTORY
+# ══════════════════════════════════════════════════════════════════════════════
+
+with tab_history:
+
+    st.subheader("All Runs")
+    if run_records:
+        rows = []
+        for record in run_records:
+            status   = record["launcher_status"]
+            manifest = record["run_manifest"]
+            cost_i   = estimate_run_cost(record)
+            cost_s   = (format_currency(cost_i["estimated_total_cost"])
+                        if cost_i["estimated_total_cost"] is not None else "—")
+            cat      = classify_run_status(status)
+            datasets = manifest.get("datasets", [])
+            ds_str   = (", ".join(f"{d.get('market','?')} {d.get('timeframe','?')}" for d in datasets)
+                        if datasets else "—")
+            rows.append({
+                "Run ID":    status.get("run_id", record["run_dir"].name),
+                "Updated":   status.get("updated_utc", "unknown"),
+                "Status":    cat.upper(),
+                "Outcome":   badge_for_value(status.get("run_outcome")),
+                "VM":        badge_for_value(status.get("vm_outcome")),
+                "Datasets":  ds_str,
+                "Machine":   manifest.get("machine_type", "—"),
+                "Est. Cost": cost_s,
+            })
+        render_table(pd.DataFrame(rows))
+    else:
+        st.warning(f"No runs found in: `{canonical_runs_root(storage)}`")
+
+    if selected_run:
+        with st.expander("Selected Run Detail", expanded=False):
+            rid = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "?")
+            st.markdown(
+                f"**Run ID**: `{rid}`  \n"
+                f"**Path**: `{selected_run_dir}`  \n"
+                f"**Updated**: `{selected_status.get('updated_utc', 'unknown')}`  \n"
+                f"**Machine**: `{selected_manifest.get('machine_type','?')}` in `{selected_manifest.get('zone','?')}`  \n"
+                f"**Destroy reason**: `{selected_status.get('destroy_reason','unknown')}`  \n"
+                f"**Bundle size**: `{format_bytes(selected_status.get('bundle_size_bytes'))}`"
+            )
+            recovery = selected_status.get("recovery_commands") or []
+            if recovery:
+                st.caption("Recovery commands")
+                st.code("\n".join(recovery), language="bash")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 4 — SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
 
 with tab_system:
 
-    # Storage overview
-    st.subheader("Storage Overview")
     s1, s2, s3, s4 = st.columns(4)
     s1.metric("Uploads", str(len(uploaded_datasets)))
-    s2.metric("Runs", str(len(run_records)))
+    s2.metric("Runs",    str(len(run_records)))
     s3.metric("Exports", str(len(export_files)))
-    s4.metric("Storage Root", storage.root.name)
+    s4.metric("Host",    runtime["hostname"])
 
     st.subheader("Uploaded Datasets")
     if uploaded_datasets:
-        render_table(_storage_files_table(uploaded_datasets))
+        rows = []
+        for entry in uploaded_datasets:
+            info = parse_dataset_filename(entry.name)
+            rows.append({"Filename": entry.name, "Size": format_bytes(entry.size_bytes),
+                         "Market": info["market"], "Timeframe": info["timeframe"],
+                         "Modified": format_datetime(entry.modified_at)})
+        render_table(pd.DataFrame(rows))
     else:
         st.info(f"No datasets in `{storage.uploads}`")
 
-    if export_files:
-        st.subheader("Exports")
-        render_table(_storage_files_table(export_files))
-
-    # System health
     st.divider()
     st.subheader("System Health")
-    health_rows = pd.DataFrame([
+    render_table(pd.DataFrame([
         {"Check": "Uploads directory", "Status": "✅ OK" if UPLOADS_DIR.exists() else "❌ Missing"},
-        {"Check": "Runs directory", "Status": "✅ OK" if RUNS_DIR.exists() else "❌ Missing"},
+        {"Check": "Runs directory",    "Status": "✅ OK" if RUNS_DIR.exists() else "❌ Missing"},
         {"Check": "Exports directory", "Status": "✅ OK" if EXPORTS_DIR.exists() else "❌ Missing"},
         {"Check": "Datasets uploaded", "Status": f"✅ {len(uploaded_datasets)}" if uploaded_datasets else "⚠️ None"},
-        {"Check": "Latest run state", "Status": console_run_status.get("run_state", "unknown")},
-        {"Check": "Dashboard commit", "Status": runtime["commit"]},
-        {"Check": "Dashboard host", "Status": runtime["hostname"]},
-    ])
-    render_table(health_rows)
+        {"Check": "Latest run state",  "Status": console_run_status.get("run_state", "unknown")},
+        {"Check": "Dashboard commit",  "Status": runtime["commit"]},
+    ]))
 
-    # Storage paths
     st.divider()
     st.subheader("Storage Paths")
     st.code(
         f"root:    {storage.root}\n"
         f"uploads: {storage.uploads}\n"
         f"runs:    {canonical_runs_root(storage)}\n"
-        f"exports: {storage.exports}\n"
-        f"backups: {storage.backups}",
+        f"exports: {storage.exports}",
         language="text",
     )
 
-    # Quick actions
     st.divider()
-    st.subheader("Quick Actions")
-    st.markdown("**Start a full ES 60m sweep** (run on strategy-console):")
-    st.code("python3 run_cloud_sweep.py --config cloud/config_es_60m_full_sweep.yaml", language="bash")
-    st.markdown("**Quick test run** (fast validation, 8-core):")
+    st.subheader("Quick Commands")
+    st.markdown("**Launch ES all-timeframes sweep (daily, 60m, 30m, 15m):**")
+    st.code("python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml", language="bash")
+    st.markdown("**Quick test run (MR only, 8-core, dry run):**")
     st.code("python3 run_cloud_sweep.py --config cloud/config_quick_test.yaml --dry-run", language="bash")
-    st.markdown("**Restart dashboard service**:")
+    st.markdown("**Restart dashboard:**")
     st.code("sudo systemctl restart strategy-dashboard", language="bash")
-
-    # Available configs
-    st.divider()
-    st.subheader("Available Sweep Configs")
-    try:
-        import glob
-        configs = sorted(glob.glob("cloud/config_*.yaml"))
-        for cfg in configs:
-            st.code(cfg)
-    except Exception:
-        st.info("Could not list configs.")
+    st.markdown("**Check run status remotely:**")
+    st.code(
+        "cat ~/strategy_console_storage/runs/"
+        "$(cat ~/strategy_console_storage/runs/LATEST_RUN.txt)"
+        "/artifacts/Outputs/ES_60m/status.json | python3 -m json.tool",
+        language="bash",
+    )

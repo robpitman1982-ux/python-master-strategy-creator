@@ -1,4 +1,14 @@
-# DigitalOcean Cloud Setup Guide
+# Cloud Setup Notes
+
+For the current GCP Windows workflow, use the Python launcher:
+
+```powershell
+python cloud/launch_gcp_run.py --config cloud/config_es_all_timeframes_gcp96.yaml
+```
+
+See `cloud/GCP_WINDOWS_RUNBOOK.md` for the canonical single-command run flow.
+
+The rest of this file is legacy DigitalOcean setup/reference material.
 
 ## One-time setup (do this once)
 

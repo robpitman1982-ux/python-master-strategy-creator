@@ -58,9 +58,9 @@ class ProgressTracker:
         pct = (done / total * 100) if total > 0 else 0
         elapsed_stage = time.perf_counter() - self._stage_start
         eta = (elapsed_stage / done * (total - done)) if done > 0 else 0
-        # Log every 10% or at completion
+        # Log every 10% or at completion — also on combo 1 so dashboard updates immediately
         step = max(1, total // 10)
-        if done % step == 0 or done == total:
+        if done == 1 or done % step == 0 or done == total:
             self.log(self._current_family, "SWEEP",
                      f"{done}/{total} ({pct:.1f}%) — ETA {eta/60:.1f} min")
             self._write_status("SWEEP", pct, done, total, eta)
@@ -70,7 +70,7 @@ class ProgressTracker:
         elapsed_stage = time.perf_counter() - self._stage_start
         eta = (elapsed_stage / done * (total - done)) if done > 0 else 0
         step = max(1, total // 10)
-        if done % step == 0 or done == total:
+        if done == 1 or done % step == 0 or done == total:
             self.log(self._current_family, "REFINEMENT",
                      f"{done}/{total} ({pct:.1f}%) — ETA {eta/60:.1f} min")
             self._write_status("REFINEMENT", pct, done, total, eta)

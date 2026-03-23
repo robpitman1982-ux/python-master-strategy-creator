@@ -221,7 +221,7 @@ Key sections:
 - [ ] Integrate status.json polling into run_cloud_job.py wait loop
 - [ ] Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
 - [ ] No static IP on strategy-console — IP changes on restart; reserve via gcloud compute addresses create
-- [ ] status.json first-update delay — fix: `if done == 1 or done % step == 0` instead of `if done % step == 0`
+- [x] status.json first-update delay — FIXED (done == 1)
 
 ## Coding standards
 
@@ -232,6 +232,19 @@ Key sections:
 - Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v` — 22 tests, all fast
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
+
+## Quick commands
+
+```bash
+# Run all tests (72 tests)
+python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_dashboard_utils.py -v
+
+# Launch ES all-timeframes sweep (daily/60m/30m/15m, all families, 96-core SPOT)
+python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml
+
+# Dry run (no VM created)
+python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml --dry-run
+```
 
 ## Session workflow
 
@@ -256,4 +269,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-23 — Session 24: Dashboard overhaul, ES 60m full sweep config, storage auto-detect, venv setup
+2026-03-24 — Session 25: status.json first-update fix, load_promoted_candidates test, quick commands section

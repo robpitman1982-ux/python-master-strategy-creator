@@ -697,3 +697,37 @@ def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
     result["returns"] = _safe_csv(files.get("strategy_returns.csv"))
 
     return result
+
+
+def load_promoted_candidates(outputs_dir: Path | None) -> Any:
+    """Aggregate all *_promoted_candidates.csv files from an outputs directory.
+
+    Used by the Live Monitor tab to show which combos passed the promotion gate
+    across all completed families and datasets.
+    """
+    import pandas as pd
+
+    if outputs_dir is None or not outputs_dir.exists():
+        return None
+
+    candidate_files = list(outputs_dir.rglob("*_promoted_candidates.csv"))
+    if not candidate_files:
+        return None
+
+    frames = []
+    for path in sorted(candidate_files):
+        try:
+            df = pd.read_csv(path)
+            if "dataset" not in df.columns:
+                df["dataset"] = path.parent.name
+            frames.append(df)
+        except Exception:
+            continue
+
+    if not frames:
+        return None
+
+    combined = pd.concat(frames, ignore_index=True)
+    if "profit_factor" in combined.columns:
+        combined = combined.sort_values("profit_factor", ascending=False)
+    return combined
