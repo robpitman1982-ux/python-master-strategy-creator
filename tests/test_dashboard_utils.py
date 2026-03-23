@@ -289,3 +289,12 @@ def test_build_test_run_readiness_reports_ready_when_storage_and_dataset_exist()
         assert readiness.state == "ready"
     finally:
         shutil.rmtree(tmp_path, ignore_errors=True)
+
+
+def test_load_promoted_candidates_missing():
+    tmp_path = _make_workspace_temp_dir()
+    try:
+        from dashboard_utils import load_promoted_candidates
+        assert load_promoted_candidates(tmp_path) is None
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
