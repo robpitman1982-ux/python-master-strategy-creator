@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-03-24 — Session 27 (Pre-Work): Strategy Analysis + Improvement Roadmap
+
+**What was done**:
+- Created `docs/STRATEGY_ENGINE_ANALYSIS.md`: comprehensive system analysis covering pipeline architecture,
+  all 30 filters (10 trend, 11 MR, 9 breakout), every major file, current weaknesses, and priorities
+- Created `docs/IMPROVEMENT_ROADMAP.md`: 5-phase improvement plan synthesised from Claude, ChatGPT,
+  and Gemini analysis. Phases: exits → scoring → short-side → vectorization → walk-forward → portfolio
+- Updated CLAUDE.md with roadmap references, new known issues, and GCP vCPU quota note
+
+**Key decisions documented**:
+- Exit architecture is the #1 engine improvement (trailing stops, profit targets, signal exits)
+- Bootcamp-native scoring replaces PF/PnL ranking for prop firm track
+- Vectorization comes before new filters (50-100x speedup enables wider sweeps at same cost)
+- Multi-VM parallelism deferred until CL/NQ expansion or walk-forward validation requires it
+- GCP quota: 200 vCPU in us-central1, currently using 96 per run
+
+**Next session priorities**:
+1. Wait for all-timeframe ES run to complete
+2. Deploy Session 26 code to console VM (git pull + restart dashboard)
+3. Analyse results via Ultimate Leaderboard tab and master_leaderboard.csv
+4. Begin exit architecture design (Session 28)
+
 ## 2026-03-24 — Session 26: Dashboard Status Fix + Ultimate Leaderboard
 
 **What was done**:
