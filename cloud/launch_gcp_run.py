@@ -1231,7 +1231,10 @@ def sync_run_to_strategy_console_storage(
         gcloud_base,
         console_instance_name,
         console_zone,
-        f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/{run_id} {remote_runs_root}/",
+        (
+            f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/{run_id} {remote_runs_root}/ && "
+            f"sudo -n -u {console_remote_user} chmod -R g+w {remote_run_dir}"
+        ),
     )
     synced_paths.append(remote_run_dir)
 
@@ -1265,7 +1268,10 @@ def sync_run_to_strategy_console_storage(
             gcloud_base,
             console_instance_name,
             console_zone,
-            f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/latest {remote_exports_root}/",
+            (
+                f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/latest {remote_exports_root}/ && "
+                f"sudo -n -u {console_remote_user} chmod -R g+w {remote_exports_root}/latest"
+            ),
         )
         synced_paths.append(f"{remote_exports_root}/latest")
 
