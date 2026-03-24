@@ -9,6 +9,7 @@ import pandas as pd
 from modules.config_loader import get_timeframe_multiplier, scale_lookbacks
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
+from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
     AboveLongTermSMAFilter,
     BaseFilter,
@@ -74,8 +75,11 @@ def _run_mr_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> d
         stop_distance_points=strat_type.default_stop_distance_points,
     )
 
+    # Vectorized path: compute signal mask once, pass to engine
+    signal_mask = compute_combined_signal_mask(filter_objects, data)
+
     engine = MasterStrategyEngine(data=data, config=cfg)
-    engine.run(strategy=strategy)
+    engine.run(strategy=strategy, precomputed_signals=signal_mask)
     summary = engine.results()
 
     total_trades = int(str(summary.get("Total Trades", 0)).replace(",", ""))
@@ -441,11 +445,16 @@ class MeanReversionStrategyType(BaseStrategyType):
         grid = self.get_active_refinement_grid_for_combo(classes, timeframe=timeframe)
         thresholds = self.get_trade_filter_thresholds()
 
+        # Compute filter signal mask once — reused across all refinement grid variants
+        filter_objects = self.build_filter_objects_from_classes(classes, timeframe=timeframe)
+        precomputed_signals = compute_combined_signal_mask(filter_objects, data)
+
         refiner = StrategyParameterRefiner(
             MasterStrategyEngine,
             data,
             _MRRefinementFactory(self, classes, timeframe=timeframe),
             cfg,
+            precomputed_signals=precomputed_signals,
         )
 
         refinement_df = refiner.run_refinement(

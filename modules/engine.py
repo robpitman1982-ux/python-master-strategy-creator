@@ -224,6 +224,7 @@ class MasterStrategyEngine:
         strategy,
         hold_bars: Optional[int] = None,
         stop_distance_atr: Optional[float] = None,
+        precomputed_signals: Optional[np.ndarray] = None,
     ) -> None:
         if len(self.data) < 2:
             raise ValueError("Not enough data to run backtest.")
@@ -331,7 +332,10 @@ class MasterStrategyEngine:
                     continue
 
             if self.position is None:
-                signal = strategy.generate_signal(self.data, i)
+                if precomputed_signals is not None:
+                    signal = int(precomputed_signals[i])
+                else:
+                    signal = strategy.generate_signal(self.data, i)
 
                 if signal == 1:
                     if stop_distance_atr is not None:

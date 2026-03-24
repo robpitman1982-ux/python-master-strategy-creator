@@ -17,6 +17,7 @@ _WORKER_ENGINE_CLASS = None
 _WORKER_DATA = None
 _WORKER_STRATEGY_FACTORY = None
 _WORKER_CONFIG = None
+_WORKER_PRECOMPUTED_SIGNALS = None
 
 
 def _parse_money(value: Any) -> float:
@@ -45,12 +46,14 @@ def _init_refinement_worker(
     data: pd.DataFrame,
     strategy_factory: Callable[..., Any],
     config: EngineConfig,
+    precomputed_signals=None,
 ) -> None:
-    global _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG
+    global _WORKER_ENGINE_CLASS, _WORKER_DATA, _WORKER_STRATEGY_FACTORY, _WORKER_CONFIG, _WORKER_PRECOMPUTED_SIGNALS
     _WORKER_ENGINE_CLASS = engine_class
     _WORKER_DATA = data
     _WORKER_STRATEGY_FACTORY = strategy_factory
     _WORKER_CONFIG = config
+    _WORKER_PRECOMPUTED_SIGNALS = precomputed_signals
 
 
 def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
@@ -66,7 +69,7 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
     )
 
     engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
-    engine.run(strategy=strategy)
+    engine.run(strategy=strategy, precomputed_signals=_WORKER_PRECOMPUTED_SIGNALS)
     summary = engine.results()
     exit_config = getattr(strategy, "exit_config", None)
 
@@ -184,11 +187,13 @@ class StrategyParameterRefiner:
         data: pd.DataFrame,
         strategy_factory: Callable[..., Any],
         config: EngineConfig | None = None,
+        precomputed_signals=None,
     ):
         self.engine_class = engine_class
         self.data = data
         self.strategy_factory = strategy_factory
         self.config = config or EngineConfig()
+        self.precomputed_signals = precomputed_signals
         self.results: list[RefinementResult] = []
 
     def _default_max_workers(self) -> int:
@@ -283,7 +288,7 @@ class StrategyParameterRefiner:
                 with ProcessPoolExecutor(
                     max_workers=max_workers,
                     initializer=_init_refinement_worker,
-                    initargs=(self.engine_class, self.data, self.strategy_factory, self.config),
+                    initargs=(self.engine_class, self.data, self.strategy_factory, self.config, self.precomputed_signals),
                 ) as executor:
                     for idx, result in enumerate(executor.map(_run_refinement_case, tasks), start=1):
                         if result["passes_trade_filter"]:
@@ -307,7 +312,7 @@ class StrategyParameterRefiner:
                 parallel = False
 
         if not parallel or total_runs <= 1:
-            _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
+            _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config, self.precomputed_signals)
             for idx, task in enumerate(tasks, start=1):
                 result = _run_refinement_case(task)
 
