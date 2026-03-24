@@ -33,6 +33,10 @@ DEFAULT_IMAGE_FAMILY = "ubuntu-2404-lts-amd64"
 DEFAULT_IMAGE_PROJECT = "ubuntu-os-cloud"
 DEFAULT_BUNDLE_NAME = "input_bundle.tar.gz"
 LATEST_RUN_FILE_NAME = "LATEST_RUN.txt"
+DEFAULT_STRATEGY_CONSOLE_INSTANCE = "strategy-console"
+DEFAULT_STRATEGY_CONSOLE_ZONE = "us-central1-c"
+DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT = "/home/robpitman1982/strategy_console_storage"
+DEFAULT_STRATEGY_CONSOLE_REMOTE_USER = "robpitman1982"
 
 
 EXCLUDED_DIR_NAMES = {
@@ -1137,13 +1141,16 @@ def mirror_artifacts_to_exports(
     )
     mirrored_paths.append(latest_run_path)
 
-    master_src = outputs_dir / "master_leaderboard.csv"
-    if master_src.exists():
-        latest_master = exports_root / "master_leaderboard.csv"
+    for leaderboard_name in ("master_leaderboard.csv", "master_leaderboard_bootcamp.csv"):
+        master_src = outputs_dir / leaderboard_name
+        if not master_src.exists():
+            continue
+
+        latest_master = exports_root / leaderboard_name
         shutil.copy2(master_src, latest_master)
         mirrored_paths.append(latest_master)
 
-        archived_master = exports_root / f"{run_id}_master_leaderboard.csv"
+        archived_master = exports_root / f"{run_id}_{leaderboard_name}"
         shutil.copy2(master_src, archived_master)
         mirrored_paths.append(archived_master)
 
@@ -1154,6 +1161,150 @@ def mirror_artifacts_to_exports(
         mirrored_paths.append(archived_tarball)
 
     return mirrored_paths
+
+
+def should_sync_results_to_strategy_console(results_root: Path) -> bool:
+    if os.environ.get("DISABLE_STRATEGY_CONSOLE_SYNC") == "1":
+        return False
+
+    local_console_root = (Path.home() / "strategy_console_storage").expanduser()
+    local_console_runs = local_console_root / "runs"
+    try:
+        return results_root.resolve() != local_console_runs.resolve()
+    except Exception:
+        return str(results_root) != str(local_console_runs)
+
+
+def sync_run_to_strategy_console_storage(
+    *,
+    gcloud_base: list[str],
+    run_dir: Path,
+    exports_root: Path | None = None,
+    console_instance_name: str | None = None,
+    console_zone: str | None = None,
+    console_remote_root: str | None = None,
+    console_remote_user: str | None = None,
+) -> list[str]:
+    exports_root = EXPORTS_DIR if exports_root is None else exports_root
+    console_instance_name = console_instance_name or os.environ.get(
+        "STRATEGY_CONSOLE_INSTANCE", DEFAULT_STRATEGY_CONSOLE_INSTANCE
+    )
+    console_zone = console_zone or os.environ.get("STRATEGY_CONSOLE_ZONE", DEFAULT_STRATEGY_CONSOLE_ZONE)
+    console_remote_root = console_remote_root or os.environ.get(
+        "STRATEGY_CONSOLE_REMOTE_ROOT", DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT
+    )
+    console_remote_user = console_remote_user or os.environ.get(
+        "STRATEGY_CONSOLE_REMOTE_USER", DEFAULT_STRATEGY_CONSOLE_REMOTE_USER
+    )
+
+    run_id = sanitize_run_token(run_dir.name)
+    remote_runs_root = f"{console_remote_root}/runs"
+    remote_exports_root = f"{console_remote_root}/exports"
+    remote_run_dir = f"{remote_runs_root}/{run_id}"
+    remote_stage_root = f"/tmp/strategy_console_sync_{run_id}"
+    synced_paths: list[str] = []
+
+    ssh_command(
+        gcloud_base,
+        console_instance_name,
+        console_zone,
+        (
+            f"rm -rf {remote_stage_root} && "
+            f"mkdir -p {remote_stage_root} && "
+            f"sudo -n -u {console_remote_user} mkdir -p {remote_runs_root} {remote_exports_root} && "
+            f"sudo -n -u {console_remote_user} rm -rf {remote_run_dir} {remote_exports_root}/latest"
+        ),
+    )
+
+    run_command(
+        gcloud_base
+        + [
+            "compute",
+            "scp",
+            "--recurse",
+            str(run_dir),
+            f"{console_instance_name}:{remote_stage_root}",
+            f"--zone={console_zone}",
+        ]
+    )
+    ssh_command(
+        gcloud_base,
+        console_instance_name,
+        console_zone,
+        f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/{run_id} {remote_runs_root}/",
+    )
+    synced_paths.append(remote_run_dir)
+
+    remote_runs_latest = f"{remote_runs_root}/{LATEST_RUN_FILE_NAME}"
+    ssh_command(
+        gcloud_base,
+        console_instance_name,
+        console_zone,
+        (
+            f"sudo -n -u {console_remote_user} python3 -c "
+            f"\"from pathlib import Path; "
+            f"Path({remote_runs_latest!r}).write_text({(run_id + chr(10) + remote_run_dir + chr(10))!r}, encoding='utf-8')\""
+        ),
+    )
+    synced_paths.append(remote_runs_latest)
+
+    latest_dir = exports_root / "latest"
+    if latest_dir.exists():
+        run_command(
+            gcloud_base
+            + [
+                "compute",
+                "scp",
+                "--recurse",
+                str(latest_dir),
+                f"{console_instance_name}:{remote_stage_root}",
+                f"--zone={console_zone}",
+            ]
+        )
+        ssh_command(
+            gcloud_base,
+            console_instance_name,
+            console_zone,
+            f"sudo -n -u {console_remote_user} cp -R {remote_stage_root}/latest {remote_exports_root}/",
+        )
+        synced_paths.append(f"{remote_exports_root}/latest")
+
+    for path in sorted(exports_root.iterdir()) if exports_root.exists() else []:
+        if path.is_dir():
+            continue
+        if not path.name.startswith(f"{run_id}_") and path.name not in {
+            LATEST_RUN_FILE_NAME,
+            "master_leaderboard.csv",
+            "master_leaderboard_bootcamp.csv",
+        }:
+            continue
+        run_command(
+            gcloud_base
+            + [
+                "compute",
+                "scp",
+                str(path),
+                f"{console_instance_name}:{remote_stage_root}/{path.name}",
+                f"--zone={console_zone}",
+            ]
+        )
+        ssh_command(
+            gcloud_base,
+            console_instance_name,
+            console_zone,
+            f"sudo -n -u {console_remote_user} cp {remote_stage_root}/{path.name} {remote_exports_root}/{path.name}",
+        )
+        synced_paths.append(f"{remote_exports_root}/{path.name}")
+
+    ssh_command(
+        gcloud_base,
+        console_instance_name,
+        console_zone,
+        f"rm -rf {remote_stage_root}",
+        check=False,
+    )
+
+    return synced_paths
 
 
 def _detect_expected_output_files(outputs_dir: Path) -> list[str]:
@@ -1354,6 +1505,19 @@ def recover_existing_run(
                 run_dir=run_dir,
                 extracted_dir=extracted_dir,
             )
+            console_synced: list[str] = []
+            if should_sync_results_to_strategy_console(run_dir.parent):
+                try:
+                    console_synced = sync_run_to_strategy_console_storage(
+                        gcloud_base=gcloud_base,
+                        run_dir=run_dir,
+                    )
+                except Exception as exc:
+                    status_store.update(
+                        "running",
+                        "console_sync_warning",
+                        f"Results verified locally but console sync failed: {exc}",
+                    )
             status_store.update(
                 RUN_OUTCOME_COMPLETED_VERIFIED,
                 "recovered_local_artifacts",
@@ -1366,10 +1530,12 @@ def recover_existing_run(
                 remote_state="completed",
                 final_retrieval_attempted=False,
                 final_retrieval_success=True,
-                exports_updated=[str(path) for path in mirrored],
+                exports_updated=[str(path) for path in mirrored] + console_synced,
             )
             print(f"Recovered artifacts already present locally: {extracted_dir}")
             print(f"Convenience exports updated under: {EXPORTS_DIR}")
+            if console_synced:
+                print("Synced verified run outputs to strategy-console storage.")
             return 0
 
     status_store.update(
@@ -1442,10 +1608,23 @@ def recover_existing_run(
         run_dir=run_dir,
         extracted_dir=extracted_dir,
     ) if verification.expected_outputs_present else []
+    console_synced: list[str] = []
+    if verification.expected_outputs_present and should_sync_results_to_strategy_console(run_dir.parent):
+        try:
+            console_synced = sync_run_to_strategy_console_storage(
+                gcloud_base=gcloud_base,
+                run_dir=run_dir,
+            )
+        except Exception as exc:
+            status_store.update(
+                "running",
+                "console_sync_warning",
+                f"Recovered artifacts locally but console sync failed: {exc}",
+            )
 
     run_outcome = (
         RUN_OUTCOME_COMPLETED_VERIFIED
-        if verification.artifact_verified and remote_state == "completed"
+        if verification.artifact_verified and verification.effective_remote_state == "completed"
         else RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED
     )
     status_store.update(
@@ -1454,7 +1633,7 @@ def recover_existing_run(
         verification.verification_message,
         run_outcome=run_outcome,
         failure_reason=None if run_outcome == RUN_OUTCOME_COMPLETED_VERIFIED else "artifact_verification_failed",
-        remote_state=remote_state,
+        remote_state=verification.effective_remote_state,
         remote_status=remote_status,
         remote_artifact_exists=remote_artifact_exists_flag,
         artifacts_downloaded=verification.artifacts_downloaded,
@@ -1463,11 +1642,13 @@ def recover_existing_run(
         artifact_verified=verification.artifact_verified,
         final_retrieval_attempted=True,
         final_retrieval_success=verification.artifact_verified,
-        exports_updated=[str(path) for path in mirrored],
+        exports_updated=[str(path) for path in mirrored] + console_synced,
     )
     if verification.artifact_verified:
         print(f"Recovered artifacts to: {extracted_dir}")
         print(f"Convenience exports updated under: {EXPORTS_DIR}")
+        if console_synced:
+            print("Synced verified run outputs to strategy-console storage.")
         return 0
     return 1
 
@@ -1912,6 +2093,7 @@ def main(argv: list[str] | None = None) -> int:
     remote_artifact_exists_flag: bool | None = None
     final_retrieval_attempted = False
     final_retrieval_success = False
+    console_synced_paths: list[str] = []
     try:
         if instance_exists(gcloud_base, args.instance_name, args.zone):
             status_store.update("running", "instance_reset", "Existing instance found; deleting it first.")
@@ -2355,6 +2537,25 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"VM preserved: {args.instance_name} in {args.zone}")
             else:
                 print("WARNING: VM is already gone and outputs were not verified locally.")
+        if artifact_verification.expected_outputs_present and should_sync_results_to_strategy_console(local_run_dir.parent):
+            try:
+                console_synced_paths = sync_run_to_strategy_console_storage(
+                    gcloud_base=gcloud_base,
+                    run_dir=local_run_dir,
+                )
+                status_store.update(
+                    status_store.current_payload().get("state", "running"),
+                    "console_sync_complete",
+                    "Synced verified run outputs to strategy-console storage.",
+                    exports_updated=(status_store.current_payload().get("exports_updated") or []) + console_synced_paths,
+                )
+            except Exception as exc:
+                status_store.update(
+                    status_store.current_payload().get("state", "running"),
+                    "console_sync_warning",
+                    f"Console sync failed after local verification: {exc}",
+                    exports_updated=status_store.current_payload().get("exports_updated") or [],
+                )
         print(f"Latest run pointer: {latest_run_path}")
         print_final_run_summary(status_store.latest_path, local_run_dir)
 

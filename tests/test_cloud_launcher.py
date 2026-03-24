@@ -37,6 +37,8 @@ from cloud.launch_gcp_run import (
     resolve_dataset_path,
     run_preflight,
     resolve_required_datasets,
+    should_sync_results_to_strategy_console,
+    sync_run_to_strategy_console_storage,
     should_restart_remote_orchestration,
     summarize_remote_progress,
     verify_preserved_results,
@@ -593,6 +595,7 @@ def test_mirror_artifacts_to_exports_creates_latest_and_flat_master(tmp_path: Pa
     extracted_dir = run_dir / "artifacts"
     exports_dir = tmp_path / "exports"
     _write_text(extracted_dir / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+    _write_text(extracted_dir / "Outputs" / "master_leaderboard_bootcamp.csv", "rank\n2\n")
     _write_text(extracted_dir / "Outputs" / "ES_60m" / "family_leaderboard_results.csv", "x\n1\n")
     (run_dir / "artifacts.tar.gz").parent.mkdir(parents=True, exist_ok=True)
     (run_dir / "artifacts.tar.gz").write_bytes(b"non-empty")
@@ -606,9 +609,56 @@ def test_mirror_artifacts_to_exports_creates_latest_and_flat_master(tmp_path: Pa
     assert exports_dir / "latest" in mirrored
     assert (exports_dir / LATEST_RUN_FILE_NAME).exists()
     assert (exports_dir / "master_leaderboard.csv").read_text(encoding="utf-8") == "rank\n1\n"
+    assert (exports_dir / "master_leaderboard_bootcamp.csv").read_text(encoding="utf-8") == "rank\n2\n"
     assert (exports_dir / "strategy-sweep-20260324T010203Z_master_leaderboard.csv").exists()
+    assert (exports_dir / "strategy-sweep-20260324T010203Z_master_leaderboard_bootcamp.csv").exists()
     assert (exports_dir / "strategy-sweep-20260324T010203Z_artifacts.tar.gz").exists()
     assert (exports_dir / "latest" / "Outputs" / "ES_60m" / "family_leaderboard_results.csv").exists()
+
+
+def test_should_sync_results_to_strategy_console_only_when_not_already_on_console(monkeypatch, tmp_path: Path):
+    fake_home = tmp_path / "home"
+    monkeypatch.setattr("cloud.launch_gcp_run.Path.home", lambda: fake_home)
+
+    assert should_sync_results_to_strategy_console(tmp_path / "repo" / "strategy_console_storage" / "runs") is True
+    assert should_sync_results_to_strategy_console(fake_home / "strategy_console_storage" / "runs") is False
+
+
+def test_sync_run_to_strategy_console_storage_copies_run_and_exports(monkeypatch, tmp_path: Path):
+    run_dir = tmp_path / "runs" / "strategy-sweep-20260325T010203Z"
+    exports_dir = tmp_path / "exports"
+    _write_text(run_dir / "launcher_status.json", "{}")
+    _write_text(run_dir / "artifacts" / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+    _write_text(exports_dir / LATEST_RUN_FILE_NAME, "strategy-sweep-20260325T010203Z\n")
+    _write_text(exports_dir / "master_leaderboard.csv", "rank\n1\n")
+    _write_text(exports_dir / "master_leaderboard_bootcamp.csv", "rank\n2\n")
+    _write_text(exports_dir / "strategy-sweep-20260325T010203Z_master_leaderboard.csv", "rank\n1\n")
+    _write_text(exports_dir / "strategy-sweep-20260325T010203Z_master_leaderboard_bootcamp.csv", "rank\n2\n")
+    _write_text(exports_dir / "strategy-sweep-20260325T010203Z_artifacts.tar.gz", "tar")
+    _write_text(exports_dir / "latest" / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+
+    calls: list[list[str]] = []
+
+    def _fake_run_command(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("cloud.launch_gcp_run.run_command", _fake_run_command)
+
+    synced = sync_run_to_strategy_console_storage(
+        gcloud_base=["gcloud", "--project", "test-project"],
+        run_dir=run_dir,
+        exports_root=exports_dir,
+        console_instance_name="strategy-console",
+        console_zone="us-central1-c",
+        console_remote_root="/home/robpitman1982/strategy_console_storage",
+        console_remote_user="robpitman1982",
+    )
+
+    assert "/home/robpitman1982/strategy_console_storage/runs/strategy-sweep-20260325T010203Z" in synced
+    assert "/home/robpitman1982/strategy_console_storage/exports/master_leaderboard.csv" in synced
+    assert any(command[:4] == ["gcloud", "--project", "test-project", "compute"] for command in calls)
+    assert any("--recurse" in command for command in calls)
 
 
 def test_build_destroy_recovery_commands_include_launcher_recover_flow():
@@ -663,6 +713,7 @@ def test_recover_existing_run_uses_verified_local_artifacts_without_remote_calls
     (run_dir / "artifacts.tar.gz").write_bytes(b"non-empty")
 
     monkeypatch.setattr("cloud.launch_gcp_run.EXPORTS_DIR", tmp_path / "exports")
+    monkeypatch.setattr("cloud.launch_gcp_run.should_sync_results_to_strategy_console", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
         "cloud.launch_gcp_run.safe_instance_exists",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remote should not be queried")),
