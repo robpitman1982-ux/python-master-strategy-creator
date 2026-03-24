@@ -1026,9 +1026,9 @@ if __name__ == "__main__":
         print(f"\n{'=' * 72}")
         print(f"All {len(datasets)} datasets complete.")
 
-        from modules.master_leaderboard import aggregate_master_leaderboard
+        from modules.master_leaderboard import write_master_leaderboards
 
-        master_lb = aggregate_master_leaderboard(outputs_root=str(OUTPUTS_DIR))
+        master_lb, bootcamp_master_lb = write_master_leaderboards(outputs_root=str(OUTPUTS_DIR))
         if not master_lb.empty:
             print(f"\n{'=' * 72}")
             print(f"MASTER LEADERBOARD — {len(master_lb)} accepted strategies across all datasets")
@@ -1040,9 +1040,13 @@ if __name__ == "__main__":
             ]
             print(master_lb[[c for c in preview_cols if c in master_lb.columns]].to_string(index=False))
 
-            master_path = OUTPUTS_DIR / "master_leaderboard.csv"
-            master_lb.to_csv(master_path, index=False)
-            print(f"\nSaved to {master_path}")
+            print(f"\nSaved to {OUTPUTS_DIR / 'master_leaderboard.csv'}")
+            if not bootcamp_master_lb.empty:
+                print(f"\n{'=' * 72}")
+                print(f"BOOTCAMP MASTER LEADERBOARD â€” {len(bootcamp_master_lb)} accepted strategies across all datasets")
+                print(f"{'=' * 72}")
+                print(bootcamp_master_lb[[c for c in preview_cols + ['bootcamp_score'] if c in bootcamp_master_lb.columns]].to_string(index=False))
+                print(f"\nSaved to {OUTPUTS_DIR / 'master_leaderboard_bootcamp.csv'}")
         else:
             print("\nNo accepted strategies found across all datasets for master leaderboard.")
 
