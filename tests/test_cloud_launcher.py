@@ -30,6 +30,8 @@ from cloud.launch_gcp_run import (
     main,
     make_run_id,
     parse_status_json,
+    mirror_artifacts_to_exports,
+    recover_existing_run,
     remote_paths_for_run,
     resolve_dataset_path,
     run_preflight,
@@ -541,6 +543,98 @@ def test_download_and_extract_artifacts_rejects_empty_tarball(tmp_path: Path, mo
         assert "is empty" in str(exc)
     else:
         raise AssertionError("Expected empty tarball to fail.")
+
+
+def test_mirror_artifacts_to_exports_creates_latest_and_flat_master(tmp_path: Path):
+    run_dir = tmp_path / "runs" / "strategy-sweep-20260324T010203Z"
+    extracted_dir = run_dir / "artifacts"
+    exports_dir = tmp_path / "exports"
+    _write_text(extracted_dir / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+    _write_text(extracted_dir / "Outputs" / "ES_60m" / "family_leaderboard_results.csv", "x\n1\n")
+    (run_dir / "artifacts.tar.gz").parent.mkdir(parents=True, exist_ok=True)
+    (run_dir / "artifacts.tar.gz").write_bytes(b"non-empty")
+
+    mirrored = mirror_artifacts_to_exports(
+        run_dir=run_dir,
+        extracted_dir=extracted_dir,
+        exports_root=exports_dir,
+    )
+
+    assert exports_dir / "latest" in mirrored
+    assert (exports_dir / LATEST_RUN_FILE_NAME).exists()
+    assert (exports_dir / "master_leaderboard.csv").read_text(encoding="utf-8") == "rank\n1\n"
+    assert (exports_dir / "strategy-sweep-20260324T010203Z_master_leaderboard.csv").exists()
+    assert (exports_dir / "strategy-sweep-20260324T010203Z_artifacts.tar.gz").exists()
+    assert (exports_dir / "latest" / "Outputs" / "ES_60m" / "family_leaderboard_results.csv").exists()
+
+
+def test_build_destroy_recovery_commands_include_launcher_recover_flow():
+    commands = build_destroy_decision(
+        status={
+            "run_outcome": RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+            "artifacts_downloaded": False,
+            "artifact_verified": False,
+            "extraction_verified": False,
+            "expected_outputs_present": False,
+            "remote_state": "failed",
+            "remote_artifact_exists": True,
+        },
+        args=argparse.Namespace(keep_vm=False, instance_name="strategy-sweep", zone="australia-southeast2-a"),
+        instance_exists_at_end=True,
+        remote_status_path="/tmp/run_status.json",
+        remote_tarball_path="/tmp/artifacts.tar.gz",
+        local_run_dir=Path("cloud_results/test-run"),
+    ).recovery_commands
+
+    assert commands[0] == "python run_cloud_sweep.py --recover-run test-run"
+
+
+def test_recover_existing_run_uses_verified_local_artifacts_without_remote_calls(tmp_path: Path, monkeypatch):
+    run_dir = tmp_path / "cloud_results" / "strategy-sweep-20260324T010203Z"
+    manifest = RunManifest(
+        run_id=run_dir.name,
+        created_utc="2026-03-24T01:02:03+00:00",
+        instance_name="strategy-sweep",
+        zone="us-central1-a",
+        machine_type="n2-highcpu-96",
+        provisioning_model="SPOT",
+        boot_disk_size="120GB",
+        image_family="ubuntu-2404-lts-amd64",
+        config_path=str(tmp_path / "cloud" / "config.yaml"),
+        config_sha256="abc123",
+        project_id="test-project",
+        datasets=[],
+        remote_run_root=f"/tmp/strategy_engine_runs/{run_dir.name}",
+        remote_bundle_path=f"/tmp/strategy_engine_runs/{run_dir.name}/input_bundle.tar.gz",
+        remote_runner_path=f"/tmp/strategy_engine_runs/{run_dir.name}/remote_runner.sh",
+        remote_status_path=f"/tmp/strategy_engine_runs/{run_dir.name}/run_status.json",
+        remote_artifact_tarball=f"/tmp/strategy_engine_runs/{run_dir.name}/artifacts.tar.gz",
+        local_results_dir=str(run_dir),
+    )
+    _write_text(run_dir / "run_manifest.json", json.dumps(manifest.__dict__, indent=2))
+    _write_text(run_dir / "artifacts" / "run_status.json", "{}")
+    _write_text(run_dir / "artifacts" / "manifest.json", "{}")
+    _write_text(run_dir / "artifacts" / "config.yaml", "datasets: []\n")
+    _write_text(run_dir / "artifacts" / "logs" / "engine_run.log", "ok\n")
+    _write_text(run_dir / "artifacts" / "Outputs" / "master_leaderboard.csv", "rank\n1\n")
+    (run_dir / "artifacts.tar.gz").write_bytes(b"non-empty")
+
+    monkeypatch.setattr("cloud.launch_gcp_run.EXPORTS_DIR", tmp_path / "exports")
+    monkeypatch.setattr(
+        "cloud.launch_gcp_run.safe_instance_exists",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remote should not be queried")),
+    )
+
+    exit_code = recover_existing_run(
+        gcloud_base=["gcloud"],
+        args=argparse.Namespace(),
+        run_dir=run_dir,
+    )
+
+    assert exit_code == 0
+    assert (tmp_path / "exports" / "master_leaderboard.csv").exists()
+    payload = json.loads((run_dir / "launcher_status.json").read_text(encoding="utf-8"))
+    assert payload["run_outcome"] == RUN_OUTCOME_COMPLETED_VERIFIED
 
 
 def test_can_auto_destroy_rejects_null_run_outcome():

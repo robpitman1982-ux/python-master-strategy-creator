@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from modules.config_loader import load_config
-from paths import REPO_DATA_DIR, REPO_ROOT as SHARED_REPO_ROOT, RUNS_DIR, UPLOADS_DIR
+from paths import EXPORTS_DIR, REPO_DATA_DIR, REPO_ROOT as SHARED_REPO_ROOT, RUNS_DIR, UPLOADS_DIR
 
 
 REPO_ROOT = SHARED_REPO_ROOT
@@ -317,6 +317,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="Run preflight, manifest, and bundle creation only.")
     parser.add_argument("--keep-vm", action="store_true", help="Do not destroy the VM at the end.")
     parser.add_argument("--keep-remote", action="store_true", help="Do not delete remote staging before exit.")
+    parser.add_argument(
+        "--recover-run",
+        default=None,
+        help="Recover artifacts for an existing run directory under results-root instead of launching a new VM.",
+    )
     parser.add_argument(
         "--provisioning-model",
         default="SPOT",
@@ -1084,6 +1089,54 @@ def extract_tarball(tarball_path: Path, destination: Path) -> None:
         tar.extractall(destination)
 
 
+def mirror_artifacts_to_exports(
+    *,
+    run_dir: Path,
+    extracted_dir: Path,
+    exports_root: Path | None = None,
+) -> list[Path]:
+    outputs_dir = extracted_dir / "Outputs"
+    if not outputs_dir.exists():
+        return []
+
+    if exports_root is None:
+        exports_root = EXPORTS_DIR
+    exports_root.mkdir(parents=True, exist_ok=True)
+    run_id = sanitize_run_token(run_dir.name)
+    mirrored_paths: list[Path] = []
+
+    latest_dir = exports_root / "latest"
+    if latest_dir.exists():
+        shutil.rmtree(latest_dir)
+    shutil.copytree(extracted_dir, latest_dir)
+    mirrored_paths.append(latest_dir)
+
+    latest_run_path = exports_root / LATEST_RUN_FILE_NAME
+    latest_run_path.write_text(
+        f"{run_id}\n{run_dir}\n{latest_dir}\n",
+        encoding="utf-8",
+    )
+    mirrored_paths.append(latest_run_path)
+
+    master_src = outputs_dir / "master_leaderboard.csv"
+    if master_src.exists():
+        latest_master = exports_root / "master_leaderboard.csv"
+        shutil.copy2(master_src, latest_master)
+        mirrored_paths.append(latest_master)
+
+        archived_master = exports_root / f"{run_id}_master_leaderboard.csv"
+        shutil.copy2(master_src, archived_master)
+        mirrored_paths.append(archived_master)
+
+    tarball_src = run_dir / "artifacts.tar.gz"
+    if tarball_src.exists():
+        archived_tarball = exports_root / f"{run_id}_artifacts.tar.gz"
+        shutil.copy2(tarball_src, archived_tarball)
+        mirrored_paths.append(archived_tarball)
+
+    return mirrored_paths
+
+
 def _detect_expected_output_files(outputs_dir: Path) -> list[str]:
     expected_files = [
         outputs_dir / "master_leaderboard.csv",
@@ -1232,12 +1285,171 @@ def build_recovery_commands(
     remote_tarball_path: str,
     local_run_dir: Path,
 ) -> list[str]:
+    run_id = sanitize_run_token(local_run_dir.name)
     return [
+        f"python run_cloud_sweep.py --recover-run {run_id}",
         f"gcloud compute ssh {instance_name} --zone={zone}",
         f"gcloud compute ssh {instance_name} --zone={zone} --command=\"cat {remote_status_path}\"",
         f"gcloud compute scp {instance_name}:{remote_tarball_path} \"{local_run_dir / 'artifacts.tar.gz'}\" --zone={zone}",
         f"gcloud compute instances delete {instance_name} --zone={zone} --quiet",
     ]
+
+
+def recover_existing_run(
+    *,
+    gcloud_base: list[str],
+    args: argparse.Namespace,
+    run_dir: Path,
+) -> int:
+    manifest_path = run_dir / "run_manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(f"Cannot recover run without manifest: {manifest_path}")
+
+    manifest = RunManifest(**json.loads(manifest_path.read_text(encoding="utf-8")))
+    status_store = LauncherStatusStore(
+        run_dir,
+        run_id=manifest.run_id,
+        instance_name=manifest.instance_name,
+        zone=manifest.zone,
+        config_path=manifest.config_path,
+        local_results_dir=manifest.local_results_dir,
+        remote_run_root=manifest.remote_run_root,
+        created_utc=manifest.created_utc,
+    )
+
+    extracted_dir = run_dir / "artifacts"
+    tarball_local = run_dir / "artifacts.tar.gz"
+    remote_state = REMOTE_STATUS_UNKNOWN
+    remote_status: dict[str, Any] = {}
+    remote_artifact_exists_flag: bool | None = None
+
+    if extracted_dir.exists():
+        existing_verification = inspect_preserved_artifacts(
+            tarball_path=tarball_local if tarball_local.exists() else None,
+            extracted_dir=extracted_dir,
+            remote_state="completed",
+        )
+        if existing_verification.artifact_verified:
+            mirrored = mirror_artifacts_to_exports(
+                run_dir=run_dir,
+                extracted_dir=extracted_dir,
+            )
+            status_store.update(
+                RUN_OUTCOME_COMPLETED_VERIFIED,
+                "recovered_local_artifacts",
+                "Existing local artifacts verified and mirrored to exports.",
+                run_outcome=RUN_OUTCOME_COMPLETED_VERIFIED,
+                artifacts_downloaded=existing_verification.artifacts_downloaded,
+                extraction_verified=existing_verification.extraction_verified,
+                expected_outputs_present=existing_verification.expected_outputs_present,
+                artifact_verified=existing_verification.artifact_verified,
+                remote_state="completed",
+                final_retrieval_attempted=False,
+                final_retrieval_success=True,
+                exports_updated=[str(path) for path in mirrored],
+            )
+            print(f"Recovered artifacts already present locally: {extracted_dir}")
+            print(f"Convenience exports updated under: {EXPORTS_DIR}")
+            return 0
+
+    status_store.update(
+        "running",
+        "artifact_recovery",
+        "Attempting recovery of preserved artifacts for existing run.",
+    )
+
+    instance_exists_now = safe_instance_exists(gcloud_base, manifest.instance_name, manifest.zone)
+    if instance_exists_now:
+        remote_status = parse_status_json(
+            read_remote_file(gcloud_base, manifest.instance_name, manifest.zone, manifest.remote_status_path)
+        )
+        remote_state = str(remote_status.get("state", REMOTE_STATUS_UNKNOWN)).lower()
+        try:
+            remote_artifact_exists_flag = remote_artifact_exists(
+                gcloud_base,
+                manifest.instance_name,
+                manifest.zone,
+                manifest.remote_artifact_tarball,
+            )
+        except Exception:
+            remote_artifact_exists_flag = None
+    else:
+        remote_state = "missing"
+
+    if not instance_exists_now:
+        status_store.update(
+            RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+            "artifact_recovery_failed",
+            "Recovery failed because the compute VM no longer exists.",
+            run_outcome=RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
+            failure_reason="vm_missing_before_retrieval",
+            remote_state=remote_state,
+            remote_artifact_exists=False,
+            final_retrieval_attempted=True,
+            final_retrieval_success=False,
+        )
+        return 1
+
+    if not remote_artifact_exists_flag:
+        status_store.update(
+            RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+            "artifact_recovery_failed",
+            "Recovery failed because no preserved remote artifacts tarball is present.",
+            run_outcome=RUN_OUTCOME_ARTIFACT_DOWNLOAD_FAILED,
+            failure_reason="artifact_download_failed",
+            remote_state=remote_state,
+            remote_status=remote_status,
+            remote_artifact_exists=remote_artifact_exists_flag,
+            final_retrieval_attempted=True,
+            final_retrieval_success=False,
+        )
+        return 1
+
+    artifact_result = download_and_extract_artifacts(
+        gcloud_base,
+        manifest.instance_name,
+        manifest.zone,
+        manifest.remote_artifact_tarball,
+        tarball_local,
+        extracted_dir,
+    )
+    verification = inspect_preserved_artifacts(
+        tarball_path=artifact_result.tarball_path,
+        extracted_dir=artifact_result.extracted_dir,
+        remote_state=remote_state,
+    )
+    mirrored = mirror_artifacts_to_exports(
+        run_dir=run_dir,
+        extracted_dir=extracted_dir,
+    ) if verification.expected_outputs_present else []
+
+    run_outcome = (
+        RUN_OUTCOME_COMPLETED_VERIFIED
+        if verification.artifact_verified and remote_state == "completed"
+        else RUN_OUTCOME_ARTIFACT_VERIFICATION_FAILED
+    )
+    status_store.update(
+        run_outcome,
+        "artifact_recovery_complete",
+        verification.verification_message,
+        run_outcome=run_outcome,
+        failure_reason=None if run_outcome == RUN_OUTCOME_COMPLETED_VERIFIED else "artifact_verification_failed",
+        remote_state=remote_state,
+        remote_status=remote_status,
+        remote_artifact_exists=remote_artifact_exists_flag,
+        artifacts_downloaded=verification.artifacts_downloaded,
+        extraction_verified=verification.extraction_verified,
+        expected_outputs_present=verification.expected_outputs_present,
+        artifact_verified=verification.artifact_verified,
+        final_retrieval_attempted=True,
+        final_retrieval_success=verification.artifact_verified,
+        exports_updated=[str(path) for path in mirrored],
+    )
+    if verification.artifact_verified:
+        print(f"Recovered artifacts to: {extracted_dir}")
+        print(f"Convenience exports updated under: {EXPORTS_DIR}")
+        return 0
+    return 1
 
 
 def build_destroy_decision(
@@ -1333,6 +1545,7 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
 
     outputs_dir = local_run_dir / "artifacts" / "Outputs"
     results_location = outputs_dir if outputs_dir.exists() else local_run_dir
+    exports_master = EXPORTS_DIR / "master_leaderboard.csv"
 
     print("=============================")
     print("STRATEGY ENGINE RUN COMPLETE")
@@ -1348,6 +1561,8 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     print(f"Billing stopped: {billing_message}")
     print(f"Operator action: {operator_action or 'unknown'}")
     print(f"Results location: {results_location}")
+    if exports_master.exists():
+        print(f"Convenience export: {exports_master}")
     if status.get("failure_reason"):
         print(f"Failure reason: {status['failure_reason']}")
     if vm_outcome == VM_OUTCOME_PRESERVED:
@@ -1559,6 +1774,17 @@ def main(argv: list[str] | None = None) -> int:
     print_preflight_summary(preflight)
 
     gcloud_base = build_gcloud_base(preflight.gcloud_bin, preflight.project_id)
+
+    if args.recover_run:
+        recover_run_id = sanitize_run_token(args.recover_run)
+        run_dir = build_local_run_dir(results_root, recover_run_id)
+        print(f"Recovering existing run: {recover_run_id}")
+        return recover_existing_run(
+            gcloud_base=gcloud_base,
+            args=args,
+            run_dir=run_dir,
+        )
+
     config = load_config(config_path)
     datasets = preflight.datasets
 
@@ -1803,6 +2029,17 @@ def main(argv: list[str] | None = None) -> int:
                     remote_state=remote_state,
                     remote_artifact_exists=True,
                 )
+                if artifact_verification.expected_outputs_present:
+                    mirrored_paths = mirror_artifacts_to_exports(
+                        run_dir=local_run_dir,
+                        extracted_dir=extracted_dir,
+                    )
+                    status_store.update(
+                        "running",
+                        "exports_sync",
+                        "Mirrored latest outputs to strategy_console_storage/exports.",
+                        exports_updated=[str(path) for path in mirrored_paths],
+                    )
             except Exception as exc:
                 artifact_verification = build_default_artifact_verification()
                 artifact_verification.expected_files = []
@@ -1947,6 +2184,12 @@ def main(argv: list[str] | None = None) -> int:
                     run_outcome = RUN_OUTCOME_COMPLETED_VERIFIED
                     failure_reason = None
                     exit_code = 0
+                mirrored_paths: list[Path] = []
+                if artifact_verification.expected_outputs_present:
+                    mirrored_paths = mirror_artifacts_to_exports(
+                        run_dir=local_run_dir,
+                        extracted_dir=local_run_dir / "artifacts",
+                    )
                 status_store.update(
                     "running",
                     "artifact_verification_retry",
@@ -1960,6 +2203,7 @@ def main(argv: list[str] | None = None) -> int:
                     remote_artifact_exists=remote_artifact_exists_flag,
                     final_retrieval_attempted=True,
                     final_retrieval_success=final_retrieval_success,
+                    exports_updated=[str(path) for path in mirrored_paths],
                 )
             except Exception as exc:
                 final_retrieval_success = False

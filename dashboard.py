@@ -687,3 +687,7 @@ with tab_system:
         "/artifacts/Outputs/ES_60m/status.json | python3 -m json.tool",
         language="bash",
     )
+    st.markdown("**Recover artifacts for a completed run that never downloaded locally:**")
+    st.code("python3 run_cloud_sweep.py --recover-run $(cat ~/strategy_console_storage/runs/LATEST_RUN.txt)", language="bash")
+    st.markdown("**Most convenient leaderboard path after recovery/success:**")
+    st.code("cat ~/strategy_console_storage/exports/master_leaderboard.csv", language="bash")
