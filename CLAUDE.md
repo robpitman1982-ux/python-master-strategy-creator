@@ -62,6 +62,7 @@ python-master-strategy-creator/
 ├── docs/
 │   ├── STRATEGY_ENGINE_ANALYSIS.md    # Complete system analysis: files, filters, pipeline, weaknesses
 │   ├── IMPROVEMENT_ROADMAP.md         # Phased improvement plan targeting The5ers Bootcamp
+│   ├── FILTER_SUMMARY.md              # Complete filter inventory, search space analysis, feature dependencies
 │   └── TRADESTATION_EXPORT_GUIDE.md   # Step-by-step data export instructions
 ├── cloud/
 │   ├── run_cloud.sh            # Linux/Mac cloud run script (DigitalOcean)
@@ -150,6 +151,9 @@ Key sections:
 - `leaderboard`: final acceptance thresholds (min_pf, min_oos_pf, min_total_trades)
 
 ## Current filter inventory
+
+See `docs/FILTER_SUMMARY.md` for comprehensive details on all filters, their parameters,
+timeframe scaling behaviour, feature dependencies, and combinatorial search space analysis.
 
 **Trend filters**: TrendDirectionFilter, PullbackFilter, RecoveryTriggerFilter, VolatilityFilter, MomentumFilter, TwoBarUpFilter, TrendSlopeFilter, HigherLowFilter
 
@@ -294,4 +298,4 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 **Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
 
 ## Last updated
-2026-03-24 — Session 27 Pre-Work: strategy analysis docs, improvement roadmap, CLAUDE.md roadmap references
+2026-03-24 — Session 27 Part A: filter summary doc, CLAUDE.md filter-summary references
