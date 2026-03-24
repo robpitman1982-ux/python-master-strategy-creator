@@ -379,6 +379,10 @@ def build_family_summary_row(
         "best_combo_recent_12m_trades": int(best_combo.get("recent_12m_trades", 0) or 0),
         "best_combo_recent_12m_pf": float(best_combo.get("recent_12m_pf", 0.0) or 0.0),
         "best_combo_quality_flag": str(best_combo.get("quality_flag", "UNKNOWN")),
+        "best_combo_exit_type": "time_stop",
+        "best_combo_trailing_stop_atr": None,
+        "best_combo_profit_target_atr": None,
+        "best_combo_signal_exit_reference": None,
 
         "refinement_ran": refinement_df is not None and not refinement_df.empty,
         "accepted_refinement_rows": len(refinement_df) if refinement_df is not None else 0,
@@ -399,6 +403,10 @@ def build_family_summary_row(
         "best_refined_recent_12m_trades": int(_extract_best_refined_param(best_refined, "recent_12m_trades", 0)),
         "best_refined_recent_12m_pf": float(_extract_best_refined_param(best_refined, "recent_12m_pf", 0.0)),
         "best_refined_quality_flag": str(_extract_best_refined_param(best_refined, "quality_flag", "UNKNOWN")),
+        "best_refined_exit_type": str(_extract_best_refined_param(best_refined, "exit_type", "time_stop")),
+        "best_refined_trailing_stop_atr": _extract_best_refined_param(best_refined, "trailing_stop_atr", None),
+        "best_refined_profit_target_atr": _extract_best_refined_param(best_refined, "profit_target_atr", None),
+        "best_refined_signal_exit_reference": _extract_best_refined_param(best_refined, "signal_exit_reference", None),
     }
 
 
@@ -458,6 +466,10 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_stop_distance_points": 0.0,
         "leader_min_avg_range": 0.0,
         "leader_momentum_lookback": 0,
+        "leader_exit_type": row.get("best_combo_exit_type", "time_stop"),
+        "leader_trailing_stop_atr": row.get("best_combo_trailing_stop_atr"),
+        "leader_profit_target_atr": row.get("best_combo_profit_target_atr"),
+        "leader_signal_exit_reference": row.get("best_combo_signal_exit_reference"),
     }
 
     if not bool(row.get("refinement_ran", False)):
@@ -481,6 +493,10 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "leader_stop_distance_points": row.get("best_refined_stop_distance_points", 0.0),
         "leader_min_avg_range": row.get("best_refined_min_avg_range", 0.0),
         "leader_momentum_lookback": row.get("best_refined_momentum_lookback", 0),
+        "leader_exit_type": row.get("best_refined_exit_type", "time_stop"),
+        "leader_trailing_stop_atr": row.get("best_refined_trailing_stop_atr"),
+        "leader_profit_target_atr": row.get("best_refined_profit_target_atr"),
+        "leader_signal_exit_reference": row.get("best_refined_signal_exit_reference"),
     }
 
     combo_net = float(combo["leader_net_pnl"] or 0.0)
@@ -553,10 +569,22 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_stop_distance_points",
         "leader_min_avg_range",
         "leader_momentum_lookback",
+        "leader_exit_type",
+        "leader_trailing_stop_atr",
+        "leader_profit_target_atr",
+        "leader_signal_exit_reference",
         "best_combo_strategy_name",
         "best_combo_filters",
         "best_combo_filter_class_names",
         "best_refined_strategy_name",
+        "best_combo_exit_type",
+        "best_combo_trailing_stop_atr",
+        "best_combo_profit_target_atr",
+        "best_combo_signal_exit_reference",
+        "best_refined_exit_type",
+        "best_refined_trailing_stop_atr",
+        "best_refined_profit_target_atr",
+        "best_refined_signal_exit_reference",
     ]
 
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()

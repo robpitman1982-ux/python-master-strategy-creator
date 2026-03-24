@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from modules.engine import EngineConfig, MasterStrategyEngine
@@ -285,3 +287,79 @@ def test_refinement_results_include_exit_metadata():
     assert not result_df.empty
     assert {"exit_type", "trailing_stop_atr", "profit_target_atr", "signal_exit_reference"}.issubset(result_df.columns)
     assert set(result_df["exit_type"]) == {"time_stop", "trailing_stop", "profit_target", "signal_exit"}
+
+
+def test_family_summary_and_leaderboard_expose_exit_metadata():
+    from master_strategy_engine import build_family_leaderboard, build_family_summary_row
+
+    data = _make_exit_df(
+        [
+            {"open": 100.0, "high": 100.5, "low": 99.5, "close": 100.0, "atr_20": 1.0},
+            {"open": 100.3, "high": 101.0, "low": 100.0, "close": 100.7, "atr_20": 1.0},
+        ]
+    )
+    combo_results_df = pd.DataFrame(
+        [
+            {
+                "strategy_name": "ComboTrend_Test",
+                "profit_factor": 1.10,
+                "average_trade": 50.0,
+                "net_pnl": 500.0,
+                "total_trades": 20,
+                "filters": "TrendDirection,Pullback",
+                "filter_class_names": "TrendDirectionFilter,PullbackFilter",
+                "is_trades": 8,
+                "oos_trades": 12,
+                "is_pf": 1.02,
+                "oos_pf": 1.08,
+                "recent_12m_trades": 5,
+                "recent_12m_pf": 1.05,
+                "quality_flag": "STABLE",
+            }
+        ]
+    )
+    refinement_df = pd.DataFrame(
+        [
+            {
+                "strategy_name": "RefinedTrend_Test",
+                "profit_factor": 1.35,
+                "average_trade": 75.0,
+                "net_pnl": 900.0,
+                "total_trades": 22,
+                "hold_bars": 8,
+                "stop_distance_points": 1.25,
+                "min_avg_range": 0.0,
+                "momentum_lookback": 10,
+                "is_trades": 9,
+                "oos_trades": 13,
+                "is_pf": 1.20,
+                "oos_pf": 1.30,
+                "recent_12m_trades": 6,
+                "recent_12m_pf": 1.25,
+                "quality_flag": "ROBUST",
+                "exit_type": "trailing_stop",
+                "trailing_stop_atr": 1.5,
+                "profit_target_atr": None,
+                "signal_exit_reference": None,
+            }
+        ]
+    )
+
+    summary_row = build_family_summary_row(
+        strategy_type_name="trend",
+        dataset_path=Path("ES_60m_2008_2026_tradestation.csv"),
+        data=data,
+        sanity_check={"strategy_name": "Sanity", "total_trades": 3},
+        combo_results_df=combo_results_df,
+        promoted_df=combo_results_df.copy(),
+        refinement_df=refinement_df,
+    )
+
+    assert summary_row["best_combo_exit_type"] == "time_stop"
+    assert summary_row["best_refined_exit_type"] == "trailing_stop"
+    assert summary_row["best_refined_trailing_stop_atr"] == 1.5
+
+    leaderboard = build_family_leaderboard(pd.DataFrame([summary_row]))
+    assert leaderboard.loc[0, "leader_exit_type"] == "trailing_stop"
+    assert leaderboard.loc[0, "leader_trailing_stop_atr"] == 1.5
+    assert pd.isna(leaderboard.loc[0, "leader_profit_target_atr"])

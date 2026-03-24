@@ -219,12 +219,27 @@ def _rebuild_strategy_from_leaderboard_row(
     stop_distance_points = _safe_float(row.get("leader_stop_distance_points", 0.0), 0.0)
     min_avg_range = _safe_float(row.get("leader_min_avg_range", 0.0), 0.0)
     momentum_lookback = _safe_int(row.get("leader_momentum_lookback", 0), 0)
+    exit_type = row.get("leader_exit_type", "time_stop")
+    trailing_stop_atr = row.get("leader_trailing_stop_atr")
+    profit_target_atr = row.get("leader_profit_target_atr")
+    signal_exit_reference = row.get("leader_signal_exit_reference")
+
+    if pd.isna(trailing_stop_atr):
+        trailing_stop_atr = None
+    if pd.isna(profit_target_atr):
+        profit_target_atr = None
+    if pd.isna(signal_exit_reference):
+        signal_exit_reference = None
 
     if leader_source == "combo":
         hold_bars = int(getattr(strategy_type_inst, "default_hold_bars", 3))
         stop_distance_points = float(getattr(strategy_type_inst, "default_stop_distance_points", 1.0))
         min_avg_range = 0.0
         momentum_lookback = 0
+        exit_type = str(getattr(strategy_type_inst, "get_default_exit_type")().value)
+        trailing_stop_atr = None
+        profit_target_atr = None
+        signal_exit_reference = None
 
     eval_data = add_precomputed_features(
         data.copy(),
@@ -240,6 +255,10 @@ def _rebuild_strategy_from_leaderboard_row(
         min_avg_range,
         momentum_lookback,
         timeframe=timeframe,
+        exit_type=exit_type,
+        trailing_stop_atr=trailing_stop_atr,
+        profit_target_atr=profit_target_atr,
+        signal_exit_reference=signal_exit_reference,
     )
 
     cfg = EngineConfig(
