@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-03-24 — Session 27 Part A: Filter Summary & Analysis
+
+**What was done**:
+- Created `docs/FILTER_SUMMARY.md`: comprehensive filter documentation covering all 30 filters
+  across 3 families, with parameter details, timeframe scaling behaviour, feature dependencies,
+  combinatorial search space calculations, and gap analysis for future filter ideas
+- Updated CLAUDE.md with reference to filter summary doc
+
+**Key findings from analysis**:
+- Trend: 10 filters, `C(10,4..6) = 672` combinations
+- MR: 10 filters, `C(10,3..6) = 792` combinations
+- Breakout: 10 filters, `C(10,3..5) = 582` combinations
+- MR `momentum_lookback` grid is `[0]` — MR doesn't use momentum filtering
+- MR `min_avg_range` grid is conditional on whether `DistanceBelowSMAFilter`, `LowVolatilityRegimeFilter`, or `StretchFromLongTermSMAFilter` is in the combo
+- Breakout `min_avg_range` grid is only active when `CompressionFilter` is in the combo
+- The live refinement grids are larger and more conditional than the older flat "256 combos" summary suggests
+- All filters are OHLC-first — no volume, time, or explicit regime filters exist yet
+
+**Next session priorities**:
+1. Analyse multi-timeframe ES run results (when available)
+2. Begin exit architecture design (Phase 1B of improvement roadmap)
+
 ## 2026-03-24 — Session 27 (Pre-Work): Strategy Analysis + Improvement Roadmap
 
 **What was done**:
