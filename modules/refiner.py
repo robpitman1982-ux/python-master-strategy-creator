@@ -274,7 +274,7 @@ class StrategyParameterRefiner:
         if max_workers is None:
             max_workers = self._default_max_workers()
 
-        print("\n🎯 Running top-combo parameter refinement...")
+        print("\nRunning top-combo parameter refinement...")
         print(f"Total combinations: {total_runs} | Years in sample: {years_in_sample:.2f}")
         print(f"Trade filters: min_trades={min_trades}, min_trades_per_year={min_trades_per_year:.2f}")
 
@@ -328,9 +328,9 @@ class StrategyParameterRefiner:
                 if progress_callback is not None:
                     progress_callback(idx, total_runs)
 
-        print(f"\n✅ Accepted refinement sets: {accepted_count}")
-        print(f"❌ Rejected refinement sets: {rejected_count}")
-        print(f"⏱ Refinement runtime: {(time.perf_counter() - start_time):.2f} seconds")
+        print(f"\nAccepted refinement sets: {accepted_count}")
+        print(f"Rejected refinement sets: {rejected_count}")
+        print(f"Refinement runtime: {(time.perf_counter() - start_time):.2f} seconds")
 
         return self.results_dataframe()
 
@@ -418,7 +418,7 @@ class StrategyParameterRefiner:
             print("\nNo refinement summary available.")
             return
 
-        print("\n🧠 Refinement Summary Report")
+        print("\nRefinement Summary Report")
         b = report["best_net_pnl"]
         print(
             f"\nBest Net PnL setting:\n"

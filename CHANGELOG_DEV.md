@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-03-24 — Session 29: Exit validation sweep
+
+**What was done**:
+- Added a focused ES validation config for testing new exit styles
+- Added `modules/exit_validation_report.py` to compare exit performance by family and dataset
+- Ensured family summary / leaderboard outputs expose exit-style result fields needed for validation analysis
+- Ran a local validation sweep on ES datasets using a reduced local harness after the full sequential run proved too heavy on the Windows laptop
+- Produced `docs/EXIT_VALIDATION_ANALYSIS.md` summarizing whether trailing stops, profit targets, and signal exits improved results
+
+**Key questions answered**:
+- Did trend improve with trailing stop?
+  - Not materially in the local validation; `time_stop` remained best
+- Did breakout improve with trailing stop?
+  - Yes on `ES_30m`; `trailing_stop` clearly outperformed `time_stop`
+- Did mean reversion improve with profit target / signal exit?
+  - Inconclusive in the reduced local run; trade count was too thin
+- Are the new exit styles strong enough to justify moving to Bootcamp-native scoring next?
+  - Yes, with the important caveat that family defaults should stay unchanged until a broader validation run confirms the local findings
+
+**Next session priorities**:
+1. Begin Bootcamp-native scoring / dual leaderboard
+2. Integrate validation insights into family defaults if warranted
+3. Keep vectorization as the next major engine-speed milestone after scoring
+
+---
+
 ## 2026-03-24 — Session 28: Exit architecture foundation
 
 **What was done**:

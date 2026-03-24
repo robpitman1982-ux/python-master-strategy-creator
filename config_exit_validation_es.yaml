@@ -9,10 +9,7 @@ datasets:
     market: "ES"
     timeframe: "30m"
 
-strategy_types:
-  - "trend"
-  - "mean_reversion"
-  - "breakout"
+strategy_types: "all"
 
 engine:
   initial_capital: 250000.0

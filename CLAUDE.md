@@ -51,6 +51,7 @@ python-master-strategy-creator/
 │   ├── refiner.py                     # Refinement engine (parallel parameter sweep)
 │   ├── portfolio_evaluator.py         # Portfolio metrics, Monte Carlo, stress tests
 │   ├── prop_firm_simulator.py         # Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
+│   ├── exit_validation_report.py      # Exit-style validation summary utility for refinement outputs
 │   ├── ultimate_leaderboard.py        # Cross-run strategy aggregator: deduplicates and ranks accepted strategies from all runs
 │   └── strategy_types/
 │       ├── __init__.py
@@ -176,7 +177,8 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
 - [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
 - [x] Exit architecture foundation completed — strategies now carry explicit exit config and the engine/refiner support `time_stop`, `trailing_stop`, `profit_target`, and `signal_exit`
-- [ ] Validate new exit styles on real ES sweeps and measure whether trailing exits materially improve trend / breakout quality
+- [x] Session 29 local exit validation completed â€” breakout improved on 30m with `trailing_stop`, trend remained `time_stop`, and mean reversion was inconclusive in the reduced local run
+- [ ] Re-run exit validation on a broader cloud/full-history sample before changing any family default exits
 - [ ] Long-only — short-side strategies needed for portfolio resilience
 - [x] Strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — fixed via GCP Cloud Shell set-service-account --scopes=cloud-platform; also authenticated with personal gcloud account
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a — now us-central1-a; also configurable per YAML via cloud.zone
@@ -213,6 +215,7 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] Python 3.14 / numpy issues — scripts/setup_dashboard_venv.sh pins numpy<2.2, uses python3.12 preferred
 - [ ] Dashboard: equity curve per strategy from trade-level data (equity curves now shown from strategy_returns.csv)
 - [ ] Quick real-run validation still needed after Session 22 python3.12 remote bootstrap fix
+- [x] Exit validation reporting utility added â€” `python -m modules.exit_validation_report --outputs-dir <OutputsDir>` writes `exit_validation_summary.csv` and prints best exit winners by dataset/family
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -236,6 +239,15 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [ ] No static IP on strategy-console — IP changes on restart; reserve via gcloud compute addresses create
 - [ ] GCP vCPU quota: 200 in us-central1 — constrains multi-VM parallelism
 - [x] status.json first-update delay — FIXED (done == 1)
+
+## Current project state
+
+- Session 29 exit validation is complete.
+- Exit architecture is partially validated:
+  - breakout showed a meaningful local 30m win for `trailing_stop`
+  - trend did not improve enough to justify a default exit change
+  - mean reversion still needs a broader validation run with more trades
+- Next priority remains Bootcamp-native scoring / dual leaderboard.
 
 ## Improvement roadmap
 

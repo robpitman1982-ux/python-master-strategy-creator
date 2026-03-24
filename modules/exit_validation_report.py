@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from pandas.errors import EmptyDataError
 
 
 def _safe_float(value: Any) -> float | None:
@@ -32,7 +33,10 @@ def load_refinement_results(outputs_dir: str | Path) -> pd.DataFrame:
 
     frames: list[pd.DataFrame] = []
     for csv_path in csv_files:
-        df = pd.read_csv(csv_path)
+        try:
+            df = pd.read_csv(csv_path)
+        except EmptyDataError:
+            continue
         if df.empty:
             continue
 

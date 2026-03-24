@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 import pandas as pd
 
 from modules.exit_validation_report import generate_exit_validation_report
 
 
-def test_exit_validation_report_summarizes_by_dataset_family_and_exit_type(tmp_path: Path):
-    outputs_dir = tmp_path / "Outputs"
+def test_exit_validation_report_summarizes_by_dataset_family_and_exit_type():
+    outputs_dir = Path(".tmp_exit_validation_report_test") / str(uuid4()) / "Outputs"
     es60_dir = outputs_dir / "ES_60m"
     es30_dir = outputs_dir / "ES_30m"
     es60_dir.mkdir(parents=True)
