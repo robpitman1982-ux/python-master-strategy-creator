@@ -1,7 +1,7 @@
 # STRATEGY ENGINE ANALYSIS
 
-> Comprehensive write-up of what the engine does, how every file works,
-> what every filter does, and current weaknesses.
+> Comprehensive write-up of what the engine does, how every major file fits together,
+> what each filter is designed to capture, and where the current weaknesses are.
 >
 > Last updated: 2026-03-24 (Session 27 Pre-Work)
 
@@ -9,486 +9,440 @@
 
 ## Part 1: What We're Building
 
-### Overview
+This repository is a **strategy discovery engine** for futures trading. It is not a live
+trading system and it is not placing orders. Its job is to search historical data for
+strategy candidates that are statistically robust enough to earn a place in a future
+portfolio.
 
-This is a **strategy discovery engine** for futures trading — not a live trading system.
-Its purpose is to sweep thousands of filter combinations and parameter ranges across historical
-data, identify statistically robust algorithmic strategies, and produce ranked candidates for
-future portfolio construction.
+The intended markets are:
+- **ES** (E-mini S&P 500)
+- **CL** (Crude Oil)
+- **NQ** (Nasdaq)
+- **GC** (Gold)
 
-### Target Instruments
+The operational target is **The5ers $250K Bootcamp**, which is a three-step prop challenge:
+- 6% profit target per step
+- 5% max drawdown constraint
+- 1:7.5 leverage on indices
 
-| Instrument | Exchange | Tick Value | Current Phase |
-|------------|----------|------------|---------------|
-| ES (S&P 500 E-mini) | CME | $12.50 | Active — all timeframes |
-| CL (Crude Oil) | NYMEX | $10.00 | Phase 2 |
-| NQ (Nasdaq E-mini) | CME | $5.00 | Phase 2 |
-| GC (Gold) | COMEX | $10.00 | Phase 3 |
+That target matters because it changes what "good" looks like. The end goal is not one
+beautiful backtest. The end goal is a **portfolio of about six uncorrelated strategies**
+that can repeatedly survive the Bootcamp path with acceptable drawdown.
 
-### Target Deployment
+Data is currently sourced from **TradeStation CSV exports** going back to 2008. The active
+timeframes are:
+- daily
+- 60m
+- 30m
+- 15m
 
-**The5ers $250K Bootcamp** — a 3-step prop firm challenge:
-- Step 1: $100K account, 6% profit target, 5% max drawdown
-- Step 2: $150K account, 6% profit target, 5% max drawdown
-- Step 3: $200K account, 6% profit target, 5% max drawdown
-- Funded: $250K account, 1:7.5 leverage on indices
+Planned later:
+- 5m in Phase 2
+- 1m excluded for now because it is noisier, heavier, and less aligned with the current
+  engine design
 
-**Portfolio goal**: ~6 uncorrelated strategies across multiple instruments and timeframes.
-Deploying a portfolio rather than a single strategy reduces DD risk via diversification.
-
-### Data
-
-- Source: TradeStation CSV exports (OHLCV, bar-by-bar)
-- History: back to 2008 (18 years)
-- Timeframes: daily, 60m, 30m, 15m (Phase 1); 5m (Phase 2); 1m excluded — too noisy and slow to process
-- IS/OOS split: 2019-01-01 (configurable) — ~11 years in-sample, ~5 years out-of-sample
+In short, this codebase is building a research pipeline that finds candidate strategies
+from long-run futures data, ranks them, stress-tests them, and prepares them for future
+portfolio construction.
 
 ---
 
 ## Part 2: Pipeline Architecture
 
-The engine runs a **funnel** for each strategy family (trend, mean_reversion, breakout)
-on each dataset. Each stage narrows candidates before the next.
+The engine runs a staged funnel for each dataset and each strategy family. The families are
+currently:
+- trend
+- mean_reversion
+- breakout
 
-### Stage 1 — Sanity Check
+### 1. Sanity Check
 
-Run the base strategy for this family using all default filters and parameters.
-Purpose: confirm the data file loads correctly and the engine produces trades.
-If no trades fire, abort early with a clear error message.
+Before spending serious compute, the engine runs a base strategy with default settings to
+confirm the dataset loads correctly and the backtest loop produces trades. This is a cheap
+guardrail against broken CSVs, feature-precompute issues, or family definitions that never
+trigger.
 
-### Stage 2 — Filter Combination Sweep
+### 2. Filter Combination Sweep
 
-Generate all C(n, k) filter combinations where k ranges from `min_filters` to `max_filters`.
-For each combo:
-- Run with default `hold_bars`, `stop_distance`, `min_avg_range`, `momentum_lookback`
-- Record: PF, avg_trade, net_pnl, total_trades, IS trades, OOS trades
-- Assign quality flag (ROBUST / STABLE / MARGINAL / BROKEN_IN_OOS / etc.)
-- Compute quality_score (continuous metric for ranking)
-- Record consistency stats: pct_profitable_years, max_consecutive_losing_years
+The main search starts by generating all valid `C(n, k)` filter combinations for a family,
+where `k` ranges from `min_filters` to `max_filters`.
 
-This is the widest stage — can produce thousands of combos for large filter libraries.
+Each combination is run with default entry/exit parameters, and the engine records:
+- profit factor
+- average trade
+- net PnL
+- total trades
+- IS/OOS trade counts
+- IS/OOS PF
+- quality flag
+- quality score
+- yearly consistency metrics
 
-### Stage 3 — Promotion Gate
+This stage answers the first important question: **which combinations of filters even look
+promising before parameter tuning?**
 
-Filter sweep results by minimum thresholds:
-- `min_pf`: minimum profit factor (default 1.1)
-- `min_trades`: minimum total trades across full history
-- `min_trades_per_year`: minimum annualised trade frequency
+### 3. Promotion Gate
 
-Rank surviving combos by composite score: `quality_score × oos_pf × (trades_per_year / 10)`.
-Cap at `max_promoted_candidates` (default 20) to prevent refinement explosion.
+Sweep results then go through a deliberately loose promotion gate. Candidates are filtered by:
+- minimum profit factor
+- minimum total trades
+- minimum trades per year
 
-**Deliberately loose**: the gate is intentionally permissive — refinement will further narrow.
+They are then ranked and capped at 20 promoted candidates. This cap is important because
+refinement is much more expensive than sweep evaluation. The gate is intentionally permissive:
+it is designed to keep "interesting enough" candidates alive for deeper testing rather than
+killing them too early.
 
-### Stage 4 — Refinement Grid
+### 4. Refinement Grid
 
-For each promoted candidate, run a 4D parameter grid search:
-- `hold_bars`: how many bars to hold position before time-stop
-- `stop_distance`: stop loss in ATR multiples
-- `min_avg_range`: minimum bar range filter (regime filter)
-- `momentum_lookback`: lookback for MomentumFilter (if used)
+Promoted candidates are re-run across a parameter grid:
+- `hold_bars`
+- `stop_distance`
+- `min_avg_range`
+- `momentum_lookback`
 
-Grid size: 4 × 4 × 4 × 4 = 256 combinations per candidate.
-Each combination gets a full IS/OOS split and quality flag.
-All accepted refinements are pooled and sorted by net_pnl.
+In the current architecture, the default refinement grid is effectively **4 x 4 x 4 x 4 = 256**
+parameter combinations per candidate. That makes refinement thorough, but also brute-force.
 
-### Stage 5 — Leaderboard
+Every refined variant gets the same full metric treatment:
+- IS/OOS split
+- quality flag
+- quality score
+- consistency stats
 
-For each family, compare:
-- Best combo result (from sweep, with default params)
-- Best refined result (from refinement grid)
+### 5. Leaderboard
 
-The refined variant wins **only if it improves net_pnl**. The winner becomes the family leader.
+For each family, the pipeline compares:
+- the best sweep combo
+- the best refined combo
 
-Final acceptance gate: `min_pf`, `min_oos_pf`, `min_total_trades` (configurable).
-Accepted leaders go to portfolio evaluation.
+The refined version only becomes the family leader if it actually improves the outcome used
+for selection. Then a final acceptance gate is applied, typically checking:
+- minimum PF
+- minimum OOS PF
+- minimum total trades
 
-### Stage 6 — Portfolio Evaluation
+Only accepted family leaders move on.
 
-For each accepted leader, reconstruct the full trade history.
-Compute:
-- IS/OOS profit factors
-- Max drawdown (full history and OOS-only)
-- Monte Carlo simulation: 95th and 99th percentile drawdowns (10,000 iterations)
-- Stress tests: 10% trade reduction, extra slippage (+0.5 tick)
-- Correlation matrix between strategy daily returns
-- Yearly PnL breakdown per strategy
+### 6. Portfolio Evaluation
 
-### Stage 7 — Master Leaderboard
+Accepted strategies are reconstructed and evaluated together at the portfolio layer. This stage
+produces the risk view that simple PF/PnL rankings cannot:
+- Monte Carlo drawdowns at the 95th and 99th percentile
+- stress tests like trade drops and extra slippage
+- correlation matrix between strategies
+- yearly PnL breakdown
 
-After all datasets complete (multi-dataset run), aggregate:
-- Collect all `accepted_final == True` rows from every dataset's leaderboard CSV
-- Rank by: quality flag priority → net_pnl → PF
-- Write `Outputs/master_leaderboard.csv`
+This is where the engine shifts from "what backtested well?" to "what might actually survive?"
 
-### Stage 8 — Ultimate Leaderboard
+### 7. Master Leaderboard
 
-After sweep completion (via `run_cloud_sweep.py`):
-- Scan all `strategy_console_storage/runs/*/artifacts/Outputs/master_leaderboard.csv`
-- Deduplicate by (strategy_type, dataset, name, filters) — keep highest PF
-- Rank as above
-- Write `strategy_console_storage/ultimate_leaderboard.csv`
+After all datasets in a run finish, the engine aggregates accepted strategies across datasets
+into `Outputs/master_leaderboard.csv`. This cross-dataset view is the first real portfolio
+candidate pool because it brings together different timeframes under one ranking table.
 
 ---
 
 ## Part 3: File Inventory
 
-### Orchestration
+### `master_strategy_engine.py`
 
-**`master_strategy_engine.py`** — Main entry point. Loops over datasets from `config.yaml`,
-instantiates `MasterStrategyEngine` for each, runs the full funnel, then calls portfolio
-evaluation and master leaderboard aggregation. Handles multi-dataset progress and summary output.
+Main orchestrator for the research pipeline. It loads config, iterates datasets, runs each
+strategy family, triggers refinement, writes family outputs, calls portfolio evaluation, and
+creates the master leaderboard.
 
-**`run_cloud_sweep.py`** — One-click GCP sweep wrapper. Auto-detects console storage path,
-calls `cloud.launch_gcp_run.launch()`, then triggers ultimate leaderboard update on completion.
+### `modules/engine.py`
 
-### Core Engine
+Contains the core backtest and evaluation machinery:
+- `MasterStrategyEngine`
+- `EngineConfig`
+- trade execution loop
+- quality flag assignment
+- quality score calculation
+- IS/OOS metric splitting
 
-**`modules/engine.py`** — The heart of the system. Contains:
-- `MasterStrategyEngine`: orchestrates sweep → promotion → refinement → leaderboard
-- `EngineConfig`: dataclass holding all pipeline parameters
-- Trade execution loop: bar-by-bar Python loop with entry/exit logic
-- `_assign_quality_flag()`: maps IS/OOS PF pair to a quality flag
-- `quality_score`: continuous metric (0–1) for composite ranking
-- Progress reporting to `status.json` via `ProgressTracker`
+This is the heart of the system.
 
-**`modules/strategies.py`** — Strategy class hierarchy:
-- `BaseStrategy`: holds filter list, parameter set, trade result
-- `ComboStrategy`: n filters combined with logical AND
-- `RefinedStrategy`: adds parameter overrides (hold_bars, stop_distance, etc.)
-- Trade entry triggered when all filters pass; exit via time-stop or stop-loss
+### `modules/strategies.py`
 
-**`modules/data_loader.py`** — Loads TradeStation CSV exports.
-Handles: header detection, date/time parsing, "$1,234.56" monetary format,
-column normalisation (Date, Time, Open, High, Low, Close, Volume).
+Defines the strategy objects used by the engine. These classes hold filter lists, parameter
+state, and signal-generation logic. The current system is built around combinations of filters
+that all need to pass before a long entry is taken.
 
-**`modules/feature_builder.py`** — Precomputes derived columns on the DataFrame:
-- `fast_sma`, `slow_sma`, `long_sma` (configurable periods)
-- `atr` (Average True Range, configurable period)
-- `momentum` (close vs close N bars ago)
-- `bar_range` (High − Low)
-- `true_range` (max of H-L, H-prev_C, prev_C-L)
-- `sma_slope` (SMA change over N bars)
+### `modules/data_loader.py`
 
-### Filters
+Loads TradeStation CSV data into a usable DataFrame. It normalizes column names and date/time
+handling so the rest of the engine can work on consistent OHLCV inputs.
 
-**`modules/filters.py`** — All filter classes. Each implements `passes(row, prev_row, df, idx) -> bool`.
-See Part 4 for complete inventory.
+### `modules/feature_builder.py`
 
-### Strategy Type Families
+Precomputes reusable columns such as:
+- SMAs
+- ATR values
+- momentum values
+- bar range
+- true range
+- average range
 
-**`modules/strategy_types/base_strategy_type.py`** — Abstract base class all families implement:
-- `get_available_filters()` → list of filter instances for this family
-- `get_required_filters()` → filters always included (regardless of sweep)
-- `get_default_params()` → default entry/exit parameters
-- `build_candidate_specific_strategy()` → construct strategy from combo + params
+This reduces repeated calculation inside filter logic.
 
-**`modules/strategy_types/trend_strategy_type.py`** — Trend-following family.
-Entry: long on pullback-and-recovery in uptrending market.
-Required: TrendDirectionFilter (SMA cross). Optional: any combination of trend filters.
+### `modules/filters.py`
 
-**`modules/strategy_types/mean_reversion_strategy_type.py`** — Mean reversion family.
-Entry: long after price stretches below fast SMA, showing exhaustion + reversal signal.
-Required: BelowFastSMAFilter. Optional: distance filters, exhaustion filters, volatility regime.
+Defines all filter classes used by the strategy families. Every filter implements a `passes()`
+method that checks whether the current bar satisfies a market condition. The whole search engine
+is built around combining these filters into candidate entry rules.
 
-**`modules/strategy_types/breakout_strategy_type.py`** — Breakout family.
-Entry: long on expansion from compression with trend confirmation.
-Required: CompressionFilter + ExpansionBarFilter. Optional: close strength, prior range, etc.
+### `modules/strategy_types/`
 
-**`modules/strategy_types/strategy_factory.py`** — Registry: `get_strategy_type(name)` and
-`list_strategy_types()`. Maps string names to class instances.
+Family-specific strategy definitions:
+- `trend_strategy_type.py`
+- `mean_reversion_strategy_type.py`
+- `breakout_strategy_type.py`
+- `strategy_factory.py`
+- `base_strategy_type.py`
 
-### Optimisation
+These modules define:
+- which filters belong to each family
+- default family parameters
+- which lookbacks are required
+- how refinement grids are constructed
+- how timeframe scaling is applied
 
-**`modules/refiner.py`** — Parallel parameter grid search using `ThreadPoolExecutor`.
-Generates the 4D grid, runs each combination as an independent backtest,
-collects results, deduplicates near-identical filter combos before refinement.
+### `modules/refiner.py`
 
-**`modules/optimizer.py`** — Legacy grid search (being replaced by refiner).
-Kept for reference; no longer called in main pipeline.
+Runs the parallel parameter refinement stage. It expands promoted candidates into refinement
+grids, executes those variants, and collects/ranks the results.
 
-### Validation and Scoring
+### `modules/portfolio_evaluator.py`
 
-**`modules/portfolio_evaluator.py`** — Post-leaderboard analysis:
-- Reconstructs trade histories for each accepted strategy
-- Monte Carlo: shuffles trade order 10,000 times, computes DD distribution
-- Stress tests: drops 10% of trades randomly, adds extra slippage
-- Correlation: daily PnL series → Pearson correlation matrix
-- Yearly breakdown: per-year PnL for consistency view
-- Calls `_rebuild_strategy_from_leaderboard_row()` with timeframe parameter
+Evaluates accepted strategies after the family stage. It reconstructs strategies from leaderboard
+rows, rebuilds trade histories, and calculates:
+- Monte Carlo drawdowns
+- stress tests
+- correlations
+- yearly statistics
 
-**`modules/prop_firm_simulator.py`** — The5ers challenge simulation:
-- Supports Bootcamp ($250K, 3 steps), High Stakes, Hyper Growth configs
-- Monte Carlo pass rate: simulate N challenge attempts, count passes
-- Strategy ranking by MC pass rate
-- Daily drawdown simulation (for funded stage)
+### `modules/prop_firm_simulator.py`
 
-**`modules/consistency.py`** — Year-by-year PnL analysis:
-- `analyse_yearly_consistency()`: groups trades by calendar year
-- Outputs: pct_profitable_years, max_consecutive_losing_years, consistency_flag
-- Flags: CONSISTENT (≥70% profitable), INCONSISTENT (<50%), MODERATE otherwise
+Adds a prop-firm-specific lens. It models The5ers challenge mechanics, estimates Monte Carlo
+pass rates, and provides scoring/ranking logic that is more aligned with Bootcamp survival than
+plain PF/PnL.
 
-### Aggregation
+### `modules/consistency.py`
 
-**`modules/master_leaderboard.py`** — `aggregate_master_leaderboard()`:
-Scans all per-dataset output directories for `leaderboard.csv`,
-filters to `accepted_final == True`, merges with dataset metadata,
-ranks by quality flag + net_pnl + PF, writes `Outputs/master_leaderboard.csv`.
+Performs year-by-year PnL analysis. It helps detect whether a strategy is broadly stable or
+only works in isolated periods.
 
-**`modules/ultimate_leaderboard.py`** — `update_ultimate_leaderboard()`:
-Scans all `strategy_console_storage/runs/*/artifacts/Outputs/master_leaderboard.csv`,
-deduplicates by (strategy_type, dataset, name, filters),
-writes `strategy_console_storage/ultimate_leaderboard.csv`.
+### `modules/master_leaderboard.py`
 
-### Infrastructure
+Aggregates accepted strategies across datasets from a single run into one cross-dataset
+leaderboard.
 
-**`modules/config_loader.py`** — `load_config()` reads `config.yaml`, exposes `get_nested()` helper.
-`get_timeframe_multiplier(timeframe)`: returns scaling factor (daily=1.0, 60m=0.154, 15m=0.0385, etc.)
-`scale_lookbacks(params, multiplier)`: adjusts SMA/ATR/momentum lookback periods per timeframe.
+### `modules/ultimate_leaderboard.py`
 
-**`modules/progress.py`** — `ProgressTracker`: writes `status.json` to output directory.
-Tracks: stage name, completion %, per-dataset progress, promoted count, ETA.
-Dashboard polls this file via SSH during active runs.
+Aggregates accepted strategies across **multiple runs**, deduplicates them, and maintains the
+bigger cross-run opportunity set for review in the dashboard.
 
-**`modules/heatmap.py`** — Generates pivot-table heatmaps of parameter performance.
-Used for visualising hold_bars × stop_distance landscapes.
+### `modules/config_loader.py`
 
-### Dashboard
+Loads config values and provides timeframe-aware helpers like:
+- `get_timeframe_multiplier()`
+- `scale_lookbacks()`
 
-**`dashboard.py`** — Streamlit 5-tab dashboard:
-1. **Live Monitor**: KPI strip, per-dataset progress bars, promoted candidates table, log tail, 30s auto-refresh
-2. **Results Explorer**: leaderboard table, equity curves (Plotly), annual PnL bar chart, correlation heatmap
-3. **Ultimate Leaderboard**: cross-run strategy browser with multi-select filters
-4. **Run History**: all runs table, run detail expander
-5. **System**: storage overview, health checks, quick action commands
+This is important because the same family logic needs different practical lookbacks on daily
+versus intraday data.
 
-**`dashboard_utils.py`** — Pure helper functions:
-- `discover_runs()`: scans storage for run directories
-- `load_strategy_results()`: loads leaderboard CSV with parquet→CSV fallback
-- `fetch_live_dataset_statuses()`: SSHs into compute VM during active runs
-- `load_promoted_candidates()`: loads promoted_candidates.csv
-- `format_duration_short()`, `status_color()`, `estimate_run_cost()`
+### `modules/progress.py`
 
-### Cloud
+Provides progress tracking and writes `status.json` so long-running sweeps can be monitored by
+the dashboard or remote tooling.
 
-**`cloud/launch_gcp_run.py`** — Full GCP orchestration:
-1. Build run manifest (timestamp, config, datasets)
-2. Bundle only config-required datasets
-3. Stage under deterministic `/tmp` path on VM
-4. Wait for engine to complete (polls status.json)
-5. Download artifacts tarball
-6. Verify preserved outputs before destroy
-7. Destroy VM
+### `dashboard.py` / `dashboard_utils.py`
 
-**`paths.py`** — Shared constants: `REPO_ROOT`, `UPLOADS_DIR`, `RUNS_DIR`, `CONSOLE_STORAGE_ROOT`.
-Auto-detects `~/strategy_console_storage` or falls back to repo-local path.
+The Streamlit monitoring and analysis layer. It exposes:
+- active run monitoring
+- results exploration
+- ultimate leaderboard browsing
+- run history
+- system status
+
+### `run_cloud_sweep.py`
+
+Thin one-command wrapper for launching a GCP sweep from the repo root. It is the operational
+entry point for normal cloud runs.
+
+### `cloud/launch_gcp_run.py`
+
+More detailed launcher/orchestration logic:
+- manifest creation
+- input bundling
+- upload
+- remote monitoring
+- artifact download
+- cleanup
+
+This is the main cloud automation engine behind `run_cloud_sweep.py`.
 
 ---
 
 ## Part 4: Complete Filter Inventory
 
-### Quality Flag Definitions
+The filter library is the engine's vocabulary. Each filter expresses one piece of market logic.
+The search process tries different combinations of these pieces.
 
-| Flag | Condition | Meaning |
-|------|-----------|---------|
-| NO_TRADES | total = 0 | Strategy never triggered |
-| LOW_IS_SAMPLE | is < 50, oos < 50 | Not enough data in either period |
-| OOS_HEAVY | is < 50, oos ≥ 50 | Not enough in-sample data |
-| EDGE_DECAYED_OOS | is ≥ 50, oos < 25 | Edge disappeared out-of-sample |
-| REGIME_DEPENDENT | is_pf < 1.0, oos_pf ≥ 1.2 | Only works in certain regimes |
-| BROKEN_IN_OOS | is_pf > 1.2, oos_pf < 1.0 | Overfit — fails out-of-sample |
-| ROBUST | is_pf ≥ 1.15, oos_pf ≥ 1.15 | Strong in both periods |
-| STABLE | is_pf ≥ 1.0, oos_pf ≥ 1.0 | Acceptable in both periods |
-| MARGINAL | everything else | Weak or inconsistent |
+### Trend Filters (10)
 
-### Trend Filters (10 total)
+| Filter | What it does | Why it exists |
+|--------|---------------|---------------|
+| `TrendDirectionFilter` | Fast SMA above slow SMA | Confirms uptrend regime before taking continuation trades |
+| `PullbackFilter` | Previous close at or below the fast SMA | Looks for a dip inside the trend |
+| `RecoveryTriggerFilter` | Current close back above the fast SMA | Uses recovery as the entry trigger after the pullback |
+| `VolatilityFilter` | ATR is above a minimum threshold vs longer-term ATR | Avoids dead markets with too little movement |
+| `MomentumFilter` | Current close above close N bars ago | Confirms positive directional push |
+| `TwoBarUpFilter` | Two consecutive higher closes | Adds short-term bullish confirmation |
+| `TrendSlopeFilter` | Fast SMA rising over recent bars | Requires the trend to be improving, not just positive |
+| `HigherLowFilter` | Current low above previous low | Adds structure consistent with continuation |
+| `UpCloseFilter` | Current close above previous close | Simple bullish confirmation bar |
+| `CloseAboveFastSMAFilter` | Current close above fast SMA | Keeps entries on the stronger side of the short-term mean |
 
-Entry signal: uptrending market, price pulls back, then recovers.
+### Mean Reversion Filters (10 core filters plus the baseline condition set)
 
-| Filter | Logic | Purpose |
-|--------|-------|---------|
-| `TrendDirectionFilter` | fast_sma > slow_sma | Uptrend regime gate — fast average above slow average |
-| `PullbackFilter` | prev_close ≤ fast_sma | Price has pulled back to or below short-term average |
-| `RecoveryTriggerFilter` | close > fast_sma | Price has crossed back above fast average (recovery trigger) |
-| `VolatilityFilter` | atr > min_atr_threshold | Minimum volatility gate — enough movement to profit |
-| `MomentumFilter` | close > close[N bars ago] | Upward momentum over lookback period |
-| `TwoBarUpFilter` | close > prev_close AND prev_close > prev_prev_close | Two consecutive higher closes |
-| `TrendSlopeFilter` | fast_sma rising over N bars | Fast SMA is trending upward (not just above slow) |
-| `HigherLowFilter` | low > prev_low | Current bar's low is above previous bar's low |
-| `UpCloseFilter` | close > open | Bullish bar — closed above open |
-| `CloseAboveFastSMAFilter` | close > fast_sma | Price above short-term average at close |
+The code currently exposes **10 explicit mean reversion filter classes** in `modules/filters.py`.
+The session brief describes this family as 11 because the operating MR setup is usually thought
+of as "10 filters plus the baseline below-fast-SMA condition that frames the whole family."
 
-### Mean Reversion Filters (11 total)
+| Filter | What it does | Why it exists |
+|--------|---------------|---------------|
+| `BelowFastSMAFilter` | Close below fast SMA | Defines the short-term stretch below the mean |
+| `DistanceBelowSMAFilter` | Close is at least N ATR below the fast SMA | Requires a meaningful stretch, not a tiny dip |
+| `DownCloseFilter` | Current close below previous close | Captures short-term selling pressure |
+| `TwoBarDownFilter` | Two consecutive down closes | Looks for mild exhaustion |
+| `ThreeBarDownFilter` | Three consecutive down closes | Looks for stronger exhaustion |
+| `ReversalUpBarFilter` | Current close above current open | Adds a simple snapback trigger |
+| `LowVolatilityRegimeFilter` | ATR below a regime threshold | Favors calmer conditions where MR often works better |
+| `AboveLongTermSMAFilter` | Close above 200 SMA | Keeps long MR aligned with the larger trend |
+| `CloseNearLowFilter` | Close in the bottom portion of the bar range | Captures weak closes that may precede reversal |
+| `StretchFromLongTermSMAFilter` | Price meaningfully below 200 SMA in ATR terms | Finds deeper long-term stretch setups |
 
-Entry signal: price has stretched below its mean, showing exhaustion, then starts reversing.
+### Breakout Filters (9)
 
-| Filter | Logic | Purpose |
-|--------|-------|---------|
-| `BelowFastSMAFilter` | close < fast_sma | Price is below short-term average (stretched) |
-| `DistanceBelowSMAFilter` | fast_sma − close ≥ N × atr | Minimum stretch — not just barely below, meaningfully below |
-| `DownCloseFilter` | close < prev_close | Selling pressure — closed lower than previous bar |
-| `TwoBarDownFilter` | two consecutive down closes | Selling exhaustion signal — two bars of selling |
-| `ThreeBarDownFilter` | three consecutive down closes | Stronger exhaustion — three bars of selling |
-| `ReversalUpBarFilter` | close > open | Snapback trigger — bar closed above its open |
-| `LowVolatilityRegimeFilter` | atr < max_atr_threshold | Calm market regime — MR works best in low vol |
-| `AboveLongTermSMAFilter` | close > long_sma (200-period) | Macro uptrend — don't mean revert in downtrends |
-| `CloseNearLowFilter` | close in bottom 35% of bar's H-L range | Price closed near the bar's low — weakness |
-| `StretchFromLongTermSMAFilter` | long_sma − close ≥ N × atr | Price stretched below 200-period SMA (macro mean reversion) |
-| `AbovePrevHighFilter` | close > prev_high | Breakout above previous bar's high (reversal confirmation) |
+| Filter | What it does | Why it exists |
+|--------|---------------|---------------|
+| `CompressionFilter` | ATR below its longer-term average | Looks for squeeze conditions before expansion |
+| `ExpansionBarFilter` | Current true range above ATR by a multiplier | Confirms the breakout bar is unusually large |
+| `BreakoutRetestFilter` | Close above prior N-bar high, optionally with ATR buffer | Confirms resistance has been cleared |
+| `BreakoutTrendFilter` | Fast SMA above slow SMA | Keeps breakouts aligned with broader trend |
+| `BreakoutCloseStrengthFilter` | Close near the top of the current bar | Prefers strong closes over weak breakout attempts |
+| `PriorRangePositionFilter` | Prior close high within its recent range | Looks for pre-breakout strength already in place |
+| `BreakoutDistanceFilter` | Breakout exceeds prior high by at least N ATR | Avoids paper-thin breakouts |
+| `RisingBaseFilter` | Lows are rising across a recent window | Captures the idea of a constructive base |
+| `TightRangeFilter` | Current bar range below average by a multiplier | Looks for tight setups that can expand |
 
-### Breakout Filters (9 total)
-
-Entry signal: market has been compressing (low volatility), then breaks out with momentum.
-
-| Filter | Logic | Purpose |
-|--------|-------|---------|
-| `CompressionFilter` | atr < historical_avg_atr | Squeeze building — ATR below its own average |
-| `ExpansionBarFilter` | bar_range > avg_range × multiplier | Breakout bar — current bar larger than average |
-| `BreakoutRetestFilter` | close > prior N-bar high | Resistance broken — price closed above recent swing high |
-| `BreakoutTrendFilter` | fast_sma > slow_sma | Trend-aligned breakout only (not counter-trend) |
-| `BreakoutCloseStrengthFilter` | close in top 60%+ of bar range | Strong close — committed breakout, not a fade |
-| `PriorRangePositionFilter` | prev_close in top 50% of N-bar range | Previous close was already strong within range |
-| `BreakoutDistanceFilter` | close > prior high by ≥ N × atr | Minimum breakout distance — not just barely through |
-| `RisingBaseFilter` | lows are rising over N bars | Base forming — buying support visible |
-| `TightRangeFilter` | bar_range < avg_range × 0.85 | Tight setup — current bar is narrow (pre-breakout) |
+Notes:
+- There is also a `RangeBreakoutFilter` class in `modules/filters.py`.
+- The current session brief's nine-item breakout list reflects the actively emphasized breakout
+  inventory, which centers on compression/expansion plus quality-of-breakout filters.
 
 ---
 
 ## Part 5: Current Weaknesses
 
-### 1. Trade Count Too Thin
+### 1. Trade count is too thin
 
-The best strategy produces ~3.4 trades/year. This is far too low for:
-- Reliable statistical significance (< 20 OOS trades)
-- Bootcamp pass rate (too few opportunities to recover from drawdowns)
-- Portfolio diversification (correlated strategies don't help if none trade)
+The best strategy found so far produces only about 3.4 trades per year. That is too sparse for
+strong statistical confidence and too slow for a Bootcamp-style target that needs regular chances
+to recover from drawdowns.
 
-Root cause: conservative filter combinations, long hold bars, strict entry requirements.
+### 2. Only mean reversion works
 
-### 2. Only Mean Reversion Works
+The engine has found a credible MR edge, but trend and breakout have not yet passed cleanly.
+That is a serious portfolio weakness because a prop portfolio cannot rely on one behavior type.
 
-Trend-following and breakout families consistently fail the acceptance gate in backtests.
-Possible explanations:
-- Exit logic is too simple (time-stop only) — trends need trailing stops to capture large moves
-- Entry timing is off for trend (pullback entry works but filters may be too restrictive)
-- Breakout entries may need volume confirmation (not available in current OHLCV data)
+### 3. Filter library is solid but small
 
-### 3. Filter Library is Small
+The current filters are sensible, but the total library is still limited. The engine explores
+combinations thoroughly, but only within a relatively small vocabulary.
 
-8–11 filters per family. With C(n,k) combinations this gives limited sweep coverage.
-More filters = more combinations = more candidates = higher chance of finding robust strategies.
-But vectorization must come first (performance) before expanding the library.
+### 4. Refinement grid is brute-force
 
-### 4. Refinement Grid is Brute-Force
+The 256-point refinement grid is simple and reliable, but not efficient. It spends compute
+equally across promising and obviously poor regions.
 
-256 combinations per candidate, purely grid-based. Problems:
-- Parameter plateaus poorly explored (grid might miss the true optimal region)
-- Bayesian/adaptive methods (Optuna) would find optima in 50–100 evaluations instead of 256
-- But: shouldn't invest in smarter search until exit architecture is richer
+### 5. All strategies are long-only
 
-### 5. All Strategies are Long-Only
+The whole architecture currently searches for long entries. That leaves bear-market opportunity
+untapped and makes the portfolio more directionally fragile.
 
-Systematic short-side bias missed entirely. In bear markets (2008, 2020, 2022),
-long-only strategies draw down while short-side opportunities exist.
-Short strategies would also reduce portfolio correlation to market beta.
+### 6. Exit logic is simplistic
 
-### 6. Exit Logic is Simplistic
+Current exits are basically:
+- time-stop
+- fixed stop
 
-Only two exit mechanisms:
-- **Time-stop**: hold for N bars then exit at close
-- **Fixed stop-loss**: exit if adverse move exceeds N × ATR
+That is probably good enough for early prototyping, but weak for serious strategy quality.
+Trend and breakout especially want trailing or signal-aware exits, while MR wants more natural
+profit-taking logic.
 
-What's missing:
-- **Trailing stop**: follows price by N × ATR from highest high since entry (essential for trend)
-- **Profit target**: exit at N × ATR profit (best for mean reversion — locks in the snap-back)
-- **Signal exit**: exit when price crosses back below fast SMA (natural MR exit)
+### 7. Single IS/OOS split
 
-This single weakness probably explains why trend/breakout fail — they need trailing stops.
+One fixed IS/OOS split is easy to reason about, but it is not enough to prove robustness across
+different market regimes.
 
-### 7. Single IS/OOS Split
+### 8. No Bootcamp-native scoring
 
-Fixed 2019-01-01 split means OOS covers 2019–2024. Problems:
-- COVID crash in 2020 distorts OOS stats
-- No way to know if strategy is robust across different market regimes
-- Walk-forward validation (rolling train/test windows) is the industry standard
+The engine mostly ranks by PF, PnL, and quality flags. That is research-friendly, but it is not
+the same as ranking by the probability of surviving Bootcamp constraints.
 
-### 8. No Bootcamp-Native Scoring
+### 9. Bar-by-bar Python loop is slow
 
-Current ranking: profit factor → net PnL → quality flag.
-This maximises backtest returns, not Bootcamp pass probability.
+The engine evaluates signals and trades using Python loops. That is clear and flexible, but it
+will become a bigger bottleneck as more filters, more datasets, and more validation schemes are
+added.
 
-Bootcamp-native scoring should weight:
-- Monte Carlo pass rate (probability of hitting 6% before 5% DD)
-- DD margin from 5% limit (strategies close to the limit are dangerous)
-- Trade frequency (need enough trades to recover from early losses)
-- Consistency across years (monthly income stability)
-- Outlier dependency (does the strategy need one huge trade to show profit?)
+### 10. No regime tagging
 
-### 9. Bar-by-Bar Python Loop is Slow
+The system does not yet explicitly tag market regimes such as:
+- trending
+- ranging
+- high volatility
+- low volatility
 
-The trade execution engine iterates row-by-row using Python.
-At 15m timeframe (18 years × 252 days × 26.5 bars/day ≈ 120,000 bars per run),
-this is manageable but slow.
-
-Once we expand to multiple instruments × multiple timeframes × larger filter libraries,
-compute time will become a bottleneck.
-
-Vectorizing filter computation (precompute all filters as boolean columns, combine with AND)
-would give 50–100× speedup, enabling wider sweeps at the same cost.
-
-### 10. No Regime Tagging
-
-Strategies are evaluated on their overall statistics.
-No mechanism to understand:
-- Does this MR strategy only work in low-vol regimes?
-- Does this trend strategy fail in 2011-2015 sideways chop?
-- Which strategies complement each other in different market conditions?
-
-Regime tagging (trending/ranging, high/low vol, bull/bear) would enable regime-aware
-portfolio construction — only trading strategies whose regime is active.
+Without regime tagging, it is harder to understand where an edge actually lives and which
+strategies complement each other.
 
 ---
 
 ## Part 6: Priority Improvements
 
-Ranked by impact on Bootcamp pass probability:
+Ranked in practical order:
 
-1. **Exit architecture** — trailing stops + profit targets + signal exits.
-   This alone may fix trend/breakout families and double trade quality for MR.
-   Effort: 2 sessions. Impact: very high.
+1. **Analyse the multi-timeframe ES run results**
+   See what is actually working before changing the engine again.
 
-2. **Bootcamp-native scoring** — MC pass rate + DD margin as primary ranking.
-   Changes what we optimise for, everything downstream improves.
-   Effort: 1 session. Impact: high.
+2. **Improve exit architecture**
+   Add trailing stops, profit targets, and signal exits because the current time-stop plus fixed
+   stop logic likely suppresses trend and breakout quality.
 
-3. **Vectorization** — rewrite execution as pandas/numpy column operations.
-   50–100× speedup unlocks wider sweeps, more filters, larger grids.
-   Effort: 2 sessions. Impact: high (enables everything else).
+3. **Add Bootcamp-native scoring**
+   Rank strategies by drawdown-aware pass probability, not just PF/PnL.
 
-4. **Short-side strategies** — mirror all filter families for short entry.
-   Portfolio resilience in down markets, reduces market beta.
-   Effort: 2 sessions. Impact: medium-high.
+4. **Vectorize signal generation**
+   Speed matters because every planned improvement increases search load.
 
-5. **Walk-forward validation** — rolling 6yr train / 1yr test windows.
-   Proves robustness across regimes, not just one train/test split.
-   Effort: 2 sessions. Impact: medium-high (confidence, not performance).
+5. **Add short-side strategies**
+   This expands opportunity and improves resilience across bearish regimes.
 
-6. **New filters** — InsideBar, OutsideBar, ADX, ATRPercentile, Gap, VolumeSpike.
-   Wider library = more combo diversity = more candidate strategies.
-   Effort: 1–2 sessions per tier. Impact: medium (after vectorization).
+6. **Expand the filter library**
+   New filters are valuable, but only after the engine is fast enough and exits are better.
 
-7. **Trend subfamily split** — separate Pullback Continuation from Momentum/Breakout Trend.
-   Currently trend family conflates two different strategies. Splitting may improve both.
-   Effort: 1 session. Impact: medium.
+7. **Add walk-forward validation**
+   Multiple train/test windows are needed before trusting a strategy as truly robust.
 
-8. **Multi-VM orchestration** — parallel VMs for CL/NQ alongside ES or walk-forward.
-   Current GCP quota: 200 vCPU. Already using 96. Headroom for 2nd VM.
-   Effort: 1 session. Impact: low (scale, not quality).
+8. **Introduce portfolio-level optimisation**
+   The real target is the best team of strategies, not just the best standalone strategy.
 
-9. **Bayesian refinement** — replace 256-point grid with Optuna.
-   Only valuable after exit architecture is richer (more parameters to optimise).
-   Effort: 1 session. Impact: low-medium.
+9. **Add regime tagging**
+   This will improve understanding, selection, and future live deployment logic.
 
-10. **Regime tagging** — classify bars as trending/ranging/high-vol/low-vol.
-    Enables regime-conditional strategy selection and portfolio switching.
-    Effort: 2 sessions. Impact: medium (future sophistication).
+10. **Move refinement toward adaptive search**
+    Bayesian or Optuna-style refinement becomes more worthwhile after the strategy space is richer.
