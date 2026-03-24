@@ -279,29 +279,34 @@ class StrategyParameterRefiner:
         print(f"Trade filters: min_trades={min_trades}, min_trades_per_year={min_trades_per_year:.2f}")
 
         if parallel and total_runs > 1:
-            with ProcessPoolExecutor(
-                max_workers=max_workers,
-                initializer=_init_refinement_worker,
-                initargs=(self.engine_class, self.data, self.strategy_factory, self.config),
-            ) as executor:
-                for idx, result in enumerate(executor.map(_run_refinement_case, tasks), start=1):
-                    if result["passes_trade_filter"]:
-                        accepted_count += 1
-                        self.results.append(RefinementResult(**result))
-                    else:
-                        rejected_count += 1
+            try:
+                with ProcessPoolExecutor(
+                    max_workers=max_workers,
+                    initializer=_init_refinement_worker,
+                    initargs=(self.engine_class, self.data, self.strategy_factory, self.config),
+                ) as executor:
+                    for idx, result in enumerate(executor.map(_run_refinement_case, tasks), start=1):
+                        if result["passes_trade_filter"]:
+                            accepted_count += 1
+                            self.results.append(RefinementResult(**result))
+                        else:
+                            rejected_count += 1
 
-                    print(
-                        f"  Done {idx}/{total_runs} | "
-                        f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
-                        f"range={result['min_avg_range']}, mom={result['momentum_lookback']}, "
-                        f"exit={result['exit_type']} | "
-                        f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
-                        f"trades={result['total_trades']} | {result['reject_reason']}"
-                    )
-                    if progress_callback is not None:
-                        progress_callback(idx, total_runs)
-        else:
+                        print(
+                            f"  Done {idx}/{total_runs} | "
+                            f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
+                            f"range={result['min_avg_range']}, mom={result['momentum_lookback']}, "
+                            f"exit={result['exit_type']} | "
+                            f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
+                            f"trades={result['total_trades']} | {result['reject_reason']}"
+                        )
+                        if progress_callback is not None:
+                            progress_callback(idx, total_runs)
+            except (OSError, PermissionError) as exc:
+                print(f"\n[WARN] Parallel refinement unavailable ({exc}). Falling back to sequential execution.")
+                parallel = False
+
+        if not parallel or total_runs <= 1:
             _init_refinement_worker(self.engine_class, self.data, self.strategy_factory, self.config)
             for idx, task in enumerate(tasks, start=1):
                 result = _run_refinement_case(task)

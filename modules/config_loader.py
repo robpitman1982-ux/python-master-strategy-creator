@@ -48,10 +48,14 @@ def scale_lookbacks(base_values: list[int], multiplier: float, min_val: int = 5)
 def load_config(path: Path | str | None = None) -> dict[str, Any]:
     """Load config from YAML file. Falls back to defaults if file missing."""
     config_path = Path(path) if path else _DEFAULT_CONFIG_PATH
+    fallback_path = Path("cloud") / config_path
 
     if not config_path.exists():
-        print(f"[WARN] Config file not found at {config_path}, using hardcoded defaults.")
-        return {}
+        if config_path != _DEFAULT_CONFIG_PATH and fallback_path.exists():
+            config_path = fallback_path
+        else:
+            print(f"[WARN] Config file not found at {config_path}, using hardcoded defaults.")
+            return {}
 
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f) or {}

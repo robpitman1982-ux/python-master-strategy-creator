@@ -289,13 +289,13 @@ def evaluate_portfolio(
     # Only evaluate final accepted rows.
     # -------------------------------------------------------------------------
     if "accepted_final" not in leaderboard_df.columns:
-        print("\n⚠ Leaderboard has no accepted_final column. Nothing to evaluate.")
+        print("\nLeaderboard has no accepted_final column. Nothing to evaluate.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     accepted_mask = leaderboard_df["accepted_final"].astype(str).str.strip().str.lower() == "true"
     leaderboard_df = leaderboard_df[accepted_mask].copy()
     if leaderboard_df.empty:
-        print("\n⚠ No leaderboard rows passed accepted_final == True.")
+        print("\nNo leaderboard rows passed accepted_final == True.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     print(f"\nEvaluating {len(leaderboard_df)} final accepted strategies from Leaderboard...")

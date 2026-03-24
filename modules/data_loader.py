@@ -11,7 +11,11 @@ def load_tradestation_csv(filepath: str | Path, debug: bool = True) -> pd.DataFr
     """
     filepath = Path(filepath)
     if not filepath.exists():
-        raise FileNotFoundError(f"CSV not found: {filepath}")
+        data_fallback = Path("Data") / filepath.name
+        if not filepath.is_absolute() and data_fallback.exists():
+            filepath = data_fallback
+        else:
+            raise FileNotFoundError(f"CSV not found: {filepath}")
 
     # Read as strings to control parsing
     df = pd.read_csv(filepath, dtype=str)

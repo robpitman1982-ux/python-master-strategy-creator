@@ -382,8 +382,22 @@ class BreakoutStrategyType(BaseStrategyType):
         tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
         results: list[dict[str, Any]] = []
 
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks), start=1):
+        try:
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks), start=1):
+                    print(
+                        f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
+                        f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
+                        f"trades={res['total_trades']}"
+                    )
+                    res["filter_classes"] = combinations[idx - 1]
+                    results.append(res)
+                    if progress_callback is not None:
+                        progress_callback(idx, len(combinations))
+        except (OSError, PermissionError) as exc:
+            print(f"\n[WARN] Parallel breakout sweep unavailable ({exc}). Falling back to sequential execution.")
+            for idx, task in enumerate(tasks, start=1):
+                res = _run_breakout_combo_case(task)
                 print(
                     f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
                     f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "

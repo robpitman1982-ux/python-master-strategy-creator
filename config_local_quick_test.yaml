@@ -1,0 +1,39 @@
+# Tiny local validation config for Windows/dev environments.
+# Purpose: prove the engine pipeline completes without crashing.
+
+datasets:
+  - path: "Data/ES_60m_quick_smoke.csv"
+    market: "ES"
+    timeframe: "60m"
+
+strategy_types: "mean_reversion"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 2.00
+  slippage_ticks: 4
+  tick_value: 12.50
+  dollars_per_point: 50.0
+
+pipeline:
+  max_workers_sweep: 1
+  max_workers_refinement: 1
+  max_candidates_to_refine: 1
+  oos_split_date: "2019-01-01"
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 10
+  min_trades_per_year: 1.0
+  max_promoted_candidates: 3
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 10
+
+output_dir: "Outputs_quick_local"

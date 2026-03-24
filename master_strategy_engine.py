@@ -112,7 +112,7 @@ def estimate_compute_budget(
 ) -> dict[str, float]:
     """Print and return a compute budget estimate before running a stage."""
     estimated_minutes = (n_evaluations * avg_seconds_per_eval) / 60.0
-    print(f"\n📊 COMPUTE BUDGET — {stage}")
+    print(f"\nCOMPUTE BUDGET - {stage}")
     print(f"   Evaluations:  {n_evaluations:,}")
     print(f"   Est. time:    {estimated_minutes:.1f} minutes (at {avg_seconds_per_eval:.2f}s/eval)")
     return {
@@ -229,11 +229,11 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
 
 
 def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[str, Any], promoted_df: pd.DataFrame) -> None:
-    print(f"\n🚦 Promotion Gate Results for strategy type: {strategy_type_name}")
+    print(f"\nPromotion Gate Results for strategy type: {strategy_type_name}")
     print(f"Minimum PF required: {promotion_gate.get('min_profit_factor', 0.0):.2f}")
 
     if promoted_df.empty:
-        print("\n❌ No candidates passed the promotion gate.")
+        print("\nNo candidates passed the promotion gate.")
         return
 
     display_cols = [
@@ -250,8 +250,8 @@ def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[st
     ]
 
     max_candidates = int(promotion_gate.get("max_promoted_candidates", 50))
-    cap_note = f" — capped at {max_candidates}" if len(promoted_df) == max_candidates else ""
-    print(f"\n✅ Promoted Candidates ({len(promoted_df)} Distinct{cap_note}):")
+    cap_note = f" - capped at {max_candidates}" if len(promoted_df) == max_candidates else ""
+    print(f"\nPromoted Candidates ({len(promoted_df)} Distinct{cap_note}):")
     print(promoted_df[display_cols].head(10).to_string(index=False))
 
 
@@ -296,9 +296,9 @@ def deduplicate_promoted_candidates(
     removed = original_count - len(result)
 
     if removed > 0:
-        print(f"\n🔍 Deduplication: {original_count} → {len(result)} candidates (removed {removed} near-duplicates)")
+        print(f"\nDeduplication: {original_count} -> {len(result)} candidates (removed {removed} near-duplicates)")
     else:
-        print(f"\n🔍 Deduplication: no near-duplicates found in {original_count} candidates")
+        print(f"\nDeduplication: no near-duplicates found in {original_count} candidates")
 
     return result
 
@@ -320,7 +320,7 @@ def run_sanity_check(strategy_type: Any, data: pd.DataFrame, cfg: EngineConfig) 
     engine.run(strategy=strategy)
 
     results = engine.results()
-    print("\n✅ Sanity Check run completed.")
+    print("\nSanity Check run completed.")
 
     return {
         "strategy_name": str(results.get("Strategy", "UnknownStrategy")),
@@ -403,7 +403,7 @@ def build_family_summary_row(
 
 
 def print_family_summary(summary_row: dict[str, Any]) -> None:
-    print("\n" + "=" * 72 + "\n🏁 FAMILY RUN SUMMARY\n" + "=" * 72)
+    print("\n" + "=" * 72 + "\nFAMILY RUN SUMMARY\n" + "=" * 72)
     print(f"Strategy Type:            {summary_row['strategy_type']}")
     print(f"Dataset:                  {summary_row['dataset']}")
     print(f"Rows:                     {summary_row['rows']:,}")
@@ -649,7 +649,7 @@ def run_single_family(
     combo_results_path = outputs_dir / f"{strategy_type_name}_filter_combination_sweep_results.csv"
     save_csv_if_not_empty(combo_results_df, combo_results_path)
 
-    print(f"\n⏱ Filter combination sweep runtime: {sweep_elapsed:.2f} seconds")
+    print(f"\nFilter combination sweep runtime: {sweep_elapsed:.2f} seconds")
 
     promotion_gate = get_promotion_gate_config(strategy_type)
     promoted_df = apply_promotion_gate(combo_results_df, promotion_gate)
@@ -671,7 +671,7 @@ def run_single_family(
     all_accepted_refinements: list[pd.DataFrame] = []
 
     if promoted_df is None or promoted_df.empty:
-        print(f"\n⛔ Skipping {strategy_type_name} refinement because no candidates were promoted.")
+        print(f"\nSkipping {strategy_type_name} refinement because no candidates were promoted.")
     else:
         n_candidates = min(len(promoted_df), MAX_CANDIDATES_TO_REFINE)
         sample_candidate = {**promoted_df.iloc[0].to_dict(), "timeframe": cfg.timeframe}
@@ -701,7 +701,7 @@ def run_single_family(
             if tracker is not None:
                 tracker.log_refinement_candidate(rank, len(candidates_to_test), candidate_name)
                 tracker.reset_stage_timer()
-            print(f"\n{'=' * 50}\n🏆 Attempting Refinement on Promoted Candidate #{rank}\n{'=' * 50}")
+            print(f"\n{'=' * 50}\nAttempting Refinement on Promoted Candidate #{rank}\n{'=' * 50}")
             print(f"Strategy: {candidate.get('strategy_name', 'UNKNOWN')}")
             print(f"Filters:  {candidate.get('filters', 'UNKNOWN')}")
 
@@ -715,13 +715,13 @@ def run_single_family(
             )
 
             if current_refinement_df is not None and not current_refinement_df.empty:
-                print(f"\n✅ Refinement successful for candidate #{rank}. Storing {len(current_refinement_df)} viable settings.")
+                print(f"\nRefinement successful for candidate #{rank}. Storing {len(current_refinement_df)} viable settings.")
                 all_accepted_refinements.append(current_refinement_df)
             else:
-                print(f"\n❌ Refinement yielded 0 accepted rows for candidate #{rank}.")
+                print(f"\nRefinement yielded 0 accepted rows for candidate #{rank}.")
 
         if all_accepted_refinements:
-            print(f"\n🧠 Pooling all refined results across {len(all_accepted_refinements)} candidates and sorting for the absolute best edge...")
+            print(f"\nPooling all refined results across {len(all_accepted_refinements)} candidates and sorting for the absolute best edge...")
             combined_refinements = pd.concat(all_accepted_refinements, ignore_index=True)
             combined_refinements = combined_refinements.sort_values(
                 by=["net_pnl", "profit_factor", "average_trade"],
@@ -792,7 +792,7 @@ def _run_dataset(
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
 
-        print(f"\n🏆 LEADERBOARD — {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
+        print(f"\nLEADERBOARD - {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
         preview_cols = [
             "strategy_type",
             "leader_source",
@@ -810,7 +810,7 @@ def _run_dataset(
         ]
         print(leaderboard_df[[c for c in preview_cols if c in leaderboard_df.columns]].to_string(index=False))
 
-        print("\n" + "=" * 72 + "\n🔬 STARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
+        print("\n" + "=" * 72 + "\nSTARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
 
         n_accepted = int(leaderboard_df.get("accepted_final", pd.Series(dtype=bool)).sum()) if "accepted_final" in leaderboard_df.columns else len(leaderboard_df)
         tracker.log_portfolio(n_accepted)
@@ -830,7 +830,7 @@ def _run_dataset(
             if not yearly_df.empty:
                 yearly_df.to_csv(ds_output_dir / "yearly_stats_breakdown.csv", index=False)
 
-            print("\n✅ PORTFOLIO EVALUATION COMPLETE.")
+            print("\nPORTFOLIO EVALUATION COMPLETE.")
             preview_cols = [
                 "strategy_family",
                 "strategy_name",
@@ -844,7 +844,7 @@ def _run_dataset(
             print("\n[Final Strategy Review Table]")
             print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
         else:
-            print("\n⚠ No strategies passed final leaderboard acceptance gate for evaluation.")
+            print("\nNo strategies passed final leaderboard acceptance gate for evaluation.")
 
     tracker.log_done()
 
@@ -888,7 +888,7 @@ if __name__ == "__main__":
         ds_timeframe = ds.get("timeframe", "UNKNOWN")
 
         print(f"\n{'=' * 72}")
-        print(f"📂 DATASET {ds_idx + 1}/{len(datasets)}: {ds_market} {ds_timeframe}")
+        print(f"DATASET {ds_idx + 1}/{len(datasets)}: {ds_market} {ds_timeframe}")
         print(f"   Path: {ds_path}")
         print(f"{'=' * 72}")
 
