@@ -1882,6 +1882,8 @@ def launch_remote_runner(
 ) -> subprocess.CompletedProcess[str]:
     clean_runner_path = sanitize_run_token(remote_runner_path)
     clean_run_root = sanitize_run_token(remote_run_root)
+    # Wrap in a subshell + disown so the SSH connection returns immediately
+    # instead of blocking for the full engine duration.
     return ssh_command(
         gcloud_base,
         instance_name,
@@ -1889,8 +1891,9 @@ def launch_remote_runner(
         (
             f"mkdir -p {clean_run_root}/logs && "
             f"chmod +x {clean_runner_path} && "
-            f"nohup sudo bash {clean_runner_path} {clean_run_root} > "
-            f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null &"
+            f"( nohup sudo bash {clean_runner_path} {clean_run_root} > "
+            f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null & disown ) ; "
+            f"echo launched"
         ),
         check=False,
     )
