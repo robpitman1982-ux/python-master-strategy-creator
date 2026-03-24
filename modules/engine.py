@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from modules.consistency import analyse_yearly_consistency
+from modules.strategies import ExitConfig, ExitType, build_exit_config
 
 
 @dataclass
@@ -147,6 +148,77 @@ class MasterStrategyEngine:
 
         return float(getattr(strategy, "stop_distance_points", 10.0) or 10.0)
 
+    @staticmethod
+    def _resolve_current_atr(bar: pd.Series) -> float:
+        current_atr = float(bar.get("atr_20", np.nan))
+        if pd.isna(current_atr) or current_atr <= 0:
+            return 10.0
+        return current_atr
+
+    def _resolve_exit_config(
+        self,
+        strategy,
+        hold_bars: int,
+        stop_distance_points: float,
+    ) -> ExitConfig:
+        return build_exit_config(
+            exit_config=getattr(strategy, "exit_config", None),
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_points,
+            default_hold_bars=hold_bars,
+            default_stop_distance_points=stop_distance_points,
+        )
+
+    @staticmethod
+    def _resolve_fast_sma_column(strategy, data: pd.DataFrame) -> str | None:
+        candidate_lengths: list[int] = []
+        for filter_obj in getattr(strategy, "filters", []):
+            fast_length = getattr(filter_obj, "fast_length", None)
+            if isinstance(fast_length, int) and fast_length > 0:
+                candidate_lengths.append(fast_length)
+
+        for length in sorted(set(candidate_lengths)):
+            column = f"sma_{length}"
+            if column in data.columns:
+                return column
+
+        sma_columns = sorted(
+            col for col in data.columns
+            if isinstance(col, str) and col.startswith("sma_")
+        )
+        return sma_columns[0] if sma_columns else None
+
+    def _resolve_signal_exit_price(
+        self,
+        strategy,
+        bar: pd.Series,
+        close_price: float,
+    ) -> float | None:
+        exit_config: ExitConfig | None = getattr(strategy, "exit_config", None)
+        if exit_config is None:
+            return None
+
+        if exit_config.exit_type != ExitType.SIGNAL_EXIT:
+            return None
+
+        if (exit_config.signal_exit_reference or "").strip().lower() != "fast_sma":
+            return None
+
+        sma_column = self._resolve_fast_sma_column(strategy, self.data)
+        if sma_column is None:
+            return None
+
+        fast_sma = float(bar.get(sma_column, np.nan))
+        if pd.isna(fast_sma):
+            return None
+
+        # Session 28 foundation rule for long mean reversion:
+        # exit once price has reverted back to or above the fast SMA.
+        if close_price >= fast_sma:
+            return close_price
+
+        return None
+
     def run(
         self,
         strategy,
@@ -187,11 +259,16 @@ class MasterStrategyEngine:
             if self.position is not None:
                 bars_held = i - int(self.position["entry_index"])
                 self._update_open_position_excursions(bar_low=low_price, bar_high=high_price)
+                self.position["highest_high_since_entry"] = max(
+                    float(self.position["highest_high_since_entry"]),
+                    high_price,
+                )
 
-                stop_price = float(self.position["stop_price"])
+                protective_stop_price = float(self.position["stop_price"])
+                exit_config: ExitConfig = self.position["exit_config"]
 
-                if low_price <= stop_price:
-                    stop_exit_price = stop_price - (slippage_points / 2.0)
+                if low_price <= protective_stop_price:
+                    stop_exit_price = protective_stop_price - (slippage_points / 2.0)
                     self._close_position(
                         exit_time=timestamp,
                         exit_price=stop_exit_price,
@@ -200,7 +277,50 @@ class MasterStrategyEngine:
                     )
                     continue
 
-                if bars_held >= hold_bars:
+                current_atr = self._resolve_current_atr(bar)
+
+                if exit_config.exit_type == ExitType.PROFIT_TARGET and exit_config.profit_target_atr:
+                    target_price = float(self.position["profit_target_price"])
+                    if high_price >= target_price:
+                        self._close_position(
+                            exit_time=timestamp,
+                            exit_price=target_price - (slippage_points / 2.0),
+                            bars_held=bars_held,
+                            exit_reason="PROFIT_TARGET",
+                        )
+                        continue
+
+                if exit_config.exit_type == ExitType.TRAILING_STOP and exit_config.trailing_stop_atr:
+                    # The trailing stop ratchets upward using the highest high seen
+                    # since entry and the current bar's ATR snapshot.
+                    trailing_stop_price = (
+                        float(self.position["highest_high_since_entry"])
+                        - float(exit_config.trailing_stop_atr) * current_atr
+                    )
+                    self.position["trailing_stop_price"] = max(
+                        float(self.position["trailing_stop_price"]),
+                        trailing_stop_price,
+                    )
+                    if low_price <= float(self.position["trailing_stop_price"]):
+                        self._close_position(
+                            exit_time=timestamp,
+                            exit_price=float(self.position["trailing_stop_price"]) - (slippage_points / 2.0),
+                            bars_held=bars_held,
+                            exit_reason="TRAILING_STOP",
+                        )
+                        continue
+
+                signal_exit_price = self._resolve_signal_exit_price(strategy, bar, close_price)
+                if signal_exit_price is not None:
+                    self._close_position(
+                        exit_time=timestamp,
+                        exit_price=signal_exit_price - (slippage_points / 2.0),
+                        bars_held=bars_held,
+                        exit_reason="SIGNAL_EXIT",
+                    )
+                    continue
+
+                if bars_held >= int(exit_config.hold_bars):
                     time_exit_price = close_price - (slippage_points / 2.0)
                     self._close_position(
                         exit_time=timestamp,
@@ -215,16 +335,16 @@ class MasterStrategyEngine:
 
                 if signal == 1:
                     if stop_distance_atr is not None:
-                        atr_col = "atr_20"
-                        current_atr = float(bar.get(atr_col, np.nan))
-                        if pd.isna(current_atr) or current_atr <= 0:
-                            current_atr = 10.0
+                        current_atr = self._resolve_current_atr(bar)
                         stop_dist_pts = float(stop_distance_atr) * current_atr
                     else:
                         stop_dist_pts = self._resolve_stop_distance_points(strategy, bar)
 
                     if stop_dist_pts <= 0:
                         continue
+
+                    exit_config = self._resolve_exit_config(strategy, hold_bars, stop_dist_pts)
+                    current_atr = self._resolve_current_atr(bar)
 
                     contracts = self.calculate_position_size_contracts(
                         stop_distance_points=stop_dist_pts
@@ -239,6 +359,15 @@ class MasterStrategyEngine:
                             "entry_time": timestamp,
                             "entry_price": entry_price,
                             "stop_price": stop_price,
+                            "entry_atr": current_atr,
+                            "highest_high_since_entry": high_price,
+                            "trailing_stop_price": stop_price,
+                            "profit_target_price": (
+                                entry_price + float(exit_config.profit_target_atr) * current_atr
+                                if exit_config.profit_target_atr is not None
+                                else float("nan")
+                            ),
+                            "exit_config": exit_config,
                             "contracts": contracts,
                             "mae_points": 0.0,
                             "mfe_points": 0.0,
