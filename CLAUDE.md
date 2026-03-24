@@ -238,7 +238,7 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] Config file (YAML/TOML) instead of hardcoded constants â€” config.yaml created
 - [ ] Integrate status.json polling into run_cloud_job.py wait loop
 - [ ] Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
-- [ ] Bar-by-bar Python loop â€” vectorization needed before expanding filter library
+- [x] Bar-by-bar Python loop â€” filter-level vectorization done (Session 31); trade loop vectorization is Session 32 scope
 - [ ] No static IP on strategy-console â€” IP changes on restart; reserve via gcloud compute addresses create
 - [ ] GCP vCPU quota: 200 in us-central1 â€” constrains multi-VM parallelism
 - [x] status.json first-update delay â€” FIXED (done == 1)
@@ -277,8 +277,8 @@ Key principle: exits before filters, filters before vectorization, vectorization
 ## Quick commands
 
 ```bash
-# Run all tests (72 tests)
-python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_dashboard_utils.py -v
+# Run all tests (72+ tests)
+python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_dashboard_utils.py tests/test_vectorized_filters.py -v
 
 # Launch ES all-timeframes sweep (daily/60m/30m/15m, all families, 96-core SPOT)
 python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml
@@ -314,6 +314,6 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 **Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
 
 ## Last updated
-2026-03-24 - Session 30: Bootcamp scoring implemented; VM run strategy-sweep-20260324T071642Z launched
+2026-03-25 - Session 31: Filter vectorization complete; VM run strategy-sweep-20260324T071642Z launched
 
 

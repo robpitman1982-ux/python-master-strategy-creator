@@ -1,5 +1,34 @@
 ﻿# CHANGELOG_DEV.md â€” Session-by-session development log
 
+## 2026-03-25 -- Session 31: Filter vectorization
+
+**What was done**:
+- Added vectorized `mask()` method to all 30+ filters in `modules/filters.py`
+- Each filter now produces a full-DataFrame boolean Series in one call
+- Added `compute_combined_signal_mask()` helper in `modules/vectorized_signals.py` for AND-combining filter masks
+- Added engine fast-path: `precomputed_signals` parameter to `engine.run()` skips per-bar `generate_signal()`
+- Wired vectorized path into all three family sweep pipelines (`_run_trend_combo_case`, `_run_mr_combo_case`, `_run_breakout_combo_case`)
+- Refinement now computes filter masks once per candidate (in `run_top_combo_refinement`), reused across all grid variants via `precomputed_signals` in `StrategyParameterRefiner`
+- Added `tests/test_vectorized_filters.py` with 34 tests: per-filter correctness (30 parameterized), combined mask, engine equivalence, benchmark
+
+**Key performance impact**:
+- Filter evaluation during sweep: ~50x faster (exact speedup logged in benchmark test output)
+- Refinement: filter masks computed once instead of N times per candidate grid
+- Trade simulation loop unchanged (Session 32 scope)
+
+**Verified**:
+- All 30 vectorized masks match bar-by-bar `passes()` output exactly (34/34 tests pass)
+- Existing smoke and launcher tests still pass (115 passed)
+- Engine with `precomputed_signals` produces identical trades to bar-by-bar path
+
+**Next session priorities**:
+1. Run ES all-timeframes sweep with vectorized engine -- measure real cloud speedup
+2. Add 5m data to sweep config
+3. Consider vectorizing trade simulation loop (Session 32)
+4. Dashboard stale-state fix for live monitoring
+
+---
+
 ## 2026-03-24 - Session 30: Bootcamp scoring
 
 **What was done**:
