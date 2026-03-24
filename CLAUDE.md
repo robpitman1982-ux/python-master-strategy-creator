@@ -60,6 +60,8 @@ python-master-strategy-creator/
 │       ├── breakout_strategy_type.py  # Breakout family
 │       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types()
 ├── docs/
+│   ├── STRATEGY_ENGINE_ANALYSIS.md    # Complete system analysis: files, filters, pipeline, weaknesses
+│   ├── IMPROVEMENT_ROADMAP.md         # Phased improvement plan targeting The5ers Bootcamp
 │   └── TRADESTATION_EXPORT_GUIDE.md   # Step-by-step data export instructions
 ├── cloud/
 │   ├── run_cloud.sh            # Linux/Mac cloud run script (DigitalOcean)
@@ -169,6 +171,8 @@ Key sections:
 - [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (22 tests total across smoke + cloud launcher coverage)
 - [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
 - [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
+- [ ] Exit logic limited to time-stop + fixed stop — trailing stops, profit targets, signal exits needed
+- [ ] Long-only — short-side strategies needed for portfolio resilience
 - [x] Strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — fixed via GCP Cloud Shell set-service-account --scopes=cloud-platform; also authenticated with personal gcloud account
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a — now us-central1-a; also configurable per YAML via cloud.zone
 - [x] run_cloud_sweep.py printed misleading stage labels unconditionally — fixed, wrapper now only prints config and exit code
@@ -179,6 +183,7 @@ Key sections:
 - [x] OOS split date hardcoded — now configurable via config.yaml pipeline.oos_split_date
 - [x] Add support for multiple datasets in single run — datasets list in config, per-dataset output dirs
 - [ ] Add walk-forward validation as alternative to fixed IS/OOS split
+- [ ] Single IS/OOS split — walk-forward validation needed
 - [x] Yearly stats show trend strategy lost money 9/11 years 2009-2018 — consistency module added: pct_profitable_years, max_consecutive_losing_years, consistency_flag in all results
 - [ ] Test Docker build locally before first cloud run
 - [ ] Add multi-timeframe data files for ES (daily, 30m, 15m) — see docs/TRADESTATION_EXPORT_GUIDE.md
@@ -209,6 +214,7 @@ Key sections:
 - [x] The5ers Bootcamp $250K config with correct step balances ($100K/$150K/$200K)
 - [x] The5ers High Stakes and Hyper Growth configs
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
+- [ ] Ranking uses PF/PnL — Bootcamp-native scoring (DD-adjusted) needed
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
 - [ ] Daily drawdown simulation (for High Stakes / funded stage)
@@ -221,8 +227,22 @@ Key sections:
 - [x] Config file (YAML/TOML) instead of hardcoded constants — config.yaml created
 - [ ] Integrate status.json polling into run_cloud_job.py wait loop
 - [ ] Bayesian/Optuna optimization for refinement grid (replace brute-force 256-point grid)
+- [ ] Bar-by-bar Python loop — vectorization needed before expanding filter library
 - [ ] No static IP on strategy-console — IP changes on restart; reserve via gcloud compute addresses create
+- [ ] GCP vCPU quota: 200 in us-central1 — constrains multi-VM parallelism
 - [x] status.json first-update delay — FIXED (done == 1)
+
+## Improvement roadmap
+
+See `docs/IMPROVEMENT_ROADMAP.md` for the full phased plan. Summary:
+
+- **Phase 1**: Exit architecture (trailing stops, profit targets) + Bootcamp-native scoring
+- **Phase 2**: Short-side strategies, trend subfamily split, new filters, vectorization
+- **Phase 3**: Walk-forward validation, perturbation tests, regime tagging
+- **Phase 4**: Portfolio-level optimisation for Bootcamp
+- **Phase 5**: Adaptive refinement, multi-VM orchestration (200 vCPU quota)
+
+Key principle: exits before filters, filters before vectorization, vectorization before walk-forward.
 
 ## Coding standards
 
@@ -274,4 +294,4 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 **Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
 
 ## Last updated
-2026-03-24 — Session 26: Live Monitor SSH status, ultimate leaderboard module + dashboard tab, auto-update after sweep
+2026-03-24 — Session 27 Pre-Work: strategy analysis docs, improvement roadmap, CLAUDE.md roadmap references
