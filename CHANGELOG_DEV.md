@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-24 — Session 28: Exit architecture foundation
+
+**What was done**:
+- Added first-class exit architecture to the strategy layer
+- Added supported exit type declarations per family:
+  - Trend: time_stop, trailing_stop
+  - Mean Reversion: time_stop, profit_target, signal_exit
+  - Breakout: time_stop, trailing_stop
+- Updated engine execution to support trailing stop, profit target, and signal exit handling
+- Added refinement support for exit type comparison and exit-specific parameters
+- Added tests covering exit architecture and backward compatibility
+
+**Why this matters**:
+- Trend and breakout were likely being handicapped by blunt time-based exits
+- Mean reversion can now express more natural exit logic
+- Exit quality is now a searchable part of the engine, not a fixed assumption
+
+**Next session priorities**:
+1. Run validation sweep(s) to compare exit styles on ES
+2. Begin Bootcamp-native scoring / dual leaderboard
+3. Evaluate whether trend quality improves materially with trailing exits
+
+---
+
 ## 2026-03-24 — Session 27 Part A: Filter Summary & Analysis
 
 **What was done**:

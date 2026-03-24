@@ -175,7 +175,8 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] Smoke test suite added — `python -m pytest tests/test_smoke.py -v` (22 tests total across smoke + cloud launcher coverage)
 - [x] Portfolio evaluator timeframe bug — `_rebuild_strategy_from_leaderboard_row()` now receives and passes `timeframe` to all get_required_*() and build_candidate_specific_strategy() calls
 - [ ] Re-run ES all timeframes with fixed portfolio evaluator to get correct MC/correlation/yearly stats
-- [ ] Exit logic limited to time-stop + fixed stop — trailing stops, profit targets, signal exits needed
+- [x] Exit architecture foundation completed — strategies now carry explicit exit config and the engine/refiner support `time_stop`, `trailing_stop`, `profit_target`, and `signal_exit`
+- [ ] Validate new exit styles on real ES sweeps and measure whether trailing exits materially improve trend / breakout quality
 - [ ] Long-only — short-side strategies needed for portfolio resilience
 - [x] Strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — fixed via GCP Cloud Shell set-service-account --scopes=cloud-platform; also authenticated with personal gcloud account
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a — now us-central1-a; also configurable per YAML via cloud.zone
@@ -240,7 +241,7 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 
 See `docs/IMPROVEMENT_ROADMAP.md` for the full phased plan. Summary:
 
-- **Phase 1**: Exit architecture (trailing stops, profit targets) + Bootcamp-native scoring
+- **Phase 1**: Exit architecture foundation completed; next focus is Bootcamp-native scoring and validation sweeps for the new exit styles
 - **Phase 2**: Short-side strategies, trend subfamily split, new filters, vectorization
 - **Phase 3**: Walk-forward validation, perturbation tests, regime tagging
 - **Phase 4**: Portfolio-level optimisation for Bootcamp
@@ -254,7 +255,7 @@ Key principle: exits before filters, filters before vectorization, vectorization
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v` — 22 tests, all fast
+- Tests: `python -m pytest tests/ -v` — exit architecture coverage now includes dedicated exit and smoke checks alongside the existing launcher/dashboard suites
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -298,4 +299,4 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 **Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
 
 ## Last updated
-2026-03-24 — Session 27 Part A: filter summary doc, CLAUDE.md filter-summary references
+2026-03-24 — Session 28: exit architecture foundation completed
