@@ -593,3 +593,124 @@ def test_strategy_type_timeframe_affects_filters():
     assert strat_60m is not None
     assert strat_daily is not None
     assert strat_60m.name != strat_daily.name or True  # Names may match, that's OK
+
+
+# ---------------------------------------------------------------------------
+# Test 20: Exit architecture smoke coverage
+# ---------------------------------------------------------------------------
+
+def test_strategy_family_exit_support_matrix():
+    from modules.strategies import ExitType
+    from modules.strategy_types import get_strategy_type
+
+    trend = get_strategy_type("trend")
+    mr = get_strategy_type("mean_reversion")
+    breakout = get_strategy_type("breakout")
+
+    assert trend.get_default_exit_type() == ExitType.TIME_STOP
+    assert mr.get_default_exit_type() == ExitType.TIME_STOP
+    assert breakout.get_default_exit_type() == ExitType.TIME_STOP
+
+    assert trend.get_supported_exit_types() == [ExitType.TIME_STOP, ExitType.TRAILING_STOP]
+    assert mr.get_supported_exit_types() == [ExitType.TIME_STOP, ExitType.PROFIT_TARGET, ExitType.SIGNAL_EXIT]
+    assert breakout.get_supported_exit_types() == [ExitType.TIME_STOP, ExitType.TRAILING_STOP]
+
+
+def test_strategy_build_defaults_to_time_stop_exit():
+    from modules.filters import DistanceBelowSMAFilter, ReversalUpBarFilter, TwoBarDownFilter
+    from modules.strategies import ExitType
+    from modules.strategy_types import get_strategy_type
+
+    mr = get_strategy_type("mean_reversion")
+    strategy = mr.build_candidate_specific_strategy(
+        [DistanceBelowSMAFilter, TwoBarDownFilter, ReversalUpBarFilter],
+        hold_bars=5,
+        stop_distance_points=0.75,
+        min_avg_range=0.8,
+        momentum_lookback=0,
+        timeframe="60m",
+    )
+
+    assert strategy.exit_config.exit_type == ExitType.TIME_STOP
+    assert strategy.exit_config.hold_bars == 5
+
+
+def test_refinement_results_expose_exit_metadata():
+    from modules.engine import EngineConfig, MasterStrategyEngine
+    from modules.refiner import StrategyParameterRefiner
+    from modules.strategies import ExitType, build_exit_config
+
+    df = pd.DataFrame(
+        [
+            {"open": 100.0, "high": 100.3, "low": 99.7, "close": 100.0, "atr_20": 1.0, "sma_20": 100.2},
+            {"open": 100.5, "high": 101.4, "low": 100.4, "close": 101.1, "atr_20": 1.0, "sma_20": 100.1},
+            {"open": 101.1, "high": 101.2, "low": 100.0, "close": 100.4, "atr_20": 1.0, "sma_20": 100.2},
+            {"open": 100.4, "high": 100.6, "low": 100.1, "close": 100.5, "atr_20": 1.0, "sma_20": 100.0},
+        ],
+        index=pd.date_range("2020-01-01", periods=4, freq="h"),
+    )
+
+    class _SmokeExitStrategy:
+        name = "SmokeExitStrategy"
+        filters: list[object] = []
+
+        def __init__(self, exit_config, hold_bars: int, stop_distance_atr: float):
+            self.exit_config = exit_config
+            self.hold_bars = hold_bars
+            self.stop_distance_atr = stop_distance_atr
+
+        def generate_signal(self, data: pd.DataFrame, i: int) -> int:
+            return 1 if i == 0 else 0
+
+    def strategy_factory(
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+        exit_type=None,
+        profit_target_atr=None,
+        trailing_stop_atr=None,
+        signal_exit_reference=None,
+    ):
+        return _SmokeExitStrategy(
+            exit_config=build_exit_config(
+                exit_type=exit_type,
+                hold_bars=hold_bars,
+                stop_distance_points=stop_distance_points,
+                profit_target_atr=profit_target_atr,
+                trailing_stop_atr=trailing_stop_atr,
+                signal_exit_reference=signal_exit_reference,
+            ),
+            hold_bars=hold_bars,
+            stop_distance_atr=stop_distance_points,
+        )
+
+    refiner = StrategyParameterRefiner(
+        MasterStrategyEngine,
+        df,
+        strategy_factory,
+        EngineConfig(
+            initial_capital=100_000.0,
+            risk_per_trade=0.01,
+            commission_per_contract=0.0,
+            slippage_ticks=0,
+            tick_value=12.50,
+            dollars_per_point=50.0,
+            oos_split_date="2020-01-01",
+        ),
+    )
+    result_df = refiner.run_refinement(
+        hold_bars=[2],
+        stop_distance_points=[2.0],
+        min_avg_range=[0.0],
+        momentum_lookback=[0],
+        exit_type=[ExitType.TIME_STOP, ExitType.PROFIT_TARGET],
+        profit_target_atr=[1.0],
+        min_trades=0,
+        min_trades_per_year=0.0,
+        parallel=False,
+    )
+
+    assert not result_df.empty
+    assert {"exit_type", "profit_target_atr", "trailing_stop_atr", "signal_exit_reference"}.issubset(result_df.columns)
+    assert set(result_df["exit_type"]) == {"time_stop", "profit_target"}
