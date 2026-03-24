@@ -638,6 +638,14 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_pct_profitable_years",
         "leader_max_consecutive_losing_years",
         "leader_consistency_flag",
+        "bootcamp_score",
+        "bootcamp_profitability_score",
+        "bootcamp_drawdown_score",
+        "bootcamp_oos_score",
+        "bootcamp_consistency_score",
+        "bootcamp_trade_count_score",
+        "bootcamp_quality_penalty",
+        "bootcamp_drawdown_to_profit_ratio",
         "leader_hold_bars",
         "leader_stop_distance_points",
         "leader_min_avg_range",
@@ -668,9 +676,13 @@ def build_family_bootcamp_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     if classic.empty:
         return pd.DataFrame()
 
+    sort_cols = [c for c in ["accepted_final", "bootcamp_score", "oos_pf", "leader_net_pnl"] if c in classic.columns]
+    if not sort_cols:
+        return classic.reset_index(drop=True)
+
     return classic.sort_values(
-        by=["accepted_final", "bootcamp_score", "oos_pf", "leader_net_pnl"],
-        ascending=[False, False, False, False],
+        by=sort_cols,
+        ascending=[False] * len(sort_cols),
     ).reset_index(drop=True)
 
 

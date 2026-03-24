@@ -180,6 +180,8 @@ def aggregate_ultimate_leaderboard(
         ascending=[True, False, False],
     )
     combined = combined.reset_index(drop=True)
+    if "rank" in combined.columns:
+        combined = combined.drop(columns=["rank"])
     combined.insert(0, "rank", combined.index + 1)
 
     # Drop internal sort columns

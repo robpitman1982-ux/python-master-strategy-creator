@@ -14,6 +14,40 @@ import pandas as pd
 from modules.master_leaderboard import aggregate_master_leaderboard
 
 
+def _scan_dataset_bootcamp_rows(outputs_dir: Path) -> pd.DataFrame:
+    all_rows: list[pd.DataFrame] = []
+    if not outputs_dir.exists():
+        return pd.DataFrame()
+
+    for subdir in sorted(outputs_dir.iterdir()):
+        if not subdir.is_dir():
+            continue
+        csv_path = subdir / "family_leaderboard_bootcamp.csv"
+        if not csv_path.exists():
+            continue
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception:
+            continue
+        if df.empty:
+            continue
+
+        parts = subdir.name.split("_", 1)
+        market = parts[0] if parts else subdir.name
+        timeframe = parts[1] if len(parts) > 1 else "unknown"
+        df = df.copy()
+        if "market" not in df.columns:
+            df["market"] = market
+        if "timeframe" not in df.columns:
+            df["timeframe"] = timeframe
+        all_rows.append(df)
+
+    if not all_rows:
+        return pd.DataFrame()
+
+    return pd.concat(all_rows, ignore_index=True)
+
+
 def load_bootcamp_leaderboard(outputs_dir: str | Path = "Outputs") -> pd.DataFrame:
     outputs_dir = Path(outputs_dir)
     master_csv = outputs_dir / "master_leaderboard_bootcamp.csv"
@@ -26,7 +60,11 @@ def load_bootcamp_leaderboard(outputs_dir: str | Path = "Outputs") -> pd.DataFra
         except Exception:
             pass
 
-    return aggregate_master_leaderboard(outputs_root=outputs_dir, ranking="bootcamp")
+    aggregated = aggregate_master_leaderboard(outputs_root=outputs_dir, ranking="bootcamp")
+    if not aggregated.empty:
+        return aggregated
+
+    return _scan_dataset_bootcamp_rows(outputs_dir)
 
 
 def build_bootcamp_report(outputs_dir: str | Path = "Outputs", top_n: int = 10) -> pd.DataFrame:

@@ -62,13 +62,14 @@ def main(argv: list[str] | None = None) -> int:
     if not args.dry_run:
         try:
             from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+
             ul = aggregate_ultimate_leaderboard()
             if not ul.empty:
-                print(f"\n✅ Ultimate leaderboard updated: {len(ul)} strategies across all runs")
+                print(f"\n[OK] Ultimate leaderboard updated: {len(ul)} strategies across all runs")
             else:
-                print("\n⚠️  No accepted strategies found across any runs")
+                print("\n[WARN] No accepted strategies found across any runs")
         except Exception as e:
-            print(f"\n⚠️  Ultimate leaderboard update failed: {e}")
+            print(f"\n[WARN] Ultimate leaderboard update failed: {e}")
 
     return exit_code
 
