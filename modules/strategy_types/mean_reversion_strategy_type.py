@@ -23,6 +23,7 @@ from modules.filters import (
     TwoBarDownFilter,
 )
 from modules.refiner import StrategyParameterRefiner
+from modules.strategies import ExitType, build_exit_config
 from modules.strategy_types.base_strategy_type import BaseStrategyType
 
 
@@ -35,10 +36,24 @@ class _InlineMeanReversionStrategy:
         hold_bars: int = 5,
         stop_distance_atr: float = 0.75,
         name: str | None = None,
+        exit_type: ExitType | str | None = None,
+        profit_target_atr: float | None = None,
+        signal_exit_reference: str | None = None,
+        exit_config=None,
     ):
         self.filters = filters
         self.hold_bars = hold_bars
         self.stop_distance_atr = stop_distance_atr
+        self.exit_config = build_exit_config(
+            exit_config=exit_config,
+            exit_type=exit_type,
+            hold_bars=hold_bars,
+            stop_distance_points=stop_distance_atr,
+            profit_target_atr=profit_target_atr,
+            signal_exit_reference=signal_exit_reference,
+            default_hold_bars=hold_bars,
+            default_stop_distance_points=stop_distance_atr,
+        )
         self.name = name or f"ComboMR_{build_filter_combo_name(filters)}"
 
     def generate_signal(self, data: pd.DataFrame, i: int) -> int:
@@ -132,6 +147,12 @@ class MeanReversionStrategyType(BaseStrategyType):
     default_hold_bars = 5
     default_stop_distance_points = 0.75
 
+    def get_supported_exit_types(self) -> list[ExitType]:
+        return [ExitType.TIME_STOP, ExitType.PROFIT_TARGET, ExitType.SIGNAL_EXIT]
+
+    def get_default_exit_type(self) -> ExitType:
+        return ExitType.TIME_STOP
+
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
         mult = get_timeframe_multiplier(timeframe)
         return scale_lookbacks([20, 200], mult, min_val=5)
@@ -221,6 +242,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             filters=filters,
             hold_bars=hold_bars,
             stop_distance_atr=stop_distance_points,
+            exit_type=self.get_default_exit_type(),
         )
 
     def build_candidate_specific_strategy(
@@ -231,6 +253,10 @@ class MeanReversionStrategyType(BaseStrategyType):
         min_avg_range: float,
         momentum_lookback: int,
         timeframe: str = "60m",
+        exit_type: ExitType | str | None = None,
+        profit_target_atr: float | None = None,
+        trailing_stop_atr: float | None = None,
+        signal_exit_reference: str | None = None,
     ) -> _InlineMeanReversionStrategy:
         mult = get_timeframe_multiplier(timeframe)
         fast_sma = max(5, round(20 * mult))
@@ -267,6 +293,9 @@ class MeanReversionStrategyType(BaseStrategyType):
             filters=filters,
             hold_bars=hold_bars,
             stop_distance_atr=stop_distance_points,
+            exit_type=exit_type or self.get_default_exit_type(),
+            profit_target_atr=profit_target_atr,
+            signal_exit_reference=signal_exit_reference,
             name=f"RefinedMR_HB{hold_bars}_ATR{stop_distance_points}_DIST{min_avg_range}_MOM{momentum_lookback}",
         )
 

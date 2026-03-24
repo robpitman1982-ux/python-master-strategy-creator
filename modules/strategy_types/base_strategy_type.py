@@ -6,6 +6,7 @@ from typing import Any, Callable, Optional
 
 import pandas as pd
 from modules.engine import EngineConfig
+from modules.strategies import ExitType
 
 
 class BaseStrategyType(ABC):
@@ -22,6 +23,21 @@ class BaseStrategyType(ABC):
 
     default_hold_bars: int = 3
     default_stop_distance_points: float = 10.0
+
+    @abstractmethod
+    def get_supported_exit_types(self) -> list[ExitType]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_default_exit_type(self) -> ExitType:
+        raise NotImplementedError
+
+    def get_exit_parameter_grid_for_combo(
+        self,
+        promoted_combo_classes: list[type],
+        timeframe: str = "60m",
+    ) -> dict[str, list]:
+        return {"exit_type": [self.get_default_exit_type()]}
 
     @abstractmethod
     def get_filter_classes(self) -> list[type]:
@@ -52,6 +68,10 @@ class BaseStrategyType(ABC):
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        exit_type: ExitType | str | None = None,
+        profit_target_atr: float | None = None,
+        trailing_stop_atr: float | None = None,
+        signal_exit_reference: str | None = None,
     ):
         raise NotImplementedError
 
