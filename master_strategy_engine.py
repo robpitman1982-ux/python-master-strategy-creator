@@ -40,6 +40,47 @@ FINAL_MIN_PF = get_nested(_cfg, "leaderboard", "min_pf", default=1.00)
 FINAL_MIN_OOS_PF = get_nested(_cfg, "leaderboard", "min_oos_pf", default=1.00)
 FINAL_MIN_TOTAL_TRADES = get_nested(_cfg, "leaderboard", "min_total_trades", default=60)
 
+# Bootcamp scoring contract
+# -------------------------
+# Session 30 adds a second, prop-firm-oriented ranking layer alongside the
+# classic research leaderboard. The actual score calculation lives in
+# modules/bootcamp_scoring.py, but we define the expected input and derived
+# fields here so leaderboard rows stay explicit and inspectable.
+#
+# Intended formula shape:
+# - reward profitability and survivability: PF, OOS PF, recent PF
+# - penalize large drawdown relative to profit
+# - penalize weak trade frequency
+# - penalize weak or unstable quality flags
+# - reward yearly consistency when available
+#
+# Each family leaderboard row should expose these raw inputs so the Bootcamp
+# scorer can remain deterministic and explainable instead of reaching back into
+# engine internals.
+BOOTCAMP_INPUT_FIELDS = [
+    "leader_pf",
+    "leader_net_pnl",
+    "leader_max_drawdown",
+    "leader_trades",
+    "leader_trades_per_year",
+    "is_pf",
+    "oos_pf",
+    "recent_12m_pf",
+    "quality_flag",
+    "leader_quality_score",
+    "leader_pct_profitable_years",
+    "leader_max_consecutive_losing_years",
+    "leader_consistency_flag",
+]
+
+BOOTCAMP_DERIVED_FIELDS = [
+    "bootcamp_drawdown_to_profit_ratio",
+    "bootcamp_trade_frequency_score",
+    "bootcamp_oos_score",
+    "bootcamp_consistency_score",
+    "bootcamp_quality_penalty",
+]
+
 
 # =============================================================================
 # GENERIC HELPERS
@@ -378,7 +419,13 @@ def build_family_summary_row(
         "best_combo_oos_pf": float(best_combo.get("oos_pf", 0.0) or 0.0),
         "best_combo_recent_12m_trades": int(best_combo.get("recent_12m_trades", 0) or 0),
         "best_combo_recent_12m_pf": float(best_combo.get("recent_12m_pf", 0.0) or 0.0),
+        "best_combo_trades_per_year": float(best_combo.get("trades_per_year", 0.0) or 0.0),
+        "best_combo_max_drawdown": float(best_combo.get("max_drawdown", 0.0) or 0.0),
         "best_combo_quality_flag": str(best_combo.get("quality_flag", "UNKNOWN")),
+        "best_combo_quality_score": float(best_combo.get("quality_score", 0.0) or 0.0),
+        "best_combo_pct_profitable_years": float(best_combo.get("pct_profitable_years", 0.0) or 0.0),
+        "best_combo_max_consecutive_losing_years": int(best_combo.get("max_consecutive_losing_years", 0) or 0),
+        "best_combo_consistency_flag": str(best_combo.get("consistency_flag", "INSUFFICIENT_DATA")),
         "best_combo_exit_type": "time_stop",
         "best_combo_trailing_stop_atr": None,
         "best_combo_profit_target_atr": None,
@@ -402,7 +449,13 @@ def build_family_summary_row(
         "best_refined_oos_pf": float(_extract_best_refined_param(best_refined, "oos_pf", 0.0)),
         "best_refined_recent_12m_trades": int(_extract_best_refined_param(best_refined, "recent_12m_trades", 0)),
         "best_refined_recent_12m_pf": float(_extract_best_refined_param(best_refined, "recent_12m_pf", 0.0)),
+        "best_refined_trades_per_year": float(_extract_best_refined_param(best_refined, "trades_per_year", 0.0)),
+        "best_refined_max_drawdown": float(_extract_best_refined_param(best_refined, "max_drawdown", 0.0)),
         "best_refined_quality_flag": str(_extract_best_refined_param(best_refined, "quality_flag", "UNKNOWN")),
+        "best_refined_quality_score": float(_extract_best_refined_param(best_refined, "quality_score", 0.0)),
+        "best_refined_pct_profitable_years": float(_extract_best_refined_param(best_refined, "pct_profitable_years", 0.0)),
+        "best_refined_max_consecutive_losing_years": int(_extract_best_refined_param(best_refined, "max_consecutive_losing_years", 0)),
+        "best_refined_consistency_flag": str(_extract_best_refined_param(best_refined, "consistency_flag", "INSUFFICIENT_DATA")),
         "best_refined_exit_type": str(_extract_best_refined_param(best_refined, "exit_type", "time_stop")),
         "best_refined_trailing_stop_atr": _extract_best_refined_param(best_refined, "trailing_stop_atr", None),
         "best_refined_profit_target_atr": _extract_best_refined_param(best_refined, "profit_target_atr", None),
@@ -462,10 +515,16 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "oos_pf": row.get("best_combo_oos_pf", 0.0),
         "recent_12m_trades": row.get("best_combo_recent_12m_trades", 0),
         "recent_12m_pf": row.get("best_combo_recent_12m_pf", 0.0),
+        "leader_trades_per_year": row.get("best_combo_trades_per_year", 0.0),
+        "leader_max_drawdown": row.get("best_combo_max_drawdown", 0.0),
         "leader_hold_bars": 0,
         "leader_stop_distance_points": 0.0,
         "leader_min_avg_range": 0.0,
         "leader_momentum_lookback": 0,
+        "leader_quality_score": row.get("best_combo_quality_score", 0.0),
+        "leader_pct_profitable_years": row.get("best_combo_pct_profitable_years", 0.0),
+        "leader_max_consecutive_losing_years": row.get("best_combo_max_consecutive_losing_years", 0),
+        "leader_consistency_flag": row.get("best_combo_consistency_flag", "INSUFFICIENT_DATA"),
         "leader_exit_type": row.get("best_combo_exit_type", "time_stop"),
         "leader_trailing_stop_atr": row.get("best_combo_trailing_stop_atr"),
         "leader_profit_target_atr": row.get("best_combo_profit_target_atr"),
@@ -489,10 +548,16 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "oos_pf": row.get("best_refined_oos_pf", 0.0),
         "recent_12m_trades": row.get("best_refined_recent_12m_trades", 0),
         "recent_12m_pf": row.get("best_refined_recent_12m_pf", 0.0),
+        "leader_trades_per_year": row.get("best_refined_trades_per_year", 0.0),
+        "leader_max_drawdown": row.get("best_refined_max_drawdown", 0.0),
         "leader_hold_bars": row.get("best_refined_hold_bars", 0),
         "leader_stop_distance_points": row.get("best_refined_stop_distance_points", 0.0),
         "leader_min_avg_range": row.get("best_refined_min_avg_range", 0.0),
         "leader_momentum_lookback": row.get("best_refined_momentum_lookback", 0),
+        "leader_quality_score": row.get("best_refined_quality_score", 0.0),
+        "leader_pct_profitable_years": row.get("best_refined_pct_profitable_years", 0.0),
+        "leader_max_consecutive_losing_years": row.get("best_refined_max_consecutive_losing_years", 0),
+        "leader_consistency_flag": row.get("best_refined_consistency_flag", "INSUFFICIENT_DATA"),
         "leader_exit_type": row.get("best_refined_exit_type", "time_stop"),
         "leader_trailing_stop_atr": row.get("best_refined_trailing_stop_atr"),
         "leader_profit_target_atr": row.get("best_refined_profit_target_atr"),
@@ -565,6 +630,12 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_avg_trade",
         "leader_net_pnl",
         "leader_trades",
+        "leader_trades_per_year",
+        "leader_max_drawdown",
+        "leader_quality_score",
+        "leader_pct_profitable_years",
+        "leader_max_consecutive_losing_years",
+        "leader_consistency_flag",
         "leader_hold_bars",
         "leader_stop_distance_points",
         "leader_min_avg_range",

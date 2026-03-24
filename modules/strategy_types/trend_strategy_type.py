@@ -100,6 +100,7 @@ def _run_trend_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -
         "net_pnl": _pf(summary.get("Net PnL", 0.0)),
         "profit_factor": _pf(summary.get("Profit Factor", 0.0)),
         "average_trade": _pf(summary.get("Average Trade", 0.0)),
+        "max_drawdown": _pf(summary.get("Max Drawdown", 0.0)),
         "is_trades": int(summary.get("IS Trades", 0)),
         "oos_trades": int(summary.get("OOS Trades", 0)),
         "is_pf": _pf(summary.get("IS PF", 0.0)),
