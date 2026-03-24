@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from modules.config_loader import get_nested, load_config
+from modules.bootcamp_scoring import add_bootcamp_scores
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
@@ -605,6 +606,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     leaderboard = pd.concat([leaderboard, leader_rows], axis=1)
 
     leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
+    leaderboard = add_bootcamp_scores(leaderboard)
 
     leaderboard = leaderboard.sort_values(
         by=["accepted_final", "leader_net_pnl", "leader_pf", "leader_avg_trade"],
@@ -659,6 +661,17 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()
+
+
+def build_family_bootcamp_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
+    classic = build_family_leaderboard(summary_df)
+    if classic.empty:
+        return pd.DataFrame()
+
+    return classic.sort_values(
+        by=["accepted_final", "bootcamp_score", "oos_pf", "leader_net_pnl"],
+        ascending=[False, False, False, False],
+    ).reset_index(drop=True)
 
 
 # =============================================================================
@@ -886,10 +899,14 @@ def _run_dataset(
     family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)
 
     leaderboard_df = build_family_leaderboard(family_summary_df)
+    bootcamp_leaderboard_df = build_family_bootcamp_leaderboard(family_summary_df)
     leaderboard_path = ds_output_dir / "family_leaderboard_results.csv"
+    bootcamp_leaderboard_path = ds_output_dir / "family_leaderboard_bootcamp.csv"
 
     if not leaderboard_df.empty:
         leaderboard_df.to_csv(leaderboard_path, index=False)
+        if not bootcamp_leaderboard_df.empty:
+            bootcamp_leaderboard_df.to_csv(bootcamp_leaderboard_path, index=False)
 
         print(f"\nLEADERBOARD - {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
         preview_cols = [
@@ -906,8 +923,13 @@ def _run_dataset(
             "recent_12m_pf",
             "leader_pf",
             "leader_net_pnl",
+            "bootcamp_score",
         ]
         print(leaderboard_df[[c for c in preview_cols if c in leaderboard_df.columns]].to_string(index=False))
+
+        if not bootcamp_leaderboard_df.empty:
+            print(f"\nBOOTCAMP LEADERBOARD - {ds_market} {ds_timeframe} (Saved to {bootcamp_leaderboard_path})")
+            print(bootcamp_leaderboard_df[[c for c in preview_cols if c in bootcamp_leaderboard_df.columns]].to_string(index=False))
 
         print("\n" + "=" * 72 + "\nSTARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
 
