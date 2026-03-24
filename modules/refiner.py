@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 import pandas as pd
 
 from modules.engine import EngineConfig
+from modules.strategies import ExitType, normalize_exit_type
 
 _WORKER_ENGINE_CLASS = None
 _WORKER_DATA = None
@@ -58,11 +59,16 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         stop_distance_points=task["stop_distance_points"],
         min_avg_range=task["min_avg_range"],
         momentum_lookback=task["momentum_lookback"],
+        exit_type=task.get("exit_type"),
+        profit_target_atr=task.get("profit_target_atr"),
+        trailing_stop_atr=task.get("trailing_stop_atr"),
+        signal_exit_reference=task.get("signal_exit_reference"),
     )
 
     engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
     engine.run(strategy=strategy)
     summary = engine.results()
+    exit_config = getattr(strategy, "exit_config", None)
 
     total_trades = int(summary["Total Trades"])
     years_in_sample = float(task["years_in_sample"])
@@ -87,6 +93,26 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         "stop_distance_points": float(task["stop_distance_points"]),
         "min_avg_range": float(task["min_avg_range"]),
         "momentum_lookback": int(task["momentum_lookback"]),
+        "exit_type": (
+            str(exit_config.exit_type.value)
+            if exit_config is not None and getattr(exit_config, "exit_type", None) is not None
+            else str(task.get("exit_type") or "")
+        ),
+        "trailing_stop_atr": (
+            float(exit_config.trailing_stop_atr)
+            if exit_config is not None and exit_config.trailing_stop_atr is not None
+            else None
+        ),
+        "profit_target_atr": (
+            float(exit_config.profit_target_atr)
+            if exit_config is not None and exit_config.profit_target_atr is not None
+            else None
+        ),
+        "signal_exit_reference": (
+            str(exit_config.signal_exit_reference)
+            if exit_config is not None and exit_config.signal_exit_reference
+            else None
+        ),
         "total_trades": total_trades,
         "trades_per_year": trades_per_year,
         "passes_trade_filter": passes_trade_filter,
@@ -121,6 +147,10 @@ class RefinementResult:
     stop_distance_points: float
     min_avg_range: float
     momentum_lookback: int
+    exit_type: str
+    trailing_stop_atr: float | None
+    profit_target_atr: float | None
+    signal_exit_reference: str | None
     total_trades: int
     trades_per_year: float
     passes_trade_filter: bool
@@ -171,6 +201,10 @@ class StrategyParameterRefiner:
         stop_distance_points: list[float],
         min_avg_range: list[float],
         momentum_lookback: list[int],
+        exit_type: list[ExitType | str] | None = None,
+        trailing_stop_atr: list[float] | None = None,
+        profit_target_atr: list[float] | None = None,
+        signal_exit_reference: list[str] | None = None,
         min_trades: int = 150,
         min_trades_per_year: float = 8.0,
         parallel: bool = True,
@@ -180,8 +214,58 @@ class StrategyParameterRefiner:
         self.results = []
 
         years_in_sample = _calculate_years_in_sample(self.data)
-        combinations = list(product(hold_bars, stop_distance_points, min_avg_range, momentum_lookback))
-        total_runs = len(combinations)
+        base_combinations = list(product(hold_bars, stop_distance_points, min_avg_range, momentum_lookback))
+
+        exit_types = list(exit_type or [])
+        if not exit_types:
+            exit_types = [None]
+
+        trailing_stop_values = [float(v) for v in (trailing_stop_atr or [None]) if v is not None]
+        profit_target_values = [float(v) for v in (profit_target_atr or [None]) if v is not None]
+        signal_exit_values = [str(v) for v in (signal_exit_reference or [None]) if v]
+
+        tasks: list[dict[str, Any]] = []
+        for hb, stop, rng, mom in base_combinations:
+            for requested_exit_type in exit_types:
+                normalized_exit_type = (
+                    normalize_exit_type(requested_exit_type)
+                    if requested_exit_type is not None
+                    else None
+                )
+
+                common = {
+                    "hold_bars": hb,
+                    "stop_distance_points": float(stop),
+                    "min_avg_range": float(rng),
+                    "momentum_lookback": int(mom),
+                    "years_in_sample": years_in_sample,
+                    "min_trades": min_trades,
+                    "min_trades_per_year": min_trades_per_year,
+                    "exit_type": normalized_exit_type.value if normalized_exit_type is not None else None,
+                    "profit_target_atr": None,
+                    "trailing_stop_atr": None,
+                    "signal_exit_reference": None,
+                }
+
+                if normalized_exit_type == ExitType.TRAILING_STOP:
+                    for trailing_value in trailing_stop_values or [1.5]:
+                        task = dict(common)
+                        task["trailing_stop_atr"] = float(trailing_value)
+                        tasks.append(task)
+                elif normalized_exit_type == ExitType.PROFIT_TARGET:
+                    for target_value in profit_target_values or [1.0]:
+                        task = dict(common)
+                        task["profit_target_atr"] = float(target_value)
+                        tasks.append(task)
+                elif normalized_exit_type == ExitType.SIGNAL_EXIT:
+                    for signal_value in signal_exit_values or ["fast_sma"]:
+                        task = dict(common)
+                        task["signal_exit_reference"] = signal_value
+                        tasks.append(task)
+                else:
+                    tasks.append(common)
+
+        total_runs = len(tasks)
 
         accepted_count = 0
         rejected_count = 0
@@ -193,19 +277,6 @@ class StrategyParameterRefiner:
         print("\n🎯 Running top-combo parameter refinement...")
         print(f"Total combinations: {total_runs} | Years in sample: {years_in_sample:.2f}")
         print(f"Trade filters: min_trades={min_trades}, min_trades_per_year={min_trades_per_year:.2f}")
-
-        tasks = [
-            {
-                "hold_bars": hb,
-                "stop_distance_points": float(stop),
-                "min_avg_range": float(rng),
-                "momentum_lookback": int(mom),
-                "years_in_sample": years_in_sample,
-                "min_trades": min_trades,
-                "min_trades_per_year": min_trades_per_year,
-            }
-            for hb, stop, rng, mom in combinations
-        ]
 
         if parallel and total_runs > 1:
             with ProcessPoolExecutor(
@@ -223,7 +294,8 @@ class StrategyParameterRefiner:
                     print(
                         f"  Done {idx}/{total_runs} | "
                         f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
-                        f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
+                        f"range={result['min_avg_range']}, mom={result['momentum_lookback']}, "
+                        f"exit={result['exit_type']} | "
                         f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
                         f"trades={result['total_trades']} | {result['reject_reason']}"
                     )
@@ -243,7 +315,8 @@ class StrategyParameterRefiner:
                 print(
                     f"  Done {idx}/{total_runs} | "
                     f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
-                    f"range={result['min_avg_range']}, mom={result['momentum_lookback']} | "
+                    f"range={result['min_avg_range']}, mom={result['momentum_lookback']}, "
+                    f"exit={result['exit_type']} | "
                     f"PF={result['profit_factor']:.2f} | Net={result['net_pnl']:.2f} | "
                     f"trades={result['total_trades']} | {result['reject_reason']}"
                 )
@@ -276,6 +349,10 @@ class StrategyParameterRefiner:
             "stop_distance_points",
             "min_avg_range",
             "momentum_lookback",
+            "exit_type",
+            "trailing_stop_atr",
+            "profit_target_atr",
+            "signal_exit_reference",
             "total_trades",
             "trades_per_year",
             "quality_flag",
@@ -294,6 +371,8 @@ class StrategyParameterRefiner:
             "stop_distance_points",
             "min_avg_range",
             "trades_per_year",
+            "trailing_stop_atr",
+            "profit_target_atr",
             "profit_factor",
             "average_trade",
             "net_pnl",

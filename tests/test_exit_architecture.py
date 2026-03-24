@@ -3,6 +3,7 @@ from __future__ import annotations
 import pandas as pd
 
 from modules.engine import EngineConfig, MasterStrategyEngine
+from modules.refiner import StrategyParameterRefiner
 from modules.strategies import ExitType, build_exit_config
 
 
@@ -221,3 +222,66 @@ def test_engine_processes_exit_config_without_crashing():
 
     assert len(engine.trades) == 1
     assert engine.results()["Total Trades"] == 1
+
+
+def test_refinement_results_include_exit_metadata():
+    df = _make_exit_df(
+        [
+            {"open": 100.0, "high": 100.3, "low": 99.7, "close": 100.0, "atr_20": 1.0, "sma_20": 100.2},
+            {"open": 100.5, "high": 101.4, "low": 100.4, "close": 101.1, "atr_20": 1.0, "sma_20": 100.1},
+            {"open": 101.1, "high": 101.2, "low": 100.0, "close": 100.4, "atr_20": 1.0, "sma_20": 100.2},
+            {"open": 100.4, "high": 100.6, "low": 100.1, "close": 100.5, "atr_20": 1.0, "sma_20": 100.0},
+        ]
+    )
+
+    def strategy_factory(
+        hold_bars: int,
+        stop_distance_points: float,
+        min_avg_range: float,
+        momentum_lookback: int,
+        exit_type=None,
+        profit_target_atr=None,
+        trailing_stop_atr=None,
+        signal_exit_reference=None,
+    ):
+        return _SingleEntryStrategy(
+            exit_config=build_exit_config(
+                exit_type=exit_type,
+                hold_bars=hold_bars,
+                stop_distance_points=stop_distance_points,
+                profit_target_atr=profit_target_atr,
+                trailing_stop_atr=trailing_stop_atr,
+                signal_exit_reference=signal_exit_reference,
+            ),
+            hold_bars=hold_bars,
+            stop_distance_atr=stop_distance_points,
+        )
+
+    refiner = StrategyParameterRefiner(
+        MasterStrategyEngine,
+        df,
+        strategy_factory,
+        _make_engine_config(),
+    )
+    result_df = refiner.run_refinement(
+        hold_bars=[2],
+        stop_distance_points=[2.0],
+        min_avg_range=[0.0],
+        momentum_lookback=[0],
+        exit_type=[
+            ExitType.TIME_STOP,
+            ExitType.TRAILING_STOP,
+            ExitType.PROFIT_TARGET,
+            ExitType.SIGNAL_EXIT,
+        ],
+        trailing_stop_atr=[1.5],
+        profit_target_atr=[1.0],
+        signal_exit_reference=["fast_sma"],
+        min_trades=0,
+        min_trades_per_year=0.0,
+        parallel=False,
+    )
+
+    assert not result_df.empty
+    assert {"exit_type", "trailing_stop_atr", "profit_target_atr", "signal_exit_reference"}.issubset(result_df.columns)
+    assert set(result_df["exit_type"]) == {"time_stop", "trailing_stop", "profit_target", "signal_exit"}

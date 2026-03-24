@@ -126,6 +126,10 @@ class _BreakoutRefinementFactory:
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        exit_type: ExitType | str | None = None,
+        profit_target_atr: float | None = None,
+        trailing_stop_atr: float | None = None,
+        signal_exit_reference: str | None = None,
     ):
         return self.strat_inst.build_candidate_specific_strategy(
             self.combo_classes,
@@ -134,6 +138,10 @@ class _BreakoutRefinementFactory:
             min_avg_range,
             momentum_lookback,
             timeframe=self.timeframe,
+            exit_type=exit_type,
+            profit_target_atr=profit_target_atr,
+            trailing_stop_atr=trailing_stop_atr,
+            signal_exit_reference=signal_exit_reference,
         )
 
 
@@ -150,6 +158,16 @@ class BreakoutStrategyType(BaseStrategyType):
 
     def get_default_exit_type(self) -> ExitType:
         return ExitType.TIME_STOP
+
+    def get_exit_parameter_grid_for_combo(
+        self,
+        promoted_combo_classes: list[type],
+        timeframe: str = "60m",
+    ) -> dict[str, list]:
+        return {
+            "exit_type": [ExitType.TIME_STOP, ExitType.TRAILING_STOP],
+            "trailing_stop_atr": [1.0, 1.5, 2.0, 2.5],
+        }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
         mult = get_timeframe_multiplier(timeframe)
@@ -339,6 +357,7 @@ class BreakoutStrategyType(BaseStrategyType):
 
         grid["min_avg_range"] = [0.60, 0.70, 0.80, 0.90, 1.00] if any(cls is CompressionFilter for cls in classes) else [0.0]
         grid["momentum_lookback"] = [0]
+        grid.update(self.get_exit_parameter_grid_for_combo(classes, timeframe=timeframe))
 
         return grid
 
@@ -410,6 +429,8 @@ class BreakoutStrategyType(BaseStrategyType):
             stop_distance_points=grid["stop_distance_points"],
             min_avg_range=grid["min_avg_range"],
             momentum_lookback=grid["momentum_lookback"],
+            exit_type=grid.get("exit_type"),
+            trailing_stop_atr=grid.get("trailing_stop_atr"),
             min_trades=thresholds["min_trades"],
             min_trades_per_year=thresholds["min_trades_per_year"],
             parallel=True,

@@ -128,6 +128,10 @@ class _MRRefinementFactory:
         stop_distance_points: float,
         min_avg_range: float,
         momentum_lookback: int,
+        exit_type: ExitType | str | None = None,
+        profit_target_atr: float | None = None,
+        trailing_stop_atr: float | None = None,
+        signal_exit_reference: str | None = None,
     ):
         return self.strat_inst.build_candidate_specific_strategy(
             self.combo_classes,
@@ -136,6 +140,10 @@ class _MRRefinementFactory:
             min_avg_range,
             momentum_lookback,
             timeframe=self.timeframe,
+            exit_type=exit_type,
+            profit_target_atr=profit_target_atr,
+            trailing_stop_atr=trailing_stop_atr,
+            signal_exit_reference=signal_exit_reference,
         )
 
 
@@ -152,6 +160,17 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_default_exit_type(self) -> ExitType:
         return ExitType.TIME_STOP
+
+    def get_exit_parameter_grid_for_combo(
+        self,
+        promoted_combo_classes: list[type],
+        timeframe: str = "60m",
+    ) -> dict[str, list]:
+        return {
+            "exit_type": [ExitType.TIME_STOP, ExitType.PROFIT_TARGET, ExitType.SIGNAL_EXIT],
+            "profit_target_atr": [0.5, 0.75, 1.0, 1.25, 1.5],
+            "signal_exit_reference": ["fast_sma"],
+        }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
         mult = get_timeframe_multiplier(timeframe)
@@ -347,6 +366,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             else [0.0]
         )
         grid["momentum_lookback"] = [0]
+        grid.update(self.get_exit_parameter_grid_for_combo(classes, timeframe=timeframe))
 
         return grid
 
@@ -418,6 +438,9 @@ class MeanReversionStrategyType(BaseStrategyType):
             stop_distance_points=grid["stop_distance_points"],
             min_avg_range=grid["min_avg_range"],
             momentum_lookback=grid["momentum_lookback"],
+            exit_type=grid.get("exit_type"),
+            profit_target_atr=grid.get("profit_target_atr"),
+            signal_exit_reference=grid.get("signal_exit_reference"),
             min_trades=thresholds["min_trades"],
             min_trades_per_year=thresholds["min_trades_per_year"],
             parallel=True,
