@@ -1466,6 +1466,82 @@ def build_recovery_commands(
     ]
 
 
+def _attempt_vm_destroy_after_recovery(
+    gcloud_base: list[str],
+    manifest: RunManifest,
+    status_store: "LauncherStatusStore",
+    args: argparse.Namespace,
+) -> None:
+    """Destroy the sweep VM after a successful recovery if auto-destroy is permitted."""
+    instance_exists = safe_instance_exists(gcloud_base, manifest.instance_name, manifest.zone)
+    if not instance_exists:
+        return
+    destroy_ok, destroy_reason = can_auto_destroy(status_store.current_payload(), args)
+    if not destroy_ok:
+        status_store.update(
+            VM_OUTCOME_PRESERVED,
+            "destroy_skipped",
+            f"VM preserved after recovery: {destroy_reason}",
+            vm_outcome=VM_OUTCOME_PRESERVED,
+            destroy_allowed=False,
+            destroy_reason=destroy_reason,
+            instance_exists_at_end=True,
+            billing_should_be_stopped=False,
+            operator_action=(
+                f"delete VM manually: gcloud compute instances delete "
+                f"{manifest.instance_name} --zone={manifest.zone} --quiet"
+            ),
+        )
+        print(
+            f"WARNING: VM preserved after recovery ({destroy_reason}). "
+            f"Delete manually: gcloud compute instances delete "
+            f"{manifest.instance_name} --zone={manifest.zone} --quiet"
+        )
+        return
+    try:
+        status_store.update(
+            "running",
+            "destroy",
+            "Destroying VM after successful recovery.",
+            destroy_allowed=True,
+            destroy_reason=destroy_reason,
+        )
+        delete_instance(gcloud_base, manifest.instance_name, manifest.zone)
+        status_store.update(
+            VM_OUTCOME_DESTROYED,
+            "destroyed",
+            "VM destroyed after recovery.",
+            vm_outcome=VM_OUTCOME_DESTROYED,
+            destroy_allowed=True,
+            destroy_reason=destroy_reason,
+            instance_exists_at_end=False,
+            billing_should_be_stopped=True,
+            operator_action="none",
+            recovery_commands=[],
+        )
+        print("VM destroyed successfully after recovery.")
+    except Exception as exc:
+        status_store.update(
+            VM_OUTCOME_PRESERVED,
+            "destroy_failed",
+            f"Failed to destroy VM after recovery: {exc}",
+            vm_outcome=VM_OUTCOME_PRESERVED,
+            destroy_allowed=False,
+            destroy_reason=f"destroy failed: {exc}",
+            instance_exists_at_end=True,
+            billing_should_be_stopped=False,
+            operator_action=(
+                f"delete VM manually: gcloud compute instances delete "
+                f"{manifest.instance_name} --zone={manifest.zone} --quiet"
+            ),
+        )
+        print(
+            f"WARNING: failed to destroy VM: {exc}. "
+            f"Delete manually: gcloud compute instances delete "
+            f"{manifest.instance_name} --zone={manifest.zone} --quiet"
+        )
+
+
 def recover_existing_run(
     *,
     gcloud_base: list[str],
@@ -1536,6 +1612,7 @@ def recover_existing_run(
             print(f"Convenience exports updated under: {EXPORTS_DIR}")
             if console_synced:
                 print("Synced verified run outputs to strategy-console storage.")
+            _attempt_vm_destroy_after_recovery(gcloud_base, manifest, status_store, args)
             return 0
 
     status_store.update(
@@ -1649,6 +1726,7 @@ def recover_existing_run(
         print(f"Convenience exports updated under: {EXPORTS_DIR}")
         if console_synced:
             print("Synced verified run outputs to strategy-console storage.")
+        _attempt_vm_destroy_after_recovery(gcloud_base, manifest, status_store, args)
         return 0
     return 1
 
@@ -2246,12 +2324,27 @@ def main(argv: list[str] | None = None) -> int:
                         run_dir=local_run_dir,
                         extracted_dir=extracted_dir,
                     )
+                    console_synced_main: list[str] = []
+                    if should_sync_results_to_strategy_console(local_run_dir.parent):
+                        try:
+                            console_synced_main = sync_run_to_strategy_console_storage(
+                                gcloud_base=gcloud_base,
+                                run_dir=local_run_dir,
+                            )
+                        except Exception as sync_exc:
+                            status_store.update(
+                                "running",
+                                "console_sync_warning",
+                                f"Artifacts mirrored locally but console sync failed: {sync_exc}",
+                            )
                     status_store.update(
                         "running",
                         "exports_sync",
                         "Mirrored latest outputs to strategy_console_storage/exports.",
-                        exports_updated=[str(path) for path in mirrored_paths],
+                        exports_updated=[str(path) for path in mirrored_paths] + console_synced_main,
                     )
+                    if console_synced_main:
+                        print("Synced run outputs to strategy-console storage.")
             except Exception as exc:
                 artifact_verification = build_default_artifact_verification()
                 artifact_verification.expected_files = []
@@ -2398,11 +2491,24 @@ def main(argv: list[str] | None = None) -> int:
                     failure_reason = None
                     exit_code = 0
                 mirrored_paths: list[Path] = []
+                console_synced_retry: list[str] = []
                 if artifact_verification.expected_outputs_present:
                     mirrored_paths = mirror_artifacts_to_exports(
                         run_dir=local_run_dir,
                         extracted_dir=local_run_dir / "artifacts",
                     )
+                    if should_sync_results_to_strategy_console(local_run_dir.parent):
+                        try:
+                            console_synced_retry = sync_run_to_strategy_console_storage(
+                                gcloud_base=gcloud_base,
+                                run_dir=local_run_dir,
+                            )
+                        except Exception as sync_exc:
+                            status_store.update(
+                                "running",
+                                "console_sync_warning",
+                                f"Retry artifacts mirrored locally but console sync failed: {sync_exc}",
+                            )
                 status_store.update(
                     "running",
                     "artifact_verification_retry",
@@ -2416,8 +2522,10 @@ def main(argv: list[str] | None = None) -> int:
                     remote_artifact_exists=remote_artifact_exists_flag,
                     final_retrieval_attempted=True,
                     final_retrieval_success=final_retrieval_success,
-                    exports_updated=[str(path) for path in mirrored_paths],
+                    exports_updated=[str(path) for path in mirrored_paths] + console_synced_retry,
                 )
+                if console_synced_retry:
+                    print("Synced retry run outputs to strategy-console storage.")
             except Exception as exc:
                 final_retrieval_success = False
                 status_store.update(

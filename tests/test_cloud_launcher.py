@@ -714,10 +714,8 @@ def test_recover_existing_run_uses_verified_local_artifacts_without_remote_calls
 
     monkeypatch.setattr("cloud.launch_gcp_run.EXPORTS_DIR", tmp_path / "exports")
     monkeypatch.setattr("cloud.launch_gcp_run.should_sync_results_to_strategy_console", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(
-        "cloud.launch_gcp_run.safe_instance_exists",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("remote should not be queried")),
-    )
+    # VM already gone — destroy attempt should short-circuit without further remote calls
+    monkeypatch.setattr("cloud.launch_gcp_run.safe_instance_exists", lambda *_args, **_kwargs: False)
 
     exit_code = recover_existing_run(
         gcloud_base=["gcloud"],
