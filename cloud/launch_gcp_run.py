@@ -134,6 +134,7 @@ class ArtifactVerificationResult:
     expected_subdirs_present: bool = False
     expected_files: list[str] | None = None
     verification_message: str = ""
+    effective_remote_state: str = "unknown"
 
 
 @dataclass(frozen=True)
@@ -267,6 +268,24 @@ class LauncherStatusStore:
 
 def build_default_artifact_verification() -> ArtifactVerificationResult:
     return ArtifactVerificationResult(expected_files=[])
+
+
+def infer_remote_state_from_artifacts(extracted_dir: Path, remote_state: str) -> str:
+    normalized = str(remote_state or "").strip().lower()
+    if normalized and normalized != REMOTE_STATUS_UNKNOWN:
+        return normalized
+
+    status_path = extracted_dir / "run_status.json"
+    if not status_path.exists():
+        return normalized or REMOTE_STATUS_UNKNOWN
+
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return normalized or REMOTE_STATUS_UNKNOWN
+
+    inferred = str(payload.get("state", "")).strip().lower()
+    return inferred or normalized or REMOTE_STATUS_UNKNOWN
 
 
 def sha256_file(path: Path) -> str:
@@ -1202,6 +1221,7 @@ def inspect_preserved_artifacts(
 ) -> ArtifactVerificationResult:
     verification = build_default_artifact_verification()
     verification.expected_files = []
+    verification.effective_remote_state = infer_remote_state_from_artifacts(extracted_dir, remote_state)
     if tarball_path is not None:
         verification.tarball_exists = tarball_path.exists()
         verification.tarball_size_bytes = tarball_path.stat().st_size if tarball_path.exists() else 0
@@ -1225,7 +1245,7 @@ def inspect_preserved_artifacts(
     verification.extraction_verified = verification.extracted_dir_exists
     verification.expected_subdirs_present = logs_dir.exists()
 
-    if remote_state == "completed":
+    if verification.effective_remote_state == "completed":
         outputs_dir = extracted_dir / "Outputs"
         if not outputs_dir.exists():
             verification.verification_message = "Completed run did not preserve Outputs."
@@ -1594,10 +1614,10 @@ def launch_remote_runner(
     zone: str,
     remote_runner_path: str,
     remote_run_root: str,
-) -> None:
+) -> subprocess.CompletedProcess[str]:
     clean_runner_path = sanitize_run_token(remote_runner_path)
     clean_run_root = sanitize_run_token(remote_run_root)
-    ssh_command(
+    return ssh_command(
         gcloud_base,
         instance_name,
         zone,
@@ -1607,6 +1627,7 @@ def launch_remote_runner(
             f"nohup sudo bash {clean_runner_path} {clean_run_root} > "
             f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null &"
         ),
+        check=False,
     )
 
 
@@ -1775,8 +1796,9 @@ def main(argv: list[str] | None = None) -> int:
 
     gcloud_base = build_gcloud_base(preflight.gcloud_bin, preflight.project_id)
 
-    if args.recover_run:
-        recover_run_id = sanitize_run_token(args.recover_run)
+    recover_run = getattr(args, "recover_run", None)
+    if recover_run:
+        recover_run_id = sanitize_run_token(recover_run)
         run_dir = build_local_run_dir(results_root, recover_run_id)
         print(f"Recovering existing run: {recover_run_id}")
         return recover_existing_run(
@@ -1922,13 +1944,21 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         status_store.update("running", "remote_start", "Starting remote orchestration script.")
-        launch_remote_runner(
+        launch_result = launch_remote_runner(
             gcloud_base,
             args.instance_name,
             args.zone,
             remote["runner"],
             remote["run_root"],
         )
+        if launch_result.returncode != 0:
+            status_store.update(
+                "running",
+                "remote_start_warning",
+                "Remote launch command returned non-zero; verifying whether remote orchestration actually started.",
+                remote_start_returncode=launch_result.returncode,
+                remote_start_stderr=(launch_result.stderr or "").strip()[:1000],
+            )
         runner_started, runner_guard = verify_remote_runner_started(
             gcloud_base,
             args.instance_name,
@@ -2179,6 +2209,7 @@ def main(argv: list[str] | None = None) -> int:
                     extracted_dir=artifact_result.extracted_dir,
                     remote_state=remote_state,
                 )
+                remote_state = artifact_verification.effective_remote_state or remote_state
                 final_retrieval_success = artifact_verification.artifact_verified
                 if final_retrieval_success and remote_state == "completed":
                     run_outcome = RUN_OUTCOME_COMPLETED_VERIFIED

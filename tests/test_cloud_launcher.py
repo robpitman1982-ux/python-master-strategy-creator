@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import tarfile
 from pathlib import Path
 
@@ -239,6 +240,25 @@ def test_verify_preserved_results_rejects_completed_outputs_without_meaningful_f
     assert "result files" in message
 
 
+def test_inspect_preserved_artifacts_infers_completed_state_from_preserved_run_status(tmp_path: Path):
+    extracted_dir = tmp_path / "artifacts"
+    _write_text(extracted_dir / "run_status.json", json.dumps({"state": "completed"}))
+    _write_text(extracted_dir / "manifest.json", "{}")
+    _write_text(extracted_dir / "config.yaml", "datasets: []\n")
+    _write_text(extracted_dir / "logs" / "engine_run.log", "ok\n")
+    _write_text(extracted_dir / "Outputs" / "ES_60m" / "family_summary_results.csv", "col\n1\n")
+
+    verification = inspect_preserved_artifacts(
+        tarball_path=None,
+        extracted_dir=extracted_dir,
+        remote_state="unknown",
+    )
+
+    assert verification.effective_remote_state == "completed"
+    assert verification.expected_outputs_present is True
+    assert verification.artifact_verified is True
+
+
 def test_verify_preserved_results_requires_metadata_for_failed_runs(tmp_path: Path):
     extracted_dir = tmp_path / "artifacts"
     _write_text(extracted_dir / "logs" / "runner.log", "failed\n")
@@ -247,6 +267,29 @@ def test_verify_preserved_results_requires_metadata_for_failed_runs(tmp_path: Pa
 
     assert verified is False
     assert "Missing preserved metadata" in message
+
+
+def test_launch_remote_runner_does_not_raise_on_nonzero_ssh_exit(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def _fake_ssh_command(_base, _instance, _zone, remote_command, check=True):
+        captured["remote_command"] = remote_command
+        captured["check"] = check
+        return subprocess.CompletedProcess(["gcloud"], 1, "", "transient ssh warning")
+
+    monkeypatch.setattr("cloud.launch_gcp_run.ssh_command", _fake_ssh_command)
+
+    result = launch_remote_runner(
+        ["gcloud"],
+        "strategy-sweep",
+        "us-central1-a",
+        "/tmp/strategy_engine_runs/test-run/remote_runner.sh",
+        "/tmp/strategy_engine_runs/test-run",
+    )
+
+    assert result.returncode == 1
+    assert captured["check"] is False
+    assert "nohup sudo bash" in str(captured["remote_command"])
 
 
 def test_run_preflight_validates_config_gcloud_project_and_datasets(tmp_path: Path, monkeypatch):
