@@ -917,13 +917,14 @@ def test_build_destroy_decision_preserves_when_keep_vm_requested():
     assert "delete the instance manually" in decision.operator_action
 
 
-def test_remote_runner_script_contains_console_upload(tmp_path: Path):
-    """Generated runner script includes SCP upload to console."""
+def test_remote_runner_script_contains_bucket_upload(tmp_path: Path):
+    """Generated runner script uploads artifacts to the configured GCS bucket."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
 
-    assert "gcloud compute scp" in text
-    assert "artifact_staging" in text
+    assert 'BUCKET_URI="' in text
+    assert "gcloud storage cp" in text
+    assert "artifacts.tar.gz" in text
     assert "FIRE_AND_FORGET_ENABLED" in text
 
 
@@ -937,16 +938,13 @@ def test_remote_runner_script_contains_self_delete(tmp_path: Path):
 
 
 def test_remote_runner_script_preserves_vm_on_upload_failure(tmp_path: Path):
-    """Runner does not self-delete if console upload fails."""
+    """Runner does not self-delete if bucket upload verification fails."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
 
-    # Upload failure branch must exit before the self-delete block
-    upload_fail_idx = text.index("VM preserved for manual recovery")
-    self_delete_idx = text.index("gcloud compute instances delete")
-    assert upload_fail_idx < self_delete_idx, (
-        "VM-preserve exit must appear before the self-delete command"
-    )
+    assert "Upload verification failed. VM preserved." in text
+    assert 'write_status "completed" "upload_failed" "Upload verification failed. VM preserved." 1' in text
+    assert 'gcloud compute instances delete "$(hostname)" --zone="$COMPUTE_ZONE" --quiet' in text
 
 
 def test_fire_and_forget_flag_recognized():
@@ -960,27 +958,20 @@ def test_fire_and_forget_flag_recognized():
     assert args_on.fire_and_forget is True
 
 
-def test_remote_runner_injects_console_details(tmp_path: Path):
-    """Console instance, zone, user, storage and compute zone are injected into runner script."""
+def test_remote_runner_injects_bucket_and_compute_zone(tmp_path: Path):
+    """Bucket URI and compute zone are injected into the fire-and-forget runner script."""
     runner_path = create_remote_runner_file(
         tmp_path,
         fire_and_forget=True,
-        console_instance="my-console",
-        console_zone="us-east1-b",
-        console_user="myuser",
-        console_storage="/home/myuser/storage",
+        bucket_uri="gs://my-test-bucket",
         compute_zone="us-central1-a",
     )
     text = runner_path.read_text(encoding="utf-8")
 
-    assert 'CONSOLE_INSTANCE="my-console"' in text
-    assert 'CONSOLE_ZONE="us-east1-b"' in text
-    assert 'CONSOLE_USER="myuser"' in text
-    assert 'CONSOLE_STORAGE="/home/myuser/storage"' in text
+    assert 'BUCKET_URI="gs://my-test-bucket"' in text
     assert 'COMPUTE_ZONE="us-central1-a"' in text
     assert 'FIRE_AND_FORGET_ENABLED="1"' in text
-    # No placeholders left unreplaced
-    assert "__CONSOLE_INSTANCE__" not in text
+    assert "__BUCKET_URI__" not in text
     assert "__FIRE_AND_FORGET_ENABLED__" not in text
 
 
@@ -1120,39 +1111,23 @@ def test_main_dry_run_stops_before_vm_creation(tmp_path: Path, monkeypatch):
     assert (run_dirs[0] / "input_bundle.tar.gz").exists()
 
 
-def test_remote_runner_script_ssh_disables_host_key_checking(tmp_path: Path):
-    """All gcloud SSH calls in runner include StrictHostKeyChecking=no."""
-    import re
-
+def test_remote_runner_script_uses_gcloud_storage_for_bucket_upload(tmp_path: Path):
+    """Bucket-mode runner uses gcloud storage commands instead of nested SSH/SCP."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
 
-    # Count SSH calls and flag occurrences — commands span multiple lines so we
-    # compare counts rather than per-line matching.
-    ssh_call_count = len(re.findall(r"gcloud compute ssh", text))
-    flag_count = len(re.findall(r"StrictHostKeyChecking=no", text))
-    assert ssh_call_count > 0, "No gcloud compute ssh calls found in runner"
-    assert flag_count >= ssh_call_count, (
-        f"StrictHostKeyChecking=no ({flag_count}) < gcloud compute ssh calls ({ssh_call_count})"
-    )
+    assert "gcloud storage cp" in text
+    assert "gcloud storage ls" in text
+    assert "gcloud compute ssh" not in text
+    assert "gcloud compute scp" not in text
 
 
-def test_remote_runner_script_scp_disables_host_key_checking(tmp_path: Path):
-    """All gcloud SCP calls in runner include strict-host-key-checking=no."""
-    import re
-
+def test_remote_runner_script_uses_status_path_for_bucket_status_upload(tmp_path: Path):
+    """Bucket-mode fire-and-forget uploads the defined status file path, not an undefined shell variable."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-
-    # Count SCP calls and flag occurrences — commands span multiple lines.
-    scp_call_count = len(re.findall(r"gcloud compute scp", text))
-    flag_count = len(re.findall(r"--strict-host-key-checking=no", text))
-    assert scp_call_count > 0, "No gcloud compute scp calls found in runner"
-    assert flag_count >= scp_call_count, (
-        f"--strict-host-key-checking=no ({flag_count}) < gcloud compute scp calls ({scp_call_count})"
-    )
-    quiet_count = len(re.findall(r"gcloud compute scp --quiet", text))
-    assert quiet_count >= scp_call_count, f"--quiet ({quiet_count}) < gcloud compute scp calls ({scp_call_count})"
+    assert 'gcloud storage cp "$STATUS_PATH" "$BUCKET_URI/runs/$RUN_ID/run_status.json" || true' in text
+    assert "$RUN_DIR/run_status.json" not in text
 
 
 def test_remote_runner_script_disables_interactive_prompts(tmp_path: Path):
@@ -1162,56 +1137,41 @@ def test_remote_runner_script_disables_interactive_prompts(tmp_path: Path):
     assert "CLOUDSDK_CORE_DISABLE_PROMPTS=1" in text
 
 
-def test_remote_runner_script_ssh_has_timeouts(tmp_path: Path):
-    """SSH/SCP calls have timeouts to prevent infinite hangs."""
+def test_remote_runner_script_verifies_bucket_upload_before_self_delete(tmp_path: Path):
+    """Runner checks the artifact exists in the bucket before attempting self-delete."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-    assert "ConnectTimeout" in text or "timeout " in text
-    ssh_call_count = text.count("gcloud compute ssh")
-    quiet_ssh_count = text.count("gcloud compute ssh \"$CONSOLE_INSTANCE\" --quiet")
-    assert quiet_ssh_count >= 2
+    assert 'gcloud storage ls "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz" >/dev/null' in text
+    assert "Upload confirmed. Self-deleting" in text
 
 
-def test_remote_runner_script_upload_has_retry_loop(tmp_path: Path):
-    """Upload section retries up to 3 times on failure."""
+def test_remote_runner_script_reports_bucket_upload_failure(tmp_path: Path):
+    """Bucket upload failures are explicit and preserve the VM."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-    assert "MAX_RETRIES" in text or "ATTEMPT" in text
-    assert "Retrying" in text
+    assert 'write_status "completed" "upload_failed" "Upload artifacts to bucket failed." 1' in text
+    assert "[error] Upload failed. VM preserved." in text
 
 
-def test_remote_runner_script_verifies_master_leaderboard_before_success(tmp_path: Path):
-    """Fire-and-forget upload only succeeds after the console run folder has the master leaderboard."""
+def test_remote_runner_script_uploads_artifacts_and_status_to_bucket(tmp_path: Path):
+    """Bucket-mode runner uploads both artifacts.tar.gz and run_status.json."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-    assert "artifacts/Outputs/master_leaderboard.csv" in text
-    assert "test -f" in text
+    assert 'gcloud storage cp "$ARTIFACT_TARBALL" "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz"' in text
+    assert 'gcloud storage cp "$STATUS_PATH" "$BUCKET_URI/runs/$RUN_ID/run_status.json" || true' in text
 
 
-def test_remote_runner_script_only_treats_logs_copy_as_optional(tmp_path: Path):
-    """The optional logs copy does not mask a failed Outputs install."""
+def test_remote_runner_script_self_delete_targets_instance_hostname(tmp_path: Path):
+    """Bucket-mode cleanup still deletes the current compute instance by name."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-    assert "sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/" in text
-    assert "if [ -d logs ]; then" in text
+    assert 'gcloud compute instances delete "$(hostname)" --zone="$COMPUTE_ZONE" --quiet' in text
 
 
-def test_remote_runner_script_puts_gcloud_command_before_raw_ssh_flags(tmp_path: Path):
-    """gcloud compute ssh uses --command before the raw `-- -o ...` SSH flags."""
-    import re
-
+def test_remote_runner_script_bucket_upload_happens_before_delete(tmp_path: Path):
+    """Artifact upload appears before cleanup in the bucket-mode runner."""
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
-    assert '-- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30' in text
-    assert re.search(
-        r'--command="mkdir -p /tmp/artifact_staging/\$\{RUN_ID\}"\s*\\\s*[\r\n]+\s*-- -o StrictHostKeyChecking=no',
-        text,
-    )
-
-
-def test_remote_runner_script_retries_failed_staging_directory_creation(tmp_path: Path):
-    """A failed console staging mkdir retries instead of falling through to SCP."""
-    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
-    text = runner_path.read_text(encoding="utf-8")
-    assert "Staging directory creation failed" in text
-    assert "continue" in text
+    upload_idx = text.index('gcloud storage cp "$ARTIFACT_TARBALL" "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz"')
+    delete_idx = text.index('gcloud compute instances delete "$(hostname)" --zone="$COMPUTE_ZONE" --quiet')
+    assert upload_idx < delete_idx

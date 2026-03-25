@@ -37,6 +37,8 @@ DEFAULT_STRATEGY_CONSOLE_INSTANCE = "strategy-console"
 DEFAULT_STRATEGY_CONSOLE_ZONE = "us-central1-c"
 DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT = "/home/robpitman1982/strategy_console_storage"
 DEFAULT_STRATEGY_CONSOLE_REMOTE_USER = "robpitman1982"
+DEFAULT_BUCKET_NAME = "strategy-artifacts-robpitman"
+DEFAULT_BUCKET_URI = f"gs://{DEFAULT_BUCKET_NAME}"
 
 
 EXCLUDED_DIR_NAMES = {
@@ -394,10 +396,7 @@ set -euo pipefail
 
 RUN_ROOT="$1"
 FIRE_AND_FORGET_ENABLED="__FIRE_AND_FORGET_ENABLED__"
-CONSOLE_INSTANCE="__CONSOLE_INSTANCE__"
-CONSOLE_ZONE="__CONSOLE_ZONE__"
-CONSOLE_USER="__CONSOLE_USER__"
-CONSOLE_STORAGE="__CONSOLE_STORAGE__"
+BUCKET_URI="__BUCKET_URI__"
 COMPUTE_ZONE="__COMPUTE_ZONE__"
 STATUS_PATH="$RUN_ROOT/run_status.json"
 BUNDLE_PATH="$RUN_ROOT/input_bundle.tar.gz"
@@ -599,96 +598,39 @@ else
     write_status "failed" "finished" "Engine failed" "$ENGINE_EXIT"
 fi
 
-# --- FIRE-AND-FORGET: Upload artifacts to strategy-console and self-delete ---
+# --- FIRE-AND-FORGET: Upload artifacts to GCS Bucket and self-delete ---
 if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
     RUN_ID=$(basename "$RUN_ROOT")
 
-    echo "[upload] Uploading artifacts to strategy-console..."
+    echo "[upload] Uploading artifacts to Bucket: $BUCKET_URI"
 
     # Prevent any interactive prompts during fire-and-forget upload
     export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
-    UPLOAD_SUCCESS=0
-    MAX_RETRIES=3
-
-    for ATTEMPT in 1 2 3; do
-      echo "[upload] Attempt $ATTEMPT of $MAX_RETRIES..."
-
-      # Create staging dir on console
-      timeout 60 gcloud compute ssh "$CONSOLE_INSTANCE" --quiet --zone="$CONSOLE_ZONE" \
-        --ssh-key-expire-after=60m \
-        --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
-        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
-        2>/dev/null
-
-      if [ $? -ne 0 ]; then
-        echo "[upload] Staging directory creation failed on attempt $ATTEMPT. Retrying in 15 seconds..."
-        sleep 15
-        continue
-      fi
-
-      # SCP tarball to console staging
-      timeout 300 gcloud compute scp --quiet \
-        --strict-host-key-checking=no \
-        "$ARTIFACT_TARBALL" \
-        "${CONSOLE_INSTANCE}:/tmp/artifact_staging/${RUN_ID}/artifacts.tar.gz" \
-        --zone="$CONSOLE_ZONE" \
-        2>/dev/null
-
-      if [ $? -ne 0 ]; then
-        echo "[upload] SCP failed on attempt $ATTEMPT. Retrying in 15 seconds..."
-        sleep 15
-        continue
-      fi
-
-      # SSH into console to unpack and install into canonical storage
-      timeout 120 gcloud compute ssh "$CONSOLE_INSTANCE" --quiet --zone="$CONSOLE_ZONE" \
-        --ssh-key-expire-after=60m \
-        --command="
-          mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
-          cd /tmp/artifact_staging/${RUN_ID}/unpacked &&
-          tar -xzf ../artifacts.tar.gz &&
-          sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts &&
-          sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ &&
-          if [ -d logs ]; then
-            sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/
-          fi &&
-          sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/exports &&
-          for f in master_leaderboard.csv master_leaderboard_bootcamp.csv; do
-            if [ -f Outputs/\$f ]; then
-              sudo -u ${CONSOLE_USER} cp Outputs/\$f ${CONSOLE_STORAGE}/exports/
-            fi
-          done &&
-          sudo -u ${CONSOLE_USER} test -f ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/Outputs/master_leaderboard.csv &&
-          echo '${RUN_ID}' | sudo -u ${CONSOLE_USER} tee ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
-          echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
-          rm -rf /tmp/artifact_staging/${RUN_ID} &&
-          echo '[upload] Artifacts installed to console storage and verified.'
-        " \
-        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
-        2>/dev/null
-
-      if [ $? -eq 0 ]; then
-        UPLOAD_SUCCESS=1
-        echo "[upload] SUCCESS on attempt $ATTEMPT."
-        break
-      else
-        echo "[upload] Install failed on attempt $ATTEMPT. Retrying in 15 seconds..."
-        sleep 15
-      fi
-    done
-
-    if [ $UPLOAD_SUCCESS -ne 1 ]; then
-      echo "[upload] FAILED after $MAX_RETRIES attempts. VM preserved for manual recovery."
-      write_status "completed" "upload_failed" "Engine done but console upload failed after $MAX_RETRIES attempts. VM preserved." 0
+    # 1. Upload the tarball
+    echo "[upload] Copying artifacts to cloud storage..."
+    if gcloud storage cp "$ARTIFACT_TARBALL" "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz"; then
+        echo "[upload] Artifacts tarball uploaded."
     else
-      write_status "completed" "uploaded" "Artifacts uploaded to console. VM will self-delete." 0
-      echo "[cleanup] Self-deleting compute VM in 5 seconds..."
-      sleep 5
-      gcloud compute instances delete "$(hostname)" \
-        --zone="$COMPUTE_ZONE" \
-        --quiet \
-        2>/dev/null &
+        write_status "completed" "upload_failed" "Upload artifacts to bucket failed." 1
+        echo "[error] Upload failed. VM preserved."
+        exit 1
+    fi
+
+    # 2. Upload status file
+    echo "[upload] Copying status file..."
+    gcloud storage cp "$STATUS_PATH" "$BUCKET_URI/runs/$RUN_ID/run_status.json" || true
+
+    # 3. Verify
+    echo "[upload] Verifying upload..."
+    if gcloud storage ls "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz" >/dev/null; then
+        write_status "completed" "uploaded" "Artifacts uploaded to Bucket. VM will self-delete." 0
+        echo "[cleanup] Upload confirmed. Self-deleting in 10 seconds..."
+        sleep 10
+        gcloud compute instances delete "$(hostname)" --zone="$COMPUTE_ZONE" --quiet
+    else
+        write_status "completed" "upload_failed" "Upload verification failed. VM preserved." 1
+        echo "[error] Upload verification failed. VM preserved."
     fi
 fi
 
@@ -1092,6 +1034,7 @@ def create_instance(gcloud_base: list[str], args: argparse.Namespace, startup_me
         f"--image-project={args.image_project}",
         f"--boot-disk-size={args.boot_disk_size}",
         "--boot-disk-type=pd-ssd",
+        "--scopes=cloud-platform",
         "--metadata",
         f"strategy-engine-note={startup_message}",
     ]
@@ -1975,18 +1918,12 @@ def create_remote_runner_file(
     run_dir: Path,
     *,
     fire_and_forget: bool = False,
-    console_instance: str = DEFAULT_STRATEGY_CONSOLE_INSTANCE,
-    console_zone: str = DEFAULT_STRATEGY_CONSOLE_ZONE,
-    console_user: str = DEFAULT_STRATEGY_CONSOLE_REMOTE_USER,
-    console_storage: str = DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT,
+    bucket_uri: str = DEFAULT_BUCKET_URI,
     compute_zone: str = DEFAULT_ZONE,
 ) -> Path:
     script = REMOTE_RUNNER_SCRIPT
     script = script.replace("__FIRE_AND_FORGET_ENABLED__", "1" if fire_and_forget else "0")
-    script = script.replace("__CONSOLE_INSTANCE__", console_instance)
-    script = script.replace("__CONSOLE_ZONE__", console_zone)
-    script = script.replace("__CONSOLE_USER__", console_user)
-    script = script.replace("__CONSOLE_STORAGE__", console_storage)
+    script = script.replace("__BUCKET_URI__", bucket_uri)
     script = script.replace("__COMPUTE_ZONE__", compute_zone)
     runner_path = run_dir / "remote_runner.sh"
     with runner_path.open("w", encoding="utf-8", newline="\n") as handle:
@@ -2159,6 +2096,20 @@ def monitor_run(
             return remote_status
 
 
+def ensure_bucket_exists(gcloud_base: list[str], bucket_uri: str, location: str = "us-central1") -> None:
+    cmd_base = [gcloud_base[0]] # Get executable (gcloud/gcloud.cmd)
+    if "--project" in gcloud_base:
+        idx = gcloud_base.index("--project")
+        cmd_base.extend(["--project", gcloud_base[idx + 1]])
+
+    result = run_command(cmd_base + ["storage", "buckets", "describe", bucket_uri], check=False, capture_output=True)
+    if result.returncode == 0:
+        return
+
+    print(f"Creating GCS bucket: {bucket_uri} in {location}")
+    run_command(cmd_base + ["storage", "buckets", "create", bucket_uri, f"--location={location}"])
+
+
 def print_manifest_summary(manifest: RunManifest) -> None:
     print("=" * 60)
     print("GCP Strategy Engine Launcher")
@@ -2212,6 +2163,7 @@ def main(argv: list[str] | None = None) -> int:
     if "image_family" in cloud_cfg and args.image_family == DEFAULT_IMAGE_FAMILY:
         args.image_family = cloud_cfg["image_family"]
     remote_config = build_remote_config(config, datasets)
+    bucket_uri = DEFAULT_BUCKET_URI
 
     run_id = make_run_id(args.instance_name)
     local_run_dir = build_local_run_dir(results_root, run_id)
@@ -2248,6 +2200,7 @@ def main(argv: list[str] | None = None) -> int:
     runner_path = create_remote_runner_file(
         local_run_dir,
         fire_and_forget=getattr(args, "fire_and_forget", False),
+        bucket_uri=bucket_uri,
         compute_zone=args.zone,
     )
     bundle_path = local_run_dir / DEFAULT_BUNDLE_NAME
@@ -2294,6 +2247,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Latest run pointer: {latest_run_path}")
         print_final_run_summary(status_store.latest_path, local_run_dir)
         return 0
+
+    if getattr(args, "fire_and_forget", False):
+        ensure_bucket_exists(gcloud_base, bucket_uri)
 
     exit_code = 0
     run_outcome: str | None = None
@@ -2390,13 +2346,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"VM: {manifest.instance_name} ({manifest.zone}, {manifest.machine_type})")
                 print()
                 print("The engine is running. When it finishes, the VM will:")
-                print("  1. Upload artifacts to strategy-console storage")
+                print(f"  1. Upload artifacts to GCS Bucket: {bucket_uri}")
                 print("  2. Self-delete to stop billing")
                 print()
                 print("You can safely close this terminal.")
                 print("Check results later:")
-                print(f"  cat ~/strategy_console_storage/runs/LATEST_RUN.txt")
-                print(f"  ls ~/strategy_console_storage/runs/{manifest.run_id}/artifacts/Outputs/")
+                print(f"  python download_run.py --latest")
+                print(f"  python download_run.py {manifest.run_id}")
                 print("====================")
                 return 0
         if run_outcome is None:
