@@ -357,7 +357,7 @@ def test_master_leaderboard():
                 "oos_pf": 1.86,
                 "recent_12m_pf": 1.5,
                 "leader_hold_bars": 5,
-                "leader_stop_distance_points": 0.75,
+                "leader_stop_distance_atr": 0.75,
                 "best_combo_filters": "DistanceBelowSMA,TwoBarDown,ReversalUp",
             },
             {
@@ -373,7 +373,7 @@ def test_master_leaderboard():
                 "oos_pf": 0.70,
                 "recent_12m_pf": 0.9,
                 "leader_hold_bars": 6,
-                "leader_stop_distance_points": 1.25,
+                "leader_stop_distance_atr": 1.25,
                 "best_combo_filters": "TrendDirection,Pullback,Recovery",
             },
         ])

@@ -112,7 +112,7 @@ def aggregate_master_leaderboard(
         "leader_max_drawdown",
         "calmar_ratio",
         "leader_hold_bars",
-        "leader_stop_distance_points",
+        "leader_stop_distance_atr",
         "best_combo_filters",
     ]
     output_cols = [c for c in preferred_cols if c in combined.columns]
