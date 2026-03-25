@@ -186,6 +186,7 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a â€” now us-central1-a; also configurable per YAML via cloud.zone
 - [x] run_cloud_sweep.py printed misleading stage labels unconditionally â€” fixed, wrapper now only prints config and exit code
 - [x] Remote runner Python drift could break pinned dependencies â€” launcher now bootstraps python3.12 explicitly for remote GCP venv creation
+- [x] Fire-and-forget SSH host key hang â€” all gcloud SSH/SCP calls now use StrictHostKeyChecking=no, ConnectTimeout=30, and CLOUDSDK_CORE_DISABLE_PROMPTS=1; upload retries 3 times before preserving VM
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable â€” now in config.yaml with multi-dataset loop support
@@ -285,6 +286,9 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml
 
 # Dry run (no VM created)
 python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml --dry-run
+
+# Fire-and-forget run (from strategy-console SSH):
+python3 run_cloud_sweep.py --config cloud/config_es_daily_only.yaml --fire-and-forget
 ```
 
 ## Session workflow
@@ -314,6 +318,6 @@ python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml -
 **Dashboard tabs**: Live Monitor | Results | Ultimate Leaderboard | Run History | System
 
 ## Last updated
-2026-03-25 - Session 31: Filter vectorization complete; VM run strategy-sweep-20260324T071642Z launched
+2026-03-25 - Session 32B: Fire-and-forget SSH host key fix; retry logic; config_es_daily_only.yaml added
 
 

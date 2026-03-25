@@ -1,5 +1,36 @@
 ﻿# CHANGELOG_DEV.md â€” Session-by-session development log
 
+## 2026-03-25 — Session 32B: Fix fire-and-forget SSH host key failure
+
+**What was done**:
+- Fixed SSH host key verification hang: all gcloud SSH/SCP calls in the
+  fire-and-forget upload section now use StrictHostKeyChecking=no and
+  UserKnownHostsFile=/dev/null
+- Added CLOUDSDK_CORE_DISABLE_PROMPTS=1 to prevent any interactive prompts
+- Added ConnectTimeout=30 to SSH and timeout wrappers on SCP to prevent hangs
+- Added 3-attempt retry loop for the upload sequence — transient SSH failures
+  no longer leave artifacts stranded
+- VM still only self-deletes if upload succeeds (safety guard unchanged)
+- Added cloud/config_es_daily_only.yaml for fast validation runs
+
+**Root cause**:
+- Fresh compute VMs have no cached SSH host keys for strategy-console
+- gcloud compute ssh prompts for host key confirmation interactively
+- Under nohup (non-interactive), the prompt hangs forever
+- Engine completes but artifacts never upload and VM never self-deletes
+
+**Verified**:
+- All tests pass including new host key bypass and retry tests
+- Runner script verified to contain StrictHostKeyChecking=no on all SSH calls
+- Runner script verified to contain retry logic with 3 attempts
+
+**Next steps**:
+1. Push to GitHub, pull on strategy-console
+2. Run: python3 run_cloud_sweep.py --config cloud/config_es_daily_only.yaml --fire-and-forget
+3. Verify artifacts land in ~/strategy_console_storage/runs/ and VM self-deletes
+
+---
+
 ## 2026-03-25 — Session 32: Fire-and-forget VM + leaderboard polish + EasyLanguage prep
 
 **What was done**:
