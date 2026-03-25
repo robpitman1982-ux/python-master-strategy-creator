@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-26 — Session 34: Diagnose all-timeframes launch failure + GCS bundle staging fix
+
+**Root cause of 2026-03-25 launch failure** (`strategy-sweep-20260325T202915Z`):
+- SPOT preemption during the 43MB `gcloud compute scp` of the input bundle from strategy-console (e2-micro) to the sweep VM
+- Daily run succeeded because the bundle was ~0.3MB (SCP completes in seconds before preemption can occur)
+- All-timeframes run had a 43MB bundle (4 data files); SCP took long enough for preemption to hit
+- Preemption drops the SSH connection → `CalledProcessError` → launcher exits with `unexpected_launcher_failure` + `vm_already_gone`
+
+**Fix implemented**:
+- In fire-and-forget mode, input bundle is now uploaded to GCS staging (`gs://bucket/staging/{run_id}/input_bundle.tar.gz`) before VM creation, not SCP'd after SSH is ready
+- Remote runner downloads bundle from GCS at bootstrap time if not present on disk
+- SCP now only transfers manifest.json (~1KB) and remote_runner.sh (~10KB) — completes in seconds, no preemption window
+- validate_remote check skips bundle presence when using GCS staging (bundle is pulled by runner, not pre-staged via SCP)
+- 2 new tests added; all 156 tests pass
+
+**Test result**: 156/156 pass
+
+**Next step**: Relaunch from strategy-console:
+```bash
+cd /home/robpitman1982/python-master-strategy-creator && git pull && python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_gcp96.yaml --fire-and-forget
+```
+
+---
+
 ## 2026-03-26 — Session 33: Pre-flight check + launch prep
 
 **What was done**:
