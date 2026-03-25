@@ -56,6 +56,8 @@ def _make_manifest(tmp_path: Path, datasets: list[DatasetSpec]) -> RunManifest:
     return RunManifest(
         run_id="test-run",
         created_utc="2026-03-20T00:00:00+00:00",
+        created_local="2026-03-20 11:00 (local)",
+        run_label="2026-03-20_11-00_ES-60m",
         instance_name="strategy-sweep",
         zone="australia-southeast2-a",
         machine_type="n2-highcpu-96",
@@ -352,6 +354,8 @@ def test_launcher_status_store_writes_stable_top_level_fields(tmp_path: Path):
         local_results_dir=str(run_dir),
         remote_run_root="/tmp/strategy_engine_runs/test-run",
         created_utc="2026-03-20T00:00:00+00:00",
+        created_local="2026-03-20 11:00 (local)",
+        run_label="2026-03-20_11-00_ES-60m",
     )
 
     store.update("running", "bundle", "Input bundle created.", bundle_size_bytes=1234)
@@ -383,6 +387,8 @@ def test_launcher_status_store_preserves_existing_non_none_fields(tmp_path: Path
         local_results_dir=str(run_dir),
         remote_run_root="/tmp/strategy_engine_runs/test-run",
         created_utc="2026-03-20T00:00:00+00:00",
+        created_local="2026-03-20 11:00 (local)",
+        run_label="2026-03-20_11-00_ES-60m",
     )
 
     store.update(
@@ -687,6 +693,8 @@ def test_recover_existing_run_uses_verified_local_artifacts_without_remote_calls
     manifest = RunManifest(
         run_id=run_dir.name,
         created_utc="2026-03-24T01:02:03+00:00",
+        created_local="2026-03-24 12:02 (local)",
+        run_label="2026-03-24_12-02_ES-all",
         instance_name="strategy-sweep",
         zone="us-central1-a",
         machine_type="n2-highcpu-96",
@@ -799,6 +807,8 @@ def test_monitor_run_timeout_returns_non_success_and_never_implies_destroy(monke
         local_results_dir=str(run_dir),
         remote_run_root="/tmp/strategy_engine_runs/test-run",
         created_utc="2026-03-20T00:00:00+00:00",
+        created_local="2026-03-20 11:00 (local)",
+        run_label="2026-03-20_11-00_ES-60m",
     )
     manifest = _make_manifest(tmp_path, [])
     args = argparse.Namespace(instance_name="strategy-sweep", zone="australia-southeast2-a", poll_seconds=0, keep_vm=False)
@@ -1036,6 +1046,8 @@ def test_terminal_failure_status_fields_can_be_persisted(tmp_path: Path):
         local_results_dir=str(run_dir),
         remote_run_root="/tmp/strategy_engine_runs/test-run",
         created_utc="2026-03-20T00:00:00+00:00",
+        created_local="2026-03-20 11:00 (local)",
+        run_label="2026-03-20_11-00_ES-60m",
     )
 
     store.update(
