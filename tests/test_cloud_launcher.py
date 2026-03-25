@@ -917,6 +917,73 @@ def test_build_destroy_decision_preserves_when_keep_vm_requested():
     assert "delete the instance manually" in decision.operator_action
 
 
+def test_remote_runner_script_contains_console_upload(tmp_path: Path):
+    """Generated runner script includes SCP upload to console."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert "gcloud compute scp" in text
+    assert "artifact_staging" in text
+    assert "FIRE_AND_FORGET_ENABLED" in text
+
+
+def test_remote_runner_script_contains_self_delete(tmp_path: Path):
+    """Generated runner script includes gcloud instances delete."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert "gcloud compute instances delete" in text
+    assert "$(hostname)" in text
+
+
+def test_remote_runner_script_preserves_vm_on_upload_failure(tmp_path: Path):
+    """Runner does not self-delete if console upload fails."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+
+    # Upload failure branch must exit before the self-delete block
+    upload_fail_idx = text.index("VM preserved for manual recovery")
+    self_delete_idx = text.index("gcloud compute instances delete")
+    assert upload_fail_idx < self_delete_idx, (
+        "VM-preserve exit must appear before the self-delete command"
+    )
+
+
+def test_fire_and_forget_flag_recognized():
+    """--fire-and-forget flag is parsed correctly."""
+    from cloud.launch_gcp_run import parse_args
+
+    args_off = parse_args([])
+    assert args_off.fire_and_forget is False
+
+    args_on = parse_args(["--fire-and-forget"])
+    assert args_on.fire_and_forget is True
+
+
+def test_remote_runner_injects_console_details(tmp_path: Path):
+    """Console instance, zone, user, storage and compute zone are injected into runner script."""
+    runner_path = create_remote_runner_file(
+        tmp_path,
+        fire_and_forget=True,
+        console_instance="my-console",
+        console_zone="us-east1-b",
+        console_user="myuser",
+        console_storage="/home/myuser/storage",
+        compute_zone="us-central1-a",
+    )
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert 'CONSOLE_INSTANCE="my-console"' in text
+    assert 'CONSOLE_ZONE="us-east1-b"' in text
+    assert 'CONSOLE_USER="myuser"' in text
+    assert 'CONSOLE_STORAGE="/home/myuser/storage"' in text
+    assert 'COMPUTE_ZONE="us-central1-a"' in text
+    assert 'FIRE_AND_FORGET_ENABLED="1"' in text
+    # No placeholders left unreplaced
+    assert "__CONSOLE_INSTANCE__" not in text
+    assert "__FIRE_AND_FORGET_ENABLED__" not in text
+
+
 def test_build_destroy_decision_handles_instance_already_gone():
     decision = build_destroy_decision(
         status={

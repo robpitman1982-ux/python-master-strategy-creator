@@ -351,6 +351,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         choices=["SPOT", "STANDARD"],
         help="GCP provisioning model.",
     )
+    parser.add_argument(
+        "--fire-and-forget",
+        action="store_true",
+        help="Launch engine and exit. VM will self-upload artifacts to strategy-console and self-delete.",
+    )
     return parser.parse_args(argv)
 
 
@@ -388,6 +393,12 @@ REMOTE_RUNNER_SCRIPT = r"""#!/bin/bash
 set -euo pipefail
 
 RUN_ROOT="$1"
+FIRE_AND_FORGET_ENABLED="__FIRE_AND_FORGET_ENABLED__"
+CONSOLE_INSTANCE="__CONSOLE_INSTANCE__"
+CONSOLE_ZONE="__CONSOLE_ZONE__"
+CONSOLE_USER="__CONSOLE_USER__"
+CONSOLE_STORAGE="__CONSOLE_STORAGE__"
+COMPUTE_ZONE="__COMPUTE_ZONE__"
 STATUS_PATH="$RUN_ROOT/run_status.json"
 BUNDLE_PATH="$RUN_ROOT/input_bundle.tar.gz"
 LOG_DIR="$RUN_ROOT/logs"
@@ -587,6 +598,69 @@ if [ "$ENGINE_EXIT" -eq 0 ]; then
 else
     write_status "failed" "finished" "Engine failed" "$ENGINE_EXIT"
 fi
+
+# --- FIRE-AND-FORGET: Upload artifacts to strategy-console and self-delete ---
+if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
+    RUN_ID=$(basename "$RUN_ROOT")
+
+    echo "[upload] Uploading artifacts to strategy-console..."
+
+    # Create staging dir on console
+    gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
+      --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
+      2>/dev/null || true
+
+    # SCP tarball to console staging
+    gcloud compute scp "$ARTIFACT_TARBALL" \
+      "${CONSOLE_INSTANCE}:/tmp/artifact_staging/${RUN_ID}/artifacts.tar.gz" \
+      --zone="$CONSOLE_ZONE" \
+      2>/dev/null
+
+    SCP_EXIT=$?
+
+    if [ $SCP_EXIT -ne 0 ]; then
+      echo "[upload] WARNING: SCP to console failed (exit $SCP_EXIT). VM preserved for manual recovery."
+      write_status "completed" "upload_failed" "Engine done but console upload failed. VM preserved." 0
+      exit 0
+    fi
+
+    # SSH into console to unpack and install into canonical storage
+    gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" --command="
+      mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
+      cd /tmp/artifact_staging/${RUN_ID}/unpacked &&
+      tar -xzf ../artifacts.tar.gz &&
+      sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts &&
+      sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ &&
+      sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ 2>/dev/null || true &&
+      sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/exports &&
+      for f in master_leaderboard.csv master_leaderboard_bootcamp.csv; do
+        if [ -f Outputs/\$f ]; then
+          sudo -u ${CONSOLE_USER} cp Outputs/\$f ${CONSOLE_STORAGE}/exports/
+        fi
+      done &&
+      echo '${RUN_ID}' | sudo -u ${CONSOLE_USER} tee ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
+      echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
+      rm -rf /tmp/artifact_staging/${RUN_ID} &&
+      echo '[upload] Artifacts installed to console storage.'
+    " 2>/dev/null
+
+    UPLOAD_EXIT=$?
+    if [ $UPLOAD_EXIT -eq 0 ]; then
+      echo "[upload] SUCCESS: Artifacts uploaded to strategy-console."
+      write_status "completed" "uploaded" "Artifacts uploaded to console. VM will self-delete." 0
+
+      echo "[cleanup] Self-deleting compute VM in 5 seconds..."
+      sleep 5
+      gcloud compute instances delete "$(hostname)" \
+        --zone="$COMPUTE_ZONE" \
+        --quiet \
+        2>/dev/null &
+    else
+      echo "[upload] WARNING: Upload to console failed (exit $UPLOAD_EXIT). VM preserved for manual recovery."
+      write_status "completed" "upload_failed" "Engine done but console upload failed. VM preserved." 0
+    fi
+fi
+
 exit "$ENGINE_EXIT"
 """
 
@@ -1866,10 +1940,26 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     print("=============================")
 
 
-def create_remote_runner_file(run_dir: Path) -> Path:
+def create_remote_runner_file(
+    run_dir: Path,
+    *,
+    fire_and_forget: bool = False,
+    console_instance: str = DEFAULT_STRATEGY_CONSOLE_INSTANCE,
+    console_zone: str = DEFAULT_STRATEGY_CONSOLE_ZONE,
+    console_user: str = DEFAULT_STRATEGY_CONSOLE_REMOTE_USER,
+    console_storage: str = DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT,
+    compute_zone: str = DEFAULT_ZONE,
+) -> Path:
+    script = REMOTE_RUNNER_SCRIPT
+    script = script.replace("__FIRE_AND_FORGET_ENABLED__", "1" if fire_and_forget else "0")
+    script = script.replace("__CONSOLE_INSTANCE__", console_instance)
+    script = script.replace("__CONSOLE_ZONE__", console_zone)
+    script = script.replace("__CONSOLE_USER__", console_user)
+    script = script.replace("__CONSOLE_STORAGE__", console_storage)
+    script = script.replace("__COMPUTE_ZONE__", compute_zone)
     runner_path = run_dir / "remote_runner.sh"
     with runner_path.open("w", encoding="utf-8", newline="\n") as handle:
-        handle.write(REMOTE_RUNNER_SCRIPT)
+        handle.write(script)
     return runner_path
 
 
@@ -2124,7 +2214,11 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path = local_run_dir / "run_manifest.json"
     manifest_path.write_text(json.dumps(asdict(manifest), indent=2), encoding="utf-8")
-    runner_path = create_remote_runner_file(local_run_dir)
+    runner_path = create_remote_runner_file(
+        local_run_dir,
+        fire_and_forget=getattr(args, "fire_and_forget", False),
+        compute_zone=args.zone,
+    )
     bundle_path = local_run_dir / DEFAULT_BUNDLE_NAME
 
     print_manifest_summary(manifest)
@@ -2257,6 +2351,23 @@ def main(argv: list[str] | None = None) -> int:
                 "Remote orchestration launch confirmed.",
                 remote_restart_guard=runner_guard,
             )
+            if getattr(args, "fire_and_forget", False):
+                print()
+                print("FIRE-AND-FORGET MODE")
+                print("====================")
+                print(f"Run ID: {manifest.run_id}")
+                print(f"VM: {manifest.instance_name} ({manifest.zone}, {manifest.machine_type})")
+                print()
+                print("The engine is running. When it finishes, the VM will:")
+                print("  1. Upload artifacts to strategy-console storage")
+                print("  2. Self-delete to stop billing")
+                print()
+                print("You can safely close this terminal.")
+                print("Check results later:")
+                print(f"  cat ~/strategy_console_storage/runs/LATEST_RUN.txt")
+                print(f"  ls ~/strategy_console_storage/runs/{manifest.run_id}/artifacts/Outputs/")
+                print("====================")
+                return 0
         if run_outcome is None:
             remote_status = monitor_run(
                 gcloud_base=gcloud_base,
