@@ -1,265 +1,28 @@
-﻿# CHANGELOG_DEV.md â€” Session-by-session development log
+﻿# CHANGELOG_DEV.md — Session-by-session development log
 
-## 2026-03-25 — Session 32B: Fix fire-and-forget SSH host key failure
-
-**What was done**:
-- Fixed SSH host key verification hang: all gcloud SSH/SCP calls in the
-  fire-and-forget upload section now use StrictHostKeyChecking=no and
-  UserKnownHostsFile=/dev/null
-- Added CLOUDSDK_CORE_DISABLE_PROMPTS=1 to prevent any interactive prompts
-- Added ConnectTimeout=30 to SSH and timeout wrappers on SCP to prevent hangs
-- Added 3-attempt retry loop for the upload sequence — transient SSH failures
-  no longer leave artifacts stranded
-- Tightened fire-and-forget upload verification: the remote install path now
-  requires `master_leaderboard.csv` to exist under
-  `~/strategy_console_storage/runs/<run-id>/artifacts/Outputs/` before the
-  upload is marked successful and before the VM self-deletes
-- VM still only self-deletes if upload succeeds (safety guard unchanged)
-- Added cloud/config_es_daily_only.yaml for fast validation runs
-
-**Root cause**:
-- Fresh compute VMs have no cached SSH host keys for strategy-console
-- gcloud compute ssh prompts for host key confirmation interactively
-- Under nohup (non-interactive), the prompt hangs forever
-- Engine completes but artifacts never upload and VM never self-deletes
-
-**Verified**:
-- All tests pass including new host key bypass and retry tests
-- Runner script verified to contain StrictHostKeyChecking=no on all SSH calls
-- Runner script verified to contain retry logic with 3 attempts
-
-**Next steps**:
-1. Push to GitHub, pull on strategy-console
-2. Run: python3 run_cloud_sweep.py --config cloud/config_es_daily_only.yaml --fire-and-forget
-3. Verify artifacts land in ~/strategy_console_storage/runs/ and VM self-deletes
-
----
-
-## 2026-03-25 — Session 32: Fire-and-forget VM + leaderboard polish + EasyLanguage prep
-
-**What was done**:
-- Compute VM now self-uploads artifacts to strategy-console and self-deletes
-  after engine completes — no launcher polling needed
-- Added --fire-and-forget CLI flag for fully unattended runs
-- Added max_drawdown and calmar_ratio to family and master leaderboard CSVs
-- Renamed stop_distance_points → stop_distance_atr in all CSV outputs
-- Created docs/EASYLANGUAGE_FILTER_MAP.md with complete filter-to-EasyLanguage
-  translation for all 30+ filters and a full MR strategy template
-- Fixed dashboard Live Monitor stale-state bug: ds_name derivation from
-  market+timeframe keys now correct, waiting placeholders shown instead of
-  stale previous-run artifacts
-
-**Why this matters**:
-- Fire-and-forget means you can start a run and close your laptop
-- VM self-deletes only if upload succeeds — safe against artifact loss
-- Calmar Ratio provides drawdown-adjusted performance for Bootcamp
-- EasyLanguage mapping is the bridge to TradeStation deployment
-
-**Next session priorities**:
-1. Run ES daily-only sweep with --fire-and-forget to validate
-2. Full all-timeframes run (daily/60m/30m/15m)
-3. Begin EasyLanguage conversion of top MR strategy
-4. Add 5m data
-
----
-
-## 2026-03-25 -- Session 31: Filter vectorization
-
-**What was done**:
-- Added vectorized `mask()` method to all 30+ filters in `modules/filters.py`
-- Each filter now produces a full-DataFrame boolean Series in one call
-- Added `compute_combined_signal_mask()` helper in `modules/vectorized_signals.py` for AND-combining filter masks
-- Added engine fast-path: `precomputed_signals` parameter to `engine.run()` skips per-bar `generate_signal()`
-- Wired vectorized path into all three family sweep pipelines (`_run_trend_combo_case`, `_run_mr_combo_case`, `_run_breakout_combo_case`)
-- Refinement now computes filter masks once per candidate (in `run_top_combo_refinement`), reused across all grid variants via `precomputed_signals` in `StrategyParameterRefiner`
-- Added `tests/test_vectorized_filters.py` with 34 tests: per-filter correctness (30 parameterized), combined mask, engine equivalence, benchmark
-
-**Key performance impact**:
-- Filter evaluation during sweep: ~50x faster (exact speedup logged in benchmark test output)
-- Refinement: filter masks computed once instead of N times per candidate grid
-- Trade simulation loop unchanged (Session 32 scope)
-
-**Verified**:
-- All 30 vectorized masks match bar-by-bar `passes()` output exactly (34/34 tests pass)
-- Existing smoke and launcher tests still pass (115 passed)
-- Engine with `precomputed_signals` produces identical trades to bar-by-bar path
-
-**Next session priorities**:
-1. Run ES all-timeframes sweep with vectorized engine -- measure real cloud speedup
-2. Add 5m data to sweep config
-3. Consider vectorizing trade simulation loop (Session 32)
-4. Dashboard stale-state fix for live monitoring
-
----
-
-## 2026-03-24 - Session 30: Bootcamp scoring
-
-**What was done**:
-- Added `modules/bootcamp_scoring.py` to compute deterministic Bootcamp-oriented ranking scores
-- Added dual leaderboard output at the family and master levels:
-  - classic research leaderboard
-  - Bootcamp leaderboard
-- Added `modules/bootcamp_report.py` for quick CLI inspection of Bootcamp-ranked strategies
-- Added `cloud/config_bootcamp_vm_run.yaml` for the full 96-core Bootcamp validation run
-- Ran local Bootcamp verification with `config_local_quick_test.yaml`
-- Launched the Session 30 full VM sweep and confirmed the remote engine reached `engine_start`
-- Added `docs/BOOTCAMP_SCORING_ANALYSIS.md` documenting the scoring model, local verification, and live VM run status
-
-**Key questions answered**:
-- Can the engine rank strategies using a survivability-focused score without replacing the classic research sort?
-  - Yes, Bootcamp score now exists as an explicit parallel ranking layer
-- Do we preserve existing outputs while adding the new ranking?
-  - Yes, classic outputs remain and Bootcamp companion leaderboards are written alongside them
-- Is the full Bootcamp validation run path ready?
-  - Yes, the 96-core VM run was launched; final artifact recovery and result comparison remain pending after the overnight run finishes
-
-**Next session priorities**:
-1. Recover and analyse the full Session 30 VM outputs
-2. Compare `master_leaderboard.csv` vs `master_leaderboard_bootcamp.csv`
-3. Begin Session 31 template-first strategy search once the Bootcamp run is reviewed
-
----
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
 ---
 
-## 2026-03-24 â€” Session 29: Exit validation sweep
+## 2026-03-26 — Session 33: Pre-flight check + launch prep
 
 **What was done**:
-- Added a focused ES validation config for testing new exit styles
-- Added `modules/exit_validation_report.py` to compare exit performance by family and dataset
-- Ensured family summary / leaderboard outputs expose exit-style result fields needed for validation analysis
-- Ran a local validation sweep on ES datasets using a reduced local harness after the full sequential run proved too heavy on the Windows laptop
-- Produced `docs/EXIT_VALIDATION_ANALYSIS.md` summarizing whether trailing stops, profit targets, and signal exits improved results
+- Verified bucket-based fire-and-forget workflow is on `main` (commit `be93325`+)
+- Confirmed `cloud/launch_gcp_run.py` contains full GCS upload logic: `BUCKET_URI`, `gcloud storage cp`, upload verification, self-delete after confirmed upload
+- Confirmed `modules/progress.py` has `done == 1 or done % step == 0` in both `update_sweep()` and `update_refinement()` — first-update fix is present
+- Confirmed vectorized filters are NOT implemented: `filters.py` has only a stub `apply_vectorized()` that falls back to row-by-row `passes()`; no numpy-based filter implementations; engine does not use vectorized filters. Not a blocker for this run.
+- Verified `cloud/config_es_all_timeframes_gcp96.yaml` is correct: 4 datasets, `strategy_types: all`, 94 workers, n2-highcpu-96 SPOT us-central1-a, `output_dir: Outputs`
+- Confirmed all 4 data files exist locally in `Data/`
+- Fixed 7 failing tests in `test_cloud_launcher.py` — `RunManifest` and `LauncherStatusStore` instantiations were missing `created_local` and `run_label` fields added in the run-labels commit
 
-**Key questions answered**:
-- Did trend improve with trailing stop?
-  - Not materially in the local validation; `time_stop` remained best
-- Did breakout improve with trailing stop?
-  - Yes on `ES_30m`; `trailing_stop` clearly outperformed `time_stop`
-- Did mean reversion improve with profit target / signal exit?
-  - Inconclusive in the reduced local run; trade count was too thin
-- Are the new exit styles strong enough to justify moving to Bootcamp-native scoring next?
-  - Yes, with the important caveat that family defaults should stay unchanged until a broader validation run confirms the local findings
+**Test result**: 78/78 pass
 
-**Next session priorities**:
-1. Begin Bootcamp-native scoring / dual leaderboard
-2. Integrate validation insights into family defaults if warranted
-3. Keep vectorization as the next major engine-speed milestone after scoring
+**Vectorized filters status**: Not implemented. Only a fallback stub in base filter class. Engine runs row-by-row on all bars. Not a blocker — engine correctness unaffected, just slower than it could be.
 
----
+**Next step**: Rob to run the launch command from strategy-console (see Step 7 below)
 
-## 2026-03-24 â€” Session 28: Exit architecture foundation
-
-**What was done**:
-- Added first-class exit architecture to the strategy layer
-- Added supported exit type declarations per family:
-  - Trend: time_stop, trailing_stop
-  - Mean Reversion: time_stop, profit_target, signal_exit
-  - Breakout: time_stop, trailing_stop
-- Updated engine execution to support trailing stop, profit target, and signal exit handling
-- Added refinement support for exit type comparison and exit-specific parameters
-- Added tests covering exit architecture and backward compatibility
-
-**Why this matters**:
-- Trend and breakout were likely being handicapped by blunt time-based exits
-- Mean reversion can now express more natural exit logic
-- Exit quality is now a searchable part of the engine, not a fixed assumption
-
-**Next session priorities**:
-1. Run validation sweep(s) to compare exit styles on ES
-2. Begin Bootcamp-native scoring / dual leaderboard
-3. Evaluate whether trend quality improves materially with trailing exits
-
----
-
-## 2026-03-24 â€” Session 27 Part A: Filter Summary & Analysis
-
-**What was done**:
-- Created `docs/FILTER_SUMMARY.md`: comprehensive filter documentation covering all 30 filters
-  across 3 families, with parameter details, timeframe scaling behaviour, feature dependencies,
-  combinatorial search space calculations, and gap analysis for future filter ideas
-- Updated CLAUDE.md with reference to filter summary doc
-
-**Key findings from analysis**:
-- Trend: 10 filters, `C(10,4..6) = 672` combinations
-- MR: 10 filters, `C(10,3..6) = 792` combinations
-- Breakout: 10 filters, `C(10,3..5) = 582` combinations
-- MR `momentum_lookback` grid is `[0]` â€” MR doesn't use momentum filtering
-- MR `min_avg_range` grid is conditional on whether `DistanceBelowSMAFilter`, `LowVolatilityRegimeFilter`, or `StretchFromLongTermSMAFilter` is in the combo
-- Breakout `min_avg_range` grid is only active when `CompressionFilter` is in the combo
-- The live refinement grids are larger and more conditional than the older flat "256 combos" summary suggests
-- All filters are OHLC-first â€” no volume, time, or explicit regime filters exist yet
-
-**Next session priorities**:
-1. Analyse multi-timeframe ES run results (when available)
-2. Begin exit architecture design (Phase 1B of improvement roadmap)
-
-## 2026-03-24 â€” Session 27 (Pre-Work): Strategy Analysis + Improvement Roadmap
-
-**What was done**:
-- Created `docs/STRATEGY_ENGINE_ANALYSIS.md`: comprehensive system analysis covering pipeline architecture,
-  all 30 filters (10 trend, 11 MR, 9 breakout), every major file, current weaknesses, and priorities
-- Created `docs/IMPROVEMENT_ROADMAP.md`: 5-phase improvement plan synthesised from Claude, ChatGPT,
-  and Gemini analysis. Phases: exits â†’ scoring â†’ short-side â†’ vectorization â†’ walk-forward â†’ portfolio
-- Updated CLAUDE.md with roadmap references, new known issues, and GCP vCPU quota note
-
-**Key decisions documented**:
-- Exit architecture is the #1 engine improvement (trailing stops, profit targets, signal exits)
-- Bootcamp-native scoring replaces PF/PnL ranking for prop firm track
-- Vectorization comes before new filters (50-100x speedup enables wider sweeps at same cost)
-- Multi-VM parallelism deferred until CL/NQ expansion or walk-forward validation requires it
-- GCP quota: 200 vCPU in us-central1, currently using 96 per run
-
-**Next session priorities**:
-1. Wait for all-timeframe ES run to complete
-2. Deploy Session 26 code to console VM (git pull + restart dashboard)
-3. Analyse results via Ultimate Leaderboard tab and master_leaderboard.csv
-4. Begin exit architecture design (Session 28)
-
-## 2026-03-24 â€” Session 26: Dashboard Status Fix + Ultimate Leaderboard
-
-**What was done**:
-- Fixed Live Monitor: `fetch_live_dataset_statuses()` added to `dashboard_utils.py` â€” SSHs into the compute VM via `gcloud compute ssh` during active runs to read per-dataset `status.json` in real time; falls back to local artifacts for completed runs
-- Created `modules/ultimate_leaderboard.py`: cross-run strategy aggregator â€” scans all `strategy_console_storage/runs/*/artifacts/Outputs/master_leaderboard.csv`, filters to `accepted_final == True`, deduplicates by (strategy_type, dataset, name, filters) keeping highest PF, ranks by quality flag â†’ net PnL â†’ PF, writes `ultimate_leaderboard.csv`
-- Added Ultimate Leaderboard tab to dashboard (5th tab, between Results and Run History): KPI strip, multi-select filters, sortable table, details expander, 120s cache with Refresh button
-- Auto-runs ultimate leaderboard aggregation after sweep completion in `run_cloud_sweep.py` (skipped on dry runs)
-- Tests: 57 passing (42 in smoke+dashboard_utils+ultimate_leaderboard suites)
-
-**Next session priorities**:
-1. Analyse all-timeframe ES results via Ultimate Leaderboard tab
-2. Filter summary and analysis (document all filters in filters.py)
-3. Multi-VM parallel orchestration design
-4. CL (crude oil) data export and sweep
-
----
-
-## 2026-03-24 â€” Session 25: All-Timeframe Config + Status Fix + Dashboard Live Monitor
-
-**What was done**:
-- Added `cloud/config_es_all_timeframes_96core.yaml`: ES daily/60m/30m/15m, all 3 families (trend/MR/breakout), 94 workers, n2-highcpu-96 SPOT us-central1-a
-- Fixed `modules/progress.py` status.json first-update delay: added `done == 1` condition so the first completed task is written immediately instead of waiting for the first `step` boundary
-- Dashboard overhaul â€” 4-tab layout (Live Monitor / Results / Run History / System):
-  - **Live Monitor**: KPI strip (active/total/promoted/elapsed), per-dataset progress bars with family pills, promoted candidates table, log tail, 30s auto-refresh
-  - **Results**: equity curves (Plotly dark theme), annual PnL bar chart with OOS divider, correlation heatmap
-  - **Run History**: all runs table with dataset column, run detail expander
-  - **System**: storage overview, health checks, quick action commands
-- Added `load_promoted_candidates()` to `dashboard_utils.py`: loads promoted_candidates.csv from a run outputs directory, returns None if not found
-- Added `test_load_promoted_candidates_missing` to `tests/test_dashboard_utils.py` â€” 72 tests total, all passing
-- Added Quick Commands section to CLAUDE.md with canonical sweep command
-- Marked status.json first-update delay as fixed in CLAUDE.md known issues
-
-**Next session priorities**:
-1. Launch ES all-timeframes sweep: `python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml`
-2. Monitor via Live Monitor tab in the dashboard (http://35.232.131.181:8501)
-3. Analyze results in Results Explorer (Tab 2) once sweep completes
-4. Reserve static IP for strategy-console
-5. Multi-timeframe data exports (NQ, CL) from TradeStation
-
----
-
-## 2026-03-23 â€” Session 24: Dashboard Overhaul + ES 60m Full Sweep Config
+## 2026-03-23 — Session 24: Dashboard Overhaul + ES 60m Full Sweep Config
 
 **What was done**:
 - Created `cloud/config_es_60m_full_sweep.yaml`: ES 60m, all 3 families (trend/MR/breakout), 94 workers, n2-highcpu-96 SPOT us-central1-a
@@ -269,14 +32,14 @@
   - Tab 2 "Results Explorer": leaderboard table, portfolio review, correlation heatmap (plotly), yearly PnL bar chart, equity curves
   - Tab 3 "System": storage overview, health checks, storage paths, quick action commands, available configs list
   - Professional CSS: gradient banner, metric card styling, status color classes, clean tab formatting
-- Updated `dashboard_utils.py`: added `format_duration_short()`, `status_color()`, `load_strategy_results()` (with parquetâ†’CSV fallback fixing LargeUtf8 error); updated SPOT pricing to actual rates
+- Updated `dashboard_utils.py`: added `format_duration_short()`, `status_color()`, `load_strategy_results()` (with parquet→CSV fallback fixing LargeUtf8 error); updated SPOT pricing to actual rates
 - Added `run_cloud_sweep.py` `_ensure_console_storage_env()`: auto-detects `~/strategy_console_storage`, no env var prefix needed
 - Created `scripts/setup_dashboard_venv.sh`: clean venv setup, prefers python3.12, pins numpy<2.2
 - Created `scripts/strategy-dashboard.service`: systemd unit with env var and venv ExecStart path
 
 **Next session priorities**:
 1. Run full ES 60m all-families sweep: `python3 run_cloud_sweep.py --config cloud/config_es_60m_full_sweep.yaml`
-2. Analyze results in the new dashboard (Tab 2 â€” Results Explorer)
+2. Analyze results in the new dashboard (Tab 2 — Results Explorer)
 3. Multi-timeframe expansion (daily, 30m, 15m) once 60m confirmed
 4. Reserve static IP for strategy-console
 5. GitHub Actions auto-deploy
@@ -306,12 +69,12 @@
 
 ---
 
-## 2026-03-23 â€” Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
+## 2026-03-23 — Session 21: Infrastructure hardening, US region migration, auth fix, auto-deploy
 
 **What was done**:
-- Fixed strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) â€” resolved via GCP Cloud Shell `set-service-account --scopes=cloud-platform`; also authenticated strategy-console gcloud CLI with personal account as a fallback
+- Fixed strategy-console VM auth scopes (ACCESS_TOKEN_SCOPE_INSUFFICIENT) — resolved via GCP Cloud Shell `set-service-account --scopes=cloud-platform`; also authenticated strategy-console gcloud CLI with personal account as a fallback
 - Migrated DEFAULT_ZONE from australia-southeast2-a to us-central1-a for better SPOT pricing and availability
-- Made cloud zone/machine_type/provisioning_model/boot_disk_size/image_family configurable via YAML `cloud:` section â€” no more Python edits for region changes; CLI flags still override
+- Made cloud zone/machine_type/provisioning_model/boot_disk_size/image_family configurable via YAML `cloud:` section — no more Python edits for region changes; CLI flags still override
 - Added `cloud:` section to `config_quick_test.yaml` and `config_es_all_timeframes_gcp96.yaml`
 - Fixed misleading stage labels in run_cloud_sweep.py wrapper (was printing VM LAUNCHING, SWEEP START, etc. unconditionally even on dry runs and early failures)
 - Confirmed `paths.py` auto-detects `~/strategy_console_storage` without needing the env var set
@@ -362,7 +125,7 @@
 
 ---
 
-## 2026-03-21 Ã¢â‚¬â€ Session 13: Dashboard upgrade + VM cost visibility
+## 2026-03-21 â€” Session 13: Dashboard upgrade + VM cost visibility
 
 **What was done**:
 - Upgraded `dashboard.py` from a simple file browser into a more operational control panel for cloud runs
@@ -370,7 +133,7 @@
 - Cloud Monitor now highlights run identity, launcher state/stage/message, timestamps, instance/zone, run and VM outcomes, bundle size, local/remote paths, and launcher banners that make preserved-vs-destroyed VM status obvious
 - Added an estimated VM cost panel using a small local machine-type pricing map plus elapsed runtime from launcher timestamps
 - Dataset progress now shows per-dataset cards with market/timeframe, current family/stage, progress, ETA, elapsed time, and completed/remaining families, plus an overall progress summary
-- Added a â€œBest Candidates So Farâ€ panel that prefers `master_leaderboard.csv`, then `family_leaderboard_results.csv`, then `family_summary_results.csv`
+- Added a “Best Candidates So Far” panel that prefers `master_leaderboard.csv`, then `family_leaderboard_results.csv`, then `family_summary_results.csv`
 - Results Explorer now uses grouped result sources (`cloud_results`, legacy `cloud_outputs*`, and local `Outputs`) with a smarter default selection and a file-presence summary
 - Prop Firm Simulator now reuses the selected result source, shows source context, reports how many strategy return columns were found, and gives clearer feedback when return data or trade counts are insufficient
 - Added lightweight dashboard helper tests in `tests/test_dashboard_utils.py`
@@ -386,7 +149,7 @@
 
 ---
 
-## 2026-03-20 â€” Session 11: Windows-first GCP orchestration redesign
+## 2026-03-20 — Session 11: Windows-first GCP orchestration redesign
 
 **What was done**:
 - Added `cloud/launch_gcp_run.py` as the new single-command GCP launcher for Windows-first use
@@ -413,7 +176,7 @@
 
 ---
 
-## 2026-03-20 â€” Session 10: GCP download reliability fix
+## 2026-03-20 — Session 10: GCP download reliability fix
 
 **What was done**:
 - Root cause of Session 8 empty download: GcpUser detected as "robpitman1982" but actual OS Login user was "Rob"
@@ -436,7 +199,7 @@
 
 ---
 
-## 2026-03-20 â€” Session 9: GCP automation bug fixes + Streamlit dashboard
+## 2026-03-20 — Session 9: GCP automation bug fixes + Streamlit dashboard
 
 **What was done**:
 - Fixed 10 automation bugs found during Session 8 GCP run:
@@ -453,7 +216,7 @@
 - Rewrote cloud/run_gcp_job.ps1 with all fixes applied
 - Updated cloud/run_gcp_job.sh with same fixes
 - Updated cloud/gcp_startup.sh with race condition fix
-- Created dashboard.py â€” Streamlit app with 3 tabs:
+- Created dashboard.py — Streamlit app with 3 tabs:
   - Cloud Monitor: SSH into VM, parse status.json, show progress bars + ETA
   - Results Explorer: load master_leaderboard, portfolio review, correlations, yearly PnL charts, equity curves
   - Prop Firm Simulator: select strategy, run MC pass rate, display metrics
@@ -471,7 +234,7 @@
 
 ---
 
-## 2026-03-20 â€” Session 8: Portfolio evaluator bug fix + GCP automation
+## 2026-03-20 — Session 8: Portfolio evaluator bug fix + GCP automation
 
 **What was done**:
 - CRITICAL BUG FIX: portfolio_evaluator.py now passes `timeframe` to `get_required_sma_lengths()`, `get_required_avg_range_lookbacks()`, `get_required_momentum_lookbacks()`, and `build_candidate_specific_strategy()` during trade reconstruction
@@ -479,15 +242,15 @@
   - Bug caused: Daily Breakout showed -$27K (losing) vs +$245K in engine (sign flip!)
   - Bug caused: Daily Trend missing entirely from portfolio evaluation
   - Root: `_rebuild_strategy_from_leaderboard_row()` never passed timeframe, so all strategies reconstructed with 60m SMA/ATR/momentum defaults
-- Created `cloud/gcp_startup.sh` â€” VM boot script: installs deps, clones repo, waits for data uploads, runs engine, copies outputs
-- Created `cloud/run_gcp_job.ps1` â€” fully automated PowerShell script: create VM â†’ upload data â†’ poll completion â†’ download results â†’ destroy VM
-- Created `cloud/run_gcp_job.sh` â€” bash equivalent for Linux/Mac
+- Created `cloud/gcp_startup.sh` — VM boot script: installs deps, clones repo, waits for data uploads, runs engine, copies outputs
+- Created `cloud/run_gcp_job.ps1` — fully automated PowerShell script: create VM → upload data → poll completion → download results → destroy VM
+- Created `cloud/run_gcp_job.sh` — bash equivalent for Linux/Mac
 - Key GCP gotchas handled: PuTTY SCP issues (uses native SSH), permission model (uploads to ~/uploads, startup script copies to /root/), SPOT preemption detection and restart
 - Added 2 new smoke tests for portfolio evaluator timeframe parameter
 
 **Output changes vs Session 7**:
 - Portfolio evaluator now produces correct trade reconstructions for all timeframes
-- Previous run's portfolio_review_table.csv, correlation_matrix.csv, yearly_stats_breakdown.csv were WRONG for non-60m â€” need re-run
+- Previous run's portfolio_review_table.csv, correlation_matrix.csv, yearly_stats_breakdown.csv were WRONG for non-60m — need re-run
 - 19 smoke tests pass (was 17)
 - GCP runs now fully automated with one command
 
@@ -499,7 +262,7 @@
 **Impact on previous results**:
 - Master leaderboard strategy rankings (from engine) are still valid
 - Portfolio evaluation outputs (MC drawdowns, correlations, yearly stats) need re-running
-- The 9 accepted strategies are still real â€” but their validated performance metrics need recalculation
+- The 9 accepted strategies are still real — but their validated performance metrics need recalculation
 
 **Next session priorities**:
 1. Re-run ES all timeframes on GCP with fixed code to get correct portfolio evaluation
@@ -509,14 +272,14 @@
 
 ---
 
-## 2026-03-19 â€” Session 7: Prop firm challenge simulator
+## 2026-03-19 — Session 7: Prop firm challenge simulator
 
 **What was done**:
-- Created `modules/prop_firm_simulator.py` â€” complete prop firm challenge simulation module
+- Created `modules/prop_firm_simulator.py` — complete prop firm challenge simulation module
 - Supports The5ers Bootcamp ($20K/$100K/$250K), High Stakes, and Hyper Growth programs
 - `PropFirmConfig` dataclass: generic, supports any prop firm with configurable rules
 - `The5ersBootcampConfig()` factory: correct step balances from The5ers website (Mar 2026)
-  - $250K: Steps at $100K â†’ $150K â†’ $200K, 6% target, 5% static DD, no daily DD during eval
+  - $250K: Steps at $100K → $150K → $200K, 6% target, 5% static DD, no daily DD during eval
 - `simulate_challenge()`: runs trade list through all steps chronologically
 - `monte_carlo_pass_rate()`: shuffles trade order N times to estimate pass probability
 - `compute_challenge_score()`: composite 0-1 score (pass rate 50%, DD margin 25%, speed 15%, consistency 10%)
@@ -527,7 +290,7 @@
 **Design decisions**:
 - System 2 (prop firm) shares codebase with System 1 (best edge finder)
 - Only configs, gates, and ranking criteria differ
-- Trade PnL scaled as percentage of source capital â†’ applied to step balance
+- Trade PnL scaled as percentage of source capital → applied to step balance
 - Bootcamp chosen as primary target: no daily DD during eval, unlimited time, algo-friendly
 - High Stakes secondary: 5% daily loss limit makes it harder for automated strategies
 
@@ -549,22 +312,22 @@
 
 ---
 
-## 2026-03-18 â€” Session 6: Multi-timeframe expansion prep
+## 2026-03-18 — Session 6: Multi-timeframe expansion prep
 
 **What was done**:
 - Implemented hybrid filter parameter scaling: `scale_lookbacks()` added to `config_loader.py`; `get_required_sma_lengths()`, `get_required_avg_range_lookbacks()`, `get_required_momentum_lookbacks()` in all 3 strategy types now accept `timeframe` param and return scaled values. `build_filter_objects_from_classes()` and `build_candidate_specific_strategy()` receive scaled SMA/ATR/lookback lengths based on timeframe multiplier. Pattern filters (TwoBarDown, etc.) stay as-is.
-- Threaded timeframe through refinement factories (`_MRRefinementFactory`, `_TrendRefinementFactory`, `_BreakoutRefinementFactory`) and combo case functions â€” sweep-phase filters now also scale
+- Threaded timeframe through refinement factories (`_MRRefinementFactory`, `_TrendRefinementFactory`, `_BreakoutRefinementFactory`) and combo case functions — sweep-phase filters now also scale
 - Updated `master_strategy_engine.py` helpers `get_required_*()` to pass timeframe; feature precomputation now uses timeframe-scaled lookbacks
-- Created `cloud/config_es_all_timeframes_48core.yaml` â€” 4 datasets (daily, 60m, 30m, 15m), 46 workers sweep+refinement, 5 candidates to refine, 80 GB memory budget
+- Created `cloud/config_es_all_timeframes_48core.yaml` — 4 datasets (daily, 60m, 30m, 15m), 46 workers sweep+refinement, 5 candidates to refine, 80 GB memory budget
 - Removed hardcoded `sed` max_workers replacements from `run_cloud_job.py` cloud-init; added `--config` CLI arg to `start_engine()`
-- Created `docs/TRADESTATION_EXPORT_GUIDE.md` â€” step-by-step data export instructions with file naming and verification commands
-- Added master leaderboard auto-run at end of multi-dataset pipeline â€” prints ranked table and saves `Outputs/master_leaderboard.csv`
-- Added memory estimation and auto-throttle in `run_single_family()` â€” prints per-copy and parallel estimate; auto-reduces workers if `pipeline.max_memory_gb` is set and would be exceeded; warns if > 60 GB even without limit
+- Created `docs/TRADESTATION_EXPORT_GUIDE.md` — step-by-step data export instructions with file naming and verification commands
+- Added master leaderboard auto-run at end of multi-dataset pipeline — prints ranked table and saves `Outputs/master_leaderboard.csv`
+- Added memory estimation and auto-throttle in `run_single_family()` — prints per-copy and parallel estimate; auto-reduces workers if `pipeline.max_memory_gb` is set and would be exceeded; warns if > 60 GB even without limit
 - Updated `CLOUD_DEPLOYMENT_RUNBOOK.md` with complete 48-core run instructions
 - Updated `CLAUDE.md` (issues list, structure, test count) and this CHANGELOG
 
 **Output changes vs Session 5**:
-- Feature precomputation uses timeframe-scaled SMA/ATR/momentum lookbacks (e.g., 15m â†’ 4Ã— the 60m lengths)
+- Feature precomputation uses timeframe-scaled SMA/ATR/momentum lookbacks (e.g., 15m → 4× the 60m lengths)
 - Filter constructors receive scaled SMA lengths in both sweep and refinement phases
 - Memory estimate printed before each family sweep: `Data: N bars, X.X MB per copy`
 - Master leaderboard printed automatically after multi-dataset runs
@@ -584,15 +347,15 @@
 
 ---
 
-## 2026-03-18 â€” Session 5: Smoke tests, master leaderboard, timeframe grids
+## 2026-03-18 — Session 5: Smoke tests, master leaderboard, timeframe grids
 
 **What was done**:
-- Created `tests/__init__.py` and `tests/test_smoke.py` â€” 11 smoke tests covering: config_loader, feature_builder, EngineConfig, engine run, consistency module, filter combination generation, strategy type factory, quality score range, progress tracker, master leaderboard aggregator, timeframe multiplier
-- Created `modules/master_leaderboard.py` â€” scans all `Outputs/*/family_leaderboard_results.csv`, filters to `accepted_final=True`, extracts market/timeframe from directory name, adds rank column, returns consolidated DataFrame. Runnable standalone: `python -m modules.master_leaderboard`
+- Created `tests/__init__.py` and `tests/test_smoke.py` — 11 smoke tests covering: config_loader, feature_builder, EngineConfig, engine run, consistency module, filter combination generation, strategy type factory, quality score range, progress tracker, master leaderboard aggregator, timeframe multiplier
+- Created `modules/master_leaderboard.py` — scans all `Outputs/*/family_leaderboard_results.csv`, filters to `accepted_final=True`, extracts market/timeframe from directory name, adds rank column, returns consolidated DataFrame. Runnable standalone: `python -m modules.master_leaderboard`
 - Added `TIMEFRAME_BAR_MINUTES` dict and `get_timeframe_multiplier()` to `modules/config_loader.py`
 - Added `timeframe: str = "60m"` field to `EngineConfig` dataclass
-- Updated `get_active_refinement_grid_for_combo()` in all 3 strategy types to accept `timeframe` parameter and scale `hold_bars` (and `momentum_lookback` for trend) proportionally â€” e.g., 5m multiplier=12.0Ã—, daily multiplierâ‰ˆ0.154Ã—
-- Threaded `timeframe` through: `_run_dataset()` â†’ `EngineConfig` â†’ `run_single_family()` â†’ strategy type refinement grids
+- Updated `get_active_refinement_grid_for_combo()` in all 3 strategy types to accept `timeframe` parameter and scale `hold_bars` (and `momentum_lookback` for trend) proportionally — e.g., 5m multiplier=12.0×, daily multiplier≈0.154×
+- Threaded `timeframe` through: `_run_dataset()` → `EngineConfig` → `run_single_family()` → strategy type refinement grids
 - Compute budget output now prints scaled hold_bars grid and timeframe multiplier note
 - Added `pytest>=8.0.0` to `requirements.txt`
 
@@ -600,7 +363,7 @@
 - `python -m pytest tests/test_smoke.py -v` runs 11 smoke tests in < 2s
 - `python -m modules.master_leaderboard` produces `Outputs/master_leaderboard.csv`
 - Refinement grids now auto-scale hold_bars and momentum_lookback based on dataset timeframe
-- Compute budget output shows: `hold_bars (scaled): [24, 36, 48, ...]` when timeframe â‰  60m
+- Compute budget output shows: `hold_bars (scaled): [24, 36, 48, ...]` when timeframe ≠ 60m
 
 **Verified**:
 - All 11 smoke tests pass
@@ -615,18 +378,18 @@
 
 ---
 
-## 2026-03-18 â€” Session 4: Structured logging + cloud launcher fix
+## 2026-03-18 — Session 4: Structured logging + cloud launcher fix
 
 **What was done**:
-- Created `modules/progress.py` â€” ProgressTracker class with timestamped log lines and status.json output
-- Integrated ProgressTracker into master_strategy_engine.py pipeline â€” all stage transitions and sweep/refinement progress now logged
+- Created `modules/progress.py` — ProgressTracker class with timestamped log lines and status.json output
+- Integrated ProgressTracker into master_strategy_engine.py pipeline — all stage transitions and sweep/refinement progress now logged
 - Added optional `progress_callback` parameter to sweep and refinement functions (backward compatible)
 - Fixed `run_cloud_job.py` start_engine timeout issue (was 60s, now handles nohup startup properly)
 - status.json written to each dataset's output directory, updated every 10% of sweep/refinement progress
 
 **Output changes vs Session 3**:
 - Log output now has structured timestamps and stage prefixes
-- `Outputs/ES_60m/status.json` created during runs â€” instant progress check via `cat status.json`
+- `Outputs/ES_60m/status.json` created during runs — instant progress check via `cat status.json`
 - run_cloud_job.py can now start the engine without SSH timeout errors
 
 **Verified**:
@@ -642,21 +405,21 @@
 
 ---
 
-## 2026-03-17 â€” Session 3: Cloud deployment preparation
+## 2026-03-17 — Session 3: Cloud deployment preparation
 
 **What was done**:
 - Created `Dockerfile` (python:3.11-slim based, gcc/g++ for numpy/pandas)
 - Created `requirements.txt` (numpy, pandas, pyyaml)
 - Created `.dockerignore` (excludes Data/, Outputs/, .git, pycache, etc.)
-- Created `cloud/run_cloud.sh` â€” bash script: create droplet â†’ upload â†’ build Docker â†’ run â†’ download results â†’ destroy
-- Created `cloud/run_cloud.ps1` â€” PowerShell equivalent for Windows
-- Created `cloud/config_full_es.yaml` â€” full ES 60m sweep config (all 3 families, 5 candidates to refine, 7 workers)
-- Created `cloud/config_quick_test.yaml` â€” quick single-family (mean_reversion) test config
-- Created `cloud/SETUP.md` â€” DigitalOcean setup guide with doctl install, SSH key setup, droplet size/cost reference
+- Created `cloud/run_cloud.sh` — bash script: create droplet → upload → build Docker → run → download results → destroy
+- Created `cloud/run_cloud.ps1` — PowerShell equivalent for Windows
+- Created `cloud/config_full_es.yaml` — full ES 60m sweep config (all 3 families, 5 candidates to refine, 7 workers)
+- Created `cloud/config_quick_test.yaml` — quick single-family (mean_reversion) test config
+- Created `cloud/SETUP.md` — DigitalOcean setup guide with doctl install, SSH key setup, droplet size/cost reference
 - Added `--config` CLI argument to `master_strategy_engine.py` via argparse
 - Config is now reloaded from CLI arg in `__main__`, re-deriving all module-level constants
 - Added `cloud_results/` to `.gitignore`
-- Region set to `syd1` (Sydney â€” closest to Melbourne) in all scripts
+- Region set to `syd1` (Sydney — closest to Melbourne) in all scripts
 
 **Cloud workflow**:
 1. `run_cloud.ps1` creates a c-8 droplet in syd1
@@ -675,14 +438,14 @@ Total estimated cost: $0.30-0.50 per full ES run on c-8
 
 ---
 
-## 2026-03-17 â€” Session 2: Config, consistency, multi-dataset
+## 2026-03-17 — Session 2: Config, consistency, multi-dataset
 
 **What was done**:
-- Created `config.yaml` â€” single source of truth for all pipeline constants (datasets, engine, gates, oos_split_date)
-- Created `modules/config_loader.py` â€” `load_config()` and `get_nested()` helpers; falls back to hardcoded defaults if yaml missing
+- Created `config.yaml` — single source of truth for all pipeline constants (datasets, engine, gates, oos_split_date)
+- Created `modules/config_loader.py` — `load_config()` and `get_nested()` helpers; falls back to hardcoded defaults if yaml missing
 - Updated `master_strategy_engine.py` to load all settings from config (CSV path, workers, leaderboard gates, EngineConfig fields)
-- Created `modules/consistency.py` â€” `analyse_yearly_consistency()`: yearly PnL aggregation, pct_profitable_years, max_consecutive_losing_years, consistency_flag (CONSISTENT/MIXED/INCONSISTENT/INSUFFICIENT_DATA)
-- Integrated consistency into `engine.results()` â€” three new return fields: Pct Profitable Years, Max Consecutive Losing Years, Consistency Flag
+- Created `modules/consistency.py` — `analyse_yearly_consistency()`: yearly PnL aggregation, pct_profitable_years, max_consecutive_losing_years, consistency_flag (CONSISTENT/MIXED/INCONSISTENT/INSUFFICIENT_DATA)
+- Integrated consistency into `engine.results()` — three new return fields: Pct Profitable Years, Max Consecutive Losing Years, Consistency Flag
 - Factored consistency into `calculate_quality_score()` as 6th component (weight 0.15); adjusted other weights to still sum to 1.0
 - Propagated new fields through all 3 strategy type sweep result dicts and `RefinementResult`/`_run_refinement_case()` in refiner.py
 - Added `oos_split_date` field to `EngineConfig` dataclass; replaced hardcoded `"2019-01-01"` in engine.py results()
@@ -709,18 +472,18 @@ Total estimated cost: $0.30-0.50 per full ES run on c-8
 
 ---
 
-## 2026-03-16 â€” Session 1: Foundation hardening
+## 2026-03-16 — Session 1: Foundation hardening
 
 **What was done**:
-- Added `quality_score` (0.0â€“1.0 continuous metric) to `engine.py` results; weighted on avg PF strength, IS/OOS balance, trade count confidence, recent PF, OOS trade presence
+- Added `quality_score` (0.0–1.0 continuous metric) to `engine.py` results; weighted on avg PF strength, IS/OOS balance, trade count confidence, recent PF, OOS trade presence
 - Added `BORDERLINE` suffix detection: any ROBUST/STABLE/MARGINAL flag within 0.05 of a threshold boundary gets `_BORDERLINE` appended
 - Propagated `quality_score` through sweep results (all 3 strategy types) and `RefinementResult` dataclass in `refiner.py`
-- Capped promotion gate at max 20 candidates using composite ranking (quality_score Ã— 0.4 + oos_pf Ã— 0.3 + trades/yr Ã— 0.3)
-- Added `estimate_compute_budget()` â€” prints eval count and estimated minutes before sweep and refinement
-- Added `deduplicate_promoted_candidates()` â€” removes near-duplicates by matching total_trades + PnL within 1%
+- Capped promotion gate at max 20 candidates using composite ranking (quality_score × 0.4 + oos_pf × 0.3 + trades/yr × 0.3)
+- Added `estimate_compute_budget()` — prints eval count and estimated minutes before sweep and refinement
+- Added `deduplicate_promoted_candidates()` — removes near-duplicates by matching total_trades + PnL within 1%
 
 **Output changes vs baseline**:
-- Trend family: was 93 promoted â†’ now capped at 20
+- Trend family: was 93 promoted → now capped at 20
 - BORDERLINE flags will appear on strategies near PF thresholds
 - Compute budget printed before each sweep and refinement stage
 - Dedup report printed after promotion gate
@@ -733,7 +496,7 @@ Total estimated cost: $0.30-0.50 per full ES run on c-8
 
 ---
 
-## 2026-03-16 â€” Session 0: Project review and workflow setup
+## 2026-03-16 — Session 0: Project review and workflow setup
 
 **What happened**:
 - Full pipeline review with Claude (claude.ai project chat)
@@ -745,9 +508,9 @@ Total estimated cost: $0.30-0.50 per full ES run on c-8
 
 **Key findings from first run**:
 - ES 60m data: 107,149 bars, 2008-01-02 to 2026-03-04
-- Trend: 672 combos â†’ 93 promoted â†’ best refined PF 1.13, IS PF 0.83 (below 1.0), OOS PF 1.71
-- MR: 792 combos â†’ 27 promoted â†’ best refined PF 1.42, IS PF 1.09, OOS PF 1.86
-- Breakout: 582 combos â†’ 37 promoted â†’ best refined PF 0.82, BROKEN_IN_OOS
+- Trend: 672 combos → 93 promoted → best refined PF 1.13, IS PF 0.83 (below 1.0), OOS PF 1.71
+- MR: 792 combos → 27 promoted → best refined PF 1.42, IS PF 1.09, OOS PF 1.86
+- Breakout: 582 combos → 37 promoted → best refined PF 0.82, BROKEN_IN_OOS
 - Correlation between trend & MR: -0.0005 (excellent)
 
 **Next session priorities**:
@@ -755,5 +518,3 @@ Total estimated cost: $0.30-0.50 per full ES run on c-8
 2. Tighten promotion gate or add secondary screening
 3. Add compute budget estimator
 4. Add filter-combo deduplication before refinement
-
-
