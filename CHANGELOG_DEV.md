@@ -1,5 +1,33 @@
 ﻿# CHANGELOG_DEV.md â€” Session-by-session development log
 
+## 2026-03-25 — Session 32: Fire-and-forget VM + leaderboard polish + EasyLanguage prep
+
+**What was done**:
+- Compute VM now self-uploads artifacts to strategy-console and self-deletes
+  after engine completes — no launcher polling needed
+- Added --fire-and-forget CLI flag for fully unattended runs
+- Added max_drawdown and calmar_ratio to family and master leaderboard CSVs
+- Renamed stop_distance_points → stop_distance_atr in all CSV outputs
+- Created docs/EASYLANGUAGE_FILTER_MAP.md with complete filter-to-EasyLanguage
+  translation for all 30+ filters and a full MR strategy template
+- Fixed dashboard Live Monitor stale-state bug: ds_name derivation from
+  market+timeframe keys now correct, waiting placeholders shown instead of
+  stale previous-run artifacts
+
+**Why this matters**:
+- Fire-and-forget means you can start a run and close your laptop
+- VM self-deletes only if upload succeeds — safe against artifact loss
+- Calmar Ratio provides drawdown-adjusted performance for Bootcamp
+- EasyLanguage mapping is the bridge to TradeStation deployment
+
+**Next session priorities**:
+1. Run ES daily-only sweep with --fire-and-forget to validate
+2. Full all-timeframes run (daily/60m/30m/15m)
+3. Begin EasyLanguage conversion of top MR strategy
+4. Add 5m data
+
+---
+
 ## 2026-03-25 -- Session 31: Filter vectorization
 
 **What was done**:
