@@ -1,0 +1,51 @@
+# ES daily + 60m sweep — 2 timeframes × 3 families on GCP n2-highcpu-96 ON-DEMAND in us-central1-a
+# Estimated runtime: ~2 hours
+# Estimated cost: ~$9-10 USD on-demand (no preemption risk)
+
+datasets:
+  - path: "Data/ES_daily_2008_2026_tradestation.csv"
+    market: "ES"
+    timeframe: "daily"
+  - path: "Data/ES_60m_2008_2026_tradestation.csv"
+    market: "ES"
+    timeframe: "60m"
+
+strategy_types: "all"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 2.00
+  slippage_ticks: 4
+  tick_value: 12.50
+  dollars_per_point: 50.0
+
+pipeline:
+  max_workers_sweep: 94
+  max_workers_refinement: 94
+  max_candidates_to_refine: 5
+  oos_split_date: "2019-01-01"
+  max_memory_gb: 80
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 60
+
+output_dir: "Outputs"
+
+cloud:
+  zone: "us-central1-a"
+  machine_type: "n2-highcpu-96"
+  provisioning_model: "STANDARD"
+  boot_disk_size: "120GB"
+  image_family: "ubuntu-2404-lts-amd64"
