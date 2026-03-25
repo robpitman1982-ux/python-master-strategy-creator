@@ -1151,6 +1151,8 @@ def test_remote_runner_script_scp_disables_host_key_checking(tmp_path: Path):
     assert flag_count >= scp_call_count, (
         f"--strict-host-key-checking=no ({flag_count}) < gcloud compute scp calls ({scp_call_count})"
     )
+    quiet_count = len(re.findall(r"gcloud compute scp --quiet", text))
+    assert quiet_count >= scp_call_count, f"--quiet ({quiet_count}) < gcloud compute scp calls ({scp_call_count})"
 
 
 def test_remote_runner_script_disables_interactive_prompts(tmp_path: Path):
@@ -1165,6 +1167,9 @@ def test_remote_runner_script_ssh_has_timeouts(tmp_path: Path):
     runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
     text = runner_path.read_text(encoding="utf-8")
     assert "ConnectTimeout" in text or "timeout " in text
+    ssh_call_count = text.count("gcloud compute ssh")
+    quiet_ssh_count = text.count("gcloud compute ssh \"$CONSOLE_INSTANCE\" --quiet")
+    assert quiet_ssh_count >= 2
 
 
 def test_remote_runner_script_upload_has_retry_loop(tmp_path: Path):

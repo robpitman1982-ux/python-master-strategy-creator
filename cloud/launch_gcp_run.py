@@ -615,7 +615,7 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
       echo "[upload] Attempt $ATTEMPT of $MAX_RETRIES..."
 
       # Create staging dir on console
-      timeout 60 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
+      timeout 60 gcloud compute ssh "$CONSOLE_INSTANCE" --quiet --zone="$CONSOLE_ZONE" \
         --ssh-key-expire-after=60m \
         --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
         -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
@@ -628,7 +628,7 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
       fi
 
       # SCP tarball to console staging
-      timeout 300 gcloud compute scp \
+      timeout 300 gcloud compute scp --quiet \
         --strict-host-key-checking=no \
         "$ARTIFACT_TARBALL" \
         "${CONSOLE_INSTANCE}:/tmp/artifact_staging/${RUN_ID}/artifacts.tar.gz" \
@@ -642,7 +642,7 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
       fi
 
       # SSH into console to unpack and install into canonical storage
-      timeout 120 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
+      timeout 120 gcloud compute ssh "$CONSOLE_INSTANCE" --quiet --zone="$CONSOLE_ZONE" \
         --ssh-key-expire-after=60m \
         --command="
           mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
