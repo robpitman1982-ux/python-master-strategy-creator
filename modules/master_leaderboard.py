@@ -109,6 +109,8 @@ def aggregate_master_leaderboard(
         "is_pf",
         "oos_pf",
         "recent_12m_pf",
+        "leader_max_drawdown",
+        "calmar_ratio",
         "leader_hold_bars",
         "leader_stop_distance_points",
         "best_combo_filters",

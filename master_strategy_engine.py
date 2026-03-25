@@ -597,6 +597,24 @@ def _passes_final_leaderboard_gate(row: pd.Series) -> bool:
     return True
 
 
+def _compute_calmar_ratio(row: pd.Series) -> float:
+    """Return abs(annual_return / max_drawdown). Returns 0 if data is insufficient."""
+    start = pd.to_datetime(row.get("start"), errors="coerce")
+    end = pd.to_datetime(row.get("end"), errors="coerce")
+    net_pnl = float(row.get("leader_net_pnl", 0.0) or 0.0)
+    max_dd = abs(float(row.get("leader_max_drawdown", 0.0) or 0.0))
+
+    if pd.isna(start) or pd.isna(end) or (end - start).days <= 0:
+        years = 1.0
+    else:
+        years = (end - start).days / 365.25
+
+    if max_dd < 1.0:
+        return 0.0
+    annual_return = net_pnl / years
+    return round(abs(annual_return / max_dd), 4)
+
+
 def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
@@ -606,6 +624,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     leaderboard = pd.concat([leaderboard, leader_rows], axis=1)
 
     leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
+    leaderboard["calmar_ratio"] = leaderboard.apply(_compute_calmar_ratio, axis=1)
     leaderboard = add_bootcamp_scores(leaderboard)
 
     leaderboard = leaderboard.sort_values(
@@ -634,6 +653,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_trades",
         "leader_trades_per_year",
         "leader_max_drawdown",
+        "calmar_ratio",
         "leader_quality_score",
         "leader_pct_profitable_years",
         "leader_max_consecutive_losing_years",
