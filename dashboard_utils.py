@@ -242,9 +242,14 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
 
     for ds in datasets:
-        # dataset entries may be dicts with a 'name' key, or plain strings
+        # dataset entries may be dicts with a 'name'/'output_dir' key, or market+timeframe keys
         if isinstance(ds, dict):
             ds_name = str(ds.get("name") or ds.get("output_dir") or "").strip()
+            if not ds_name:
+                market = str(ds.get("market", "")).strip()
+                timeframe = str(ds.get("timeframe", "")).strip()
+                if market and timeframe:
+                    ds_name = f"{market}_{timeframe}"
         else:
             ds_name = str(ds).strip()
         if not ds_name:
@@ -268,8 +273,29 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
     if results:
         return results
 
-    # SSH returned nothing (VM not ready yet) — fall back to local
-    return collect_launcher_dataset_statuses(run_dir)
+    # SSH returned nothing (VM not ready yet or datasets not started).
+    # Return waiting placeholders derived from the manifest — do NOT fall back
+    # to local artifacts which may contain stale data from a previous run.
+    waiting: list[dict[str, Any]] = []
+    for ds in datasets:
+        if isinstance(ds, dict):
+            market = str(ds.get("market", "?"))
+            timeframe = str(ds.get("timeframe", "?"))
+            ds_name = f"{market}_{timeframe}"
+        else:
+            ds_name = str(ds).strip()
+            market = ds_name
+            timeframe = "?"
+        waiting.append({
+            "dataset": ds_name,
+            "market": market,
+            "timeframe": timeframe,
+            "current_family": "",
+            "current_stage": "WAITING",
+            "progress_pct": 0.0,
+            "families_completed": [],
+        })
+    return waiting if waiting else []
 
 
 def _resolve_outputs_dir(run_dir: Path) -> Path | None:

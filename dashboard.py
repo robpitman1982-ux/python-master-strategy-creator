@@ -229,7 +229,18 @@ with tab_monitor:
         dataset_statuses = []
 
     if dataset_statuses:
-        st.subheader("Dataset Progress")
+        # Build title from manifest datasets if available
+        manifest_datasets = selected_manifest.get("datasets", []) if selected_manifest else []
+        ds_label = (
+            ", ".join(
+                f"{d.get('market','?')} {d.get('timeframe','?')}"
+                for d in manifest_datasets
+                if isinstance(d, dict)
+            )
+            if manifest_datasets else ""
+        )
+        progress_title = f"Dataset Progress — {ds_label}" if ds_label else "Dataset Progress"
+        st.subheader(progress_title)
         all_families = ["trend", "mean_reversion", "breakout"]
         fam_emoji    = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥"}
 
@@ -250,12 +261,13 @@ with tab_monitor:
             completed = ds.get("families_completed", [])
             eta_sec   = float(ds.get("eta_seconds", 0) or 0)
             el_sec    = float(ds.get("elapsed_seconds", 0) or 0)
-            is_done   = pct >= 100 or cur_stage == "DONE"
-            is_active = not is_done and pct > 0
+            is_waiting = cur_stage == "WAITING"
+            is_done   = not is_waiting and (pct >= 100 or cur_stage == "DONE")
+            is_active = not is_done and not is_waiting and pct > 0
 
             col_a, col_b = st.columns([3, 1])
             with col_a:
-                icon = "✅" if is_done else ("🔵" if is_active else "⏳")
+                icon = "✅" if is_done else ("🔵" if is_active else ("⏳" if is_waiting else "⏳"))
                 st.markdown(f"**{icon} {market} {timeframe}**")
                 st.progress(min(pct / 100.0, 1.0))
                 pill_html = ""
@@ -277,6 +289,8 @@ with tab_monitor:
             with col_b:
                 if is_done:
                     st.markdown("**Done ✅**")
+                elif is_waiting:
+                    st.markdown("*Waiting...*")
                 elif is_active:
                     st.markdown(f"**ETA** {format_duration_short(eta_sec)}")
                     st.caption(f"Elapsed {format_duration_short(el_sec)}")
