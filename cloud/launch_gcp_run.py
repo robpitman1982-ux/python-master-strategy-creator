@@ -605,59 +605,78 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
 
     echo "[upload] Uploading artifacts to strategy-console..."
 
-    # Create staging dir on console
-    gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
-      --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
-      2>/dev/null || true
+    # Prevent any interactive prompts during fire-and-forget upload
+    export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 
-    # SCP tarball to console staging
-    gcloud compute scp "$ARTIFACT_TARBALL" \
-      "${CONSOLE_INSTANCE}:/tmp/artifact_staging/${RUN_ID}/artifacts.tar.gz" \
-      --zone="$CONSOLE_ZONE" \
-      2>/dev/null
+    UPLOAD_SUCCESS=0
+    MAX_RETRIES=3
 
-    SCP_EXIT=$?
+    for ATTEMPT in 1 2 3; do
+      echo "[upload] Attempt $ATTEMPT of $MAX_RETRIES..."
 
-    if [ $SCP_EXIT -ne 0 ]; then
-      echo "[upload] WARNING: SCP to console failed (exit $SCP_EXIT). VM preserved for manual recovery."
-      write_status "completed" "upload_failed" "Engine done but console upload failed. VM preserved." 0
-      exit 0
-    fi
+      # Create staging dir on console
+      timeout 60 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
+        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
+        2>/dev/null || true
 
-    # SSH into console to unpack and install into canonical storage
-    gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" --command="
-      mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
-      cd /tmp/artifact_staging/${RUN_ID}/unpacked &&
-      tar -xzf ../artifacts.tar.gz &&
-      sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts &&
-      sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ &&
-      sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ 2>/dev/null || true &&
-      sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/exports &&
-      for f in master_leaderboard.csv master_leaderboard_bootcamp.csv; do
-        if [ -f Outputs/\$f ]; then
-          sudo -u ${CONSOLE_USER} cp Outputs/\$f ${CONSOLE_STORAGE}/exports/
-        fi
-      done &&
-      echo '${RUN_ID}' | sudo -u ${CONSOLE_USER} tee ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
-      echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
-      rm -rf /tmp/artifact_staging/${RUN_ID} &&
-      echo '[upload] Artifacts installed to console storage.'
-    " 2>/dev/null
+      # SCP tarball to console staging
+      timeout 300 gcloud compute scp \
+        --strict-host-key-checking=no \
+        "$ARTIFACT_TARBALL" \
+        "${CONSOLE_INSTANCE}:/tmp/artifact_staging/${RUN_ID}/artifacts.tar.gz" \
+        --zone="$CONSOLE_ZONE" \
+        2>/dev/null
 
-    UPLOAD_EXIT=$?
-    if [ $UPLOAD_EXIT -eq 0 ]; then
-      echo "[upload] SUCCESS: Artifacts uploaded to strategy-console."
+      if [ $? -ne 0 ]; then
+        echo "[upload] SCP failed on attempt $ATTEMPT. Retrying in 15 seconds..."
+        sleep 15
+        continue
+      fi
+
+      # SSH into console to unpack and install into canonical storage
+      timeout 120 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
+        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        --command="
+          mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
+          cd /tmp/artifact_staging/${RUN_ID}/unpacked &&
+          tar -xzf ../artifacts.tar.gz &&
+          sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts &&
+          sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ &&
+          sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ 2>/dev/null || true &&
+          sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/exports &&
+          for f in master_leaderboard.csv master_leaderboard_bootcamp.csv; do
+            if [ -f Outputs/\$f ]; then
+              sudo -u ${CONSOLE_USER} cp Outputs/\$f ${CONSOLE_STORAGE}/exports/
+            fi
+          done &&
+          echo '${RUN_ID}' | sudo -u ${CONSOLE_USER} tee ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
+          echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
+          rm -rf /tmp/artifact_staging/${RUN_ID} &&
+          echo '[upload] Artifacts installed to console storage.'
+        " 2>/dev/null
+
+      if [ $? -eq 0 ]; then
+        UPLOAD_SUCCESS=1
+        echo "[upload] SUCCESS on attempt $ATTEMPT."
+        break
+      else
+        echo "[upload] Install failed on attempt $ATTEMPT. Retrying in 15 seconds..."
+        sleep 15
+      fi
+    done
+
+    if [ $UPLOAD_SUCCESS -ne 1 ]; then
+      echo "[upload] FAILED after $MAX_RETRIES attempts. VM preserved for manual recovery."
+      write_status "completed" "upload_failed" "Engine done but console upload failed after $MAX_RETRIES attempts. VM preserved." 0
+    else
       write_status "completed" "uploaded" "Artifacts uploaded to console. VM will self-delete." 0
-
       echo "[cleanup] Self-deleting compute VM in 5 seconds..."
       sleep 5
       gcloud compute instances delete "$(hostname)" \
         --zone="$COMPUTE_ZONE" \
         --quiet \
         2>/dev/null &
-    else
-      echo "[upload] WARNING: Upload to console failed (exit $UPLOAD_EXIT). VM preserved for manual recovery."
-      write_status "completed" "upload_failed" "Engine done but console upload failed. VM preserved." 0
     fi
 fi
 

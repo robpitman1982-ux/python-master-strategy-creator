@@ -1118,3 +1118,58 @@ def test_main_dry_run_stops_before_vm_creation(tmp_path: Path, monkeypatch):
     latest_run = (results_root / LATEST_RUN_FILE_NAME).read_text(encoding="utf-8")
     assert run_dirs[0].name in latest_run
     assert (run_dirs[0] / "input_bundle.tar.gz").exists()
+
+
+def test_remote_runner_script_ssh_disables_host_key_checking(tmp_path: Path):
+    """All gcloud SSH calls in runner include StrictHostKeyChecking=no."""
+    import re
+
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+
+    # Count SSH calls and flag occurrences — commands span multiple lines so we
+    # compare counts rather than per-line matching.
+    ssh_call_count = len(re.findall(r"gcloud compute ssh", text))
+    flag_count = len(re.findall(r"StrictHostKeyChecking=no", text))
+    assert ssh_call_count > 0, "No gcloud compute ssh calls found in runner"
+    assert flag_count >= ssh_call_count, (
+        f"StrictHostKeyChecking=no ({flag_count}) < gcloud compute ssh calls ({ssh_call_count})"
+    )
+
+
+def test_remote_runner_script_scp_disables_host_key_checking(tmp_path: Path):
+    """All gcloud SCP calls in runner include strict-host-key-checking=no."""
+    import re
+
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+
+    # Count SCP calls and flag occurrences — commands span multiple lines.
+    scp_call_count = len(re.findall(r"gcloud compute scp", text))
+    flag_count = len(re.findall(r"--strict-host-key-checking=no", text))
+    assert scp_call_count > 0, "No gcloud compute scp calls found in runner"
+    assert flag_count >= scp_call_count, (
+        f"--strict-host-key-checking=no ({flag_count}) < gcloud compute scp calls ({scp_call_count})"
+    )
+
+
+def test_remote_runner_script_disables_interactive_prompts(tmp_path: Path):
+    """Runner sets CLOUDSDK_CORE_DISABLE_PROMPTS before upload section."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "CLOUDSDK_CORE_DISABLE_PROMPTS=1" in text
+
+
+def test_remote_runner_script_ssh_has_timeouts(tmp_path: Path):
+    """SSH/SCP calls have timeouts to prevent infinite hangs."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "ConnectTimeout" in text or "timeout " in text
+
+
+def test_remote_runner_script_upload_has_retry_loop(tmp_path: Path):
+    """Upload section retries up to 3 times on failure."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "MAX_RETRIES" in text or "ATTEMPT" in text
+    assert "Retrying" in text
