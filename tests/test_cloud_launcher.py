@@ -1187,3 +1187,28 @@ def test_remote_runner_script_bucket_upload_happens_before_delete(tmp_path: Path
     upload_idx = text.index('gcloud storage cp "$ARTIFACT_TARBALL" "$BUCKET_URI/runs/$RUN_ID/artifacts.tar.gz"')
     delete_idx = text.index('gcloud compute instances delete "$(hostname)" --zone="$COMPUTE_ZONE" --quiet')
     assert upload_idx < delete_idx
+
+
+def test_remote_runner_script_downloads_bundle_from_gcs_staging(tmp_path: Path):
+    """When bundle_staging_uri is set, the runner downloads the bundle from GCS if it is not present."""
+    runner_path = create_remote_runner_file(
+        tmp_path,
+        fire_and_forget=True,
+        bundle_staging_uri="gs://strategy-artifacts-robpitman/staging/strategy-sweep-123/input_bundle.tar.gz",
+    )
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert 'BUNDLE_STAGING_URI="gs://strategy-artifacts-robpitman/staging/strategy-sweep-123/input_bundle.tar.gz"' in text
+    assert 'gcloud storage cp "$BUNDLE_STAGING_URI" "$BUNDLE_PATH"' in text
+    assert "Downloading input bundle from GCS staging" in text
+    assert "Failed to download input bundle from GCS staging" in text
+
+
+def test_remote_runner_script_no_staging_uri_by_default(tmp_path: Path):
+    """Without bundle_staging_uri the placeholder is empty and GCS download branch is unreachable."""
+    runner_path = create_remote_runner_file(tmp_path)
+    text = runner_path.read_text(encoding="utf-8")
+
+    assert 'BUNDLE_STAGING_URI=""' in text
+    # The original fail-fast error message must still be present as the fallback
+    assert '"Input bundle missing"' in text

@@ -426,6 +426,7 @@ RUN_ROOT="$1"
 FIRE_AND_FORGET_ENABLED="__FIRE_AND_FORGET_ENABLED__"
 BUCKET_URI="__BUCKET_URI__"
 COMPUTE_ZONE="__COMPUTE_ZONE__"
+BUNDLE_STAGING_URI="__BUNDLE_STAGING_URI__"
 STATUS_PATH="$RUN_ROOT/run_status.json"
 BUNDLE_PATH="$RUN_ROOT/input_bundle.tar.gz"
 LOG_DIR="$RUN_ROOT/logs"
@@ -501,9 +502,20 @@ preserve_outputs() {
 write_status "running" "bootstrap" "Preparing remote run root"
 
 if [ ! -f "$BUNDLE_PATH" ]; then
-    write_status "failed" "bootstrap" "Input bundle missing" 1
-    preserve_outputs
-    exit 1
+    if [ -n "$BUNDLE_STAGING_URI" ]; then
+        write_status "running" "bundle_download" "Downloading input bundle from GCS staging"
+        if gcloud storage cp "$BUNDLE_STAGING_URI" "$BUNDLE_PATH"; then
+            echo "[bootstrap] Bundle downloaded from GCS staging."
+        else
+            write_status "failed" "bundle_download" "Failed to download input bundle from GCS staging" 1
+            preserve_outputs
+            exit 1
+        fi
+    else
+        write_status "failed" "bootstrap" "Input bundle missing" 1
+        preserve_outputs
+        exit 1
+    fi
 fi
 
 write_status "running" "python_bootstrap" "Installing python3.12 runtime and venv tooling"
@@ -1960,11 +1972,13 @@ def create_remote_runner_file(
     fire_and_forget: bool = False,
     bucket_uri: str = DEFAULT_BUCKET_URI,
     compute_zone: str = DEFAULT_ZONE,
+    bundle_staging_uri: str = "",
 ) -> Path:
     script = REMOTE_RUNNER_SCRIPT
     script = script.replace("__FIRE_AND_FORGET_ENABLED__", "1" if fire_and_forget else "0")
     script = script.replace("__BUCKET_URI__", bucket_uri)
     script = script.replace("__COMPUTE_ZONE__", compute_zone)
+    script = script.replace("__BUNDLE_STAGING_URI__", bundle_staging_uri)
     runner_path = run_dir / "remote_runner.sh"
     with runner_path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write(script)
@@ -2241,11 +2255,17 @@ def main(argv: list[str] | None = None) -> int:
 
     manifest_path = local_run_dir / "run_manifest.json"
     manifest_path.write_text(json.dumps(asdict(manifest), indent=2), encoding="utf-8")
+    fire_and_forget = getattr(args, "fire_and_forget", False)
+    # In fire-and-forget mode the bucket is guaranteed to exist; route the large
+    # input bundle through GCS so SCP only transfers small files (manifest + runner).
+    # This avoids CalledProcessError from SPOT preemption during a long SCP.
+    bundle_staging_uri = f"{bucket_uri}/staging/{run_id}/input_bundle.tar.gz" if fire_and_forget else ""
     runner_path = create_remote_runner_file(
         local_run_dir,
-        fire_and_forget=getattr(args, "fire_and_forget", False),
+        fire_and_forget=fire_and_forget,
         bucket_uri=bucket_uri,
         compute_zone=args.zone,
+        bundle_staging_uri=bundle_staging_uri,
     )
     bundle_path = local_run_dir / DEFAULT_BUNDLE_NAME
 
@@ -2292,8 +2312,12 @@ def main(argv: list[str] | None = None) -> int:
         print_final_run_summary(status_store.latest_path, local_run_dir)
         return 0
 
-    if getattr(args, "fire_and_forget", False):
+    if fire_and_forget:
         ensure_bucket_exists(gcloud_base, bucket_uri)
+        if bundle_staging_uri:
+            status_store.update("running", "bundle_stage_upload", "Uploading input bundle to GCS staging (avoids SCP timeout for large bundles).")
+            run_command(gcloud_base + ["storage", "cp", str(bundle_path), bundle_staging_uri])
+            print(f"[bundle] Input bundle staged to GCS: {bundle_staging_uri}")
 
     exit_code = 0
     run_outcome: str | None = None
@@ -2320,18 +2344,26 @@ def main(argv: list[str] | None = None) -> int:
         status_store.update("running", "remote_stage", "Creating deterministic remote staging directory.")
         ssh_command(gcloud_base, args.instance_name, args.zone, f"mkdir -p {remote['run_root']}/logs")
 
-        status_store.update("running", "upload", "Uploading input bundle and manifest.")
-        scp_to_remote(gcloud_base, args.instance_name, args.zone, bundle_path, remote["bundle"])
+        if bundle_staging_uri:
+            upload_desc = "Uploading manifest and runner to VM (bundle already staged to GCS)."
+        else:
+            upload_desc = "Uploading input bundle, manifest, and runner to VM."
+        status_store.update("running", "upload", upload_desc)
+        if not bundle_staging_uri:
+            scp_to_remote(gcloud_base, args.instance_name, args.zone, bundle_path, remote["bundle"])
         scp_to_remote(gcloud_base, args.instance_name, args.zone, manifest_path, f"{remote['run_root']}/manifest.json")
         scp_to_remote(gcloud_base, args.instance_name, args.zone, runner_path, remote["runner"])
 
         status_store.update("running", "validate_remote", "Validating remote upload payloads before engine start.")
+        # When bundle is staged via GCS, the runner downloads it at bootstrap time —
+        # it won't be present on the VM yet, so only validate the small files.
+        bundle_check = "" if bundle_staging_uri else f"test -s {remote['bundle']} && "
         ssh_command(
             gcloud_base,
             args.instance_name,
             args.zone,
             (
-                f"test -s {remote['bundle']} && "
+                f"{bundle_check}"
                 f"test -s {remote['run_root']}/manifest.json && "
                 f"test -s {remote['runner']}"
             ),
@@ -2382,7 +2414,7 @@ def main(argv: list[str] | None = None) -> int:
                 "Remote orchestration launch confirmed.",
                 remote_restart_guard=runner_guard,
             )
-            if getattr(args, "fire_and_forget", False):
+            if fire_and_forget:
                 print()
                 print("FIRE-AND-FORGET MODE")
                 print("====================")
