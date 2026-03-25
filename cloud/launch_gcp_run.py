@@ -643,17 +643,20 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
           tar -xzf ../artifacts.tar.gz &&
           sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts &&
           sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ &&
-          sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/ 2>/dev/null || true &&
+          if [ -d logs ]; then
+            sudo -u ${CONSOLE_USER} cp -r logs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/
+          fi &&
           sudo -u ${CONSOLE_USER} mkdir -p ${CONSOLE_STORAGE}/exports &&
           for f in master_leaderboard.csv master_leaderboard_bootcamp.csv; do
             if [ -f Outputs/\$f ]; then
               sudo -u ${CONSOLE_USER} cp Outputs/\$f ${CONSOLE_STORAGE}/exports/
             fi
           done &&
+          sudo -u ${CONSOLE_USER} test -f ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/Outputs/master_leaderboard.csv &&
           echo '${RUN_ID}' | sudo -u ${CONSOLE_USER} tee ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
           echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
           rm -rf /tmp/artifact_staging/${RUN_ID} &&
-          echo '[upload] Artifacts installed to console storage.'
+          echo '[upload] Artifacts installed to console storage and verified.'
         " 2>/dev/null
 
       if [ $? -eq 0 ]; then

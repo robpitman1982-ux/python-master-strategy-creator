@@ -186,7 +186,7 @@ timeframe scaling behaviour, feature dependencies, and combinatorial search spac
 - [x] DEFAULT_ZONE was hardcoded to australia-southeast2-a â€” now us-central1-a; also configurable per YAML via cloud.zone
 - [x] run_cloud_sweep.py printed misleading stage labels unconditionally â€” fixed, wrapper now only prints config and exit code
 - [x] Remote runner Python drift could break pinned dependencies â€” launcher now bootstraps python3.12 explicitly for remote GCP venv creation
-- [x] Fire-and-forget SSH host key hang â€” all gcloud SSH/SCP calls now use StrictHostKeyChecking=no, ConnectTimeout=30, and CLOUDSDK_CORE_DISABLE_PROMPTS=1; upload retries 3 times before preserving VM
+- [x] Fire-and-forget SSH host key hang â€” all gcloud SSH/SCP calls now use StrictHostKeyChecking=no, ConnectTimeout=30, and CLOUDSDK_CORE_DISABLE_PROMPTS=1; upload retries 3 times before preserving VM, and success now requires `master_leaderboard.csv` to exist in the console run folder before self-delete
 
 ### Important (before multi-instrument expansion)
 - [x] Make dataset path configurable â€” now in config.yaml with multi-dataset loop support

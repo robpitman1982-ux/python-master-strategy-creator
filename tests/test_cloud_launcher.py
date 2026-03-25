@@ -1173,3 +1173,19 @@ def test_remote_runner_script_upload_has_retry_loop(tmp_path: Path):
     text = runner_path.read_text(encoding="utf-8")
     assert "MAX_RETRIES" in text or "ATTEMPT" in text
     assert "Retrying" in text
+
+
+def test_remote_runner_script_verifies_master_leaderboard_before_success(tmp_path: Path):
+    """Fire-and-forget upload only succeeds after the console run folder has the master leaderboard."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "artifacts/Outputs/master_leaderboard.csv" in text
+    assert "test -f" in text
+
+
+def test_remote_runner_script_only_treats_logs_copy_as_optional(tmp_path: Path):
+    """The optional logs copy does not mask a failed Outputs install."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/" in text
+    assert "if [ -d logs ]; then" in text

@@ -10,6 +10,10 @@
 - Added ConnectTimeout=30 to SSH and timeout wrappers on SCP to prevent hangs
 - Added 3-attempt retry loop for the upload sequence — transient SSH failures
   no longer leave artifacts stranded
+- Tightened fire-and-forget upload verification: the remote install path now
+  requires `master_leaderboard.csv` to exist under
+  `~/strategy_console_storage/runs/<run-id>/artifacts/Outputs/` before the
+  upload is marked successful and before the VM self-deletes
 - VM still only self-deletes if upload succeeds (safety guard unchanged)
 - Added cloud/config_es_daily_only.yaml for fast validation runs
 
