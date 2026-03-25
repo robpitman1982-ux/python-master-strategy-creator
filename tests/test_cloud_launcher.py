@@ -1189,3 +1189,24 @@ def test_remote_runner_script_only_treats_logs_copy_as_optional(tmp_path: Path):
     text = runner_path.read_text(encoding="utf-8")
     assert "sudo -u ${CONSOLE_USER} cp -r Outputs ${CONSOLE_STORAGE}/runs/${RUN_ID}/artifacts/" in text
     assert "if [ -d logs ]; then" in text
+
+
+def test_remote_runner_script_puts_gcloud_command_before_raw_ssh_flags(tmp_path: Path):
+    """gcloud compute ssh uses --command before the raw `-- -o ...` SSH flags."""
+    import re
+
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert '-- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30' in text
+    assert re.search(
+        r'--command="mkdir -p /tmp/artifact_staging/\$\{RUN_ID\}"\s*\\\s*[\r\n]+\s*-- -o StrictHostKeyChecking=no',
+        text,
+    )
+
+
+def test_remote_runner_script_retries_failed_staging_directory_creation(tmp_path: Path):
+    """A failed console staging mkdir retries instead of falling through to SCP."""
+    runner_path = create_remote_runner_file(tmp_path, fire_and_forget=True)
+    text = runner_path.read_text(encoding="utf-8")
+    assert "Staging directory creation failed" in text
+    assert "continue" in text

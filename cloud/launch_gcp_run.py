@@ -616,9 +616,16 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
 
       # Create staging dir on console
       timeout 60 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
-        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        --ssh-key-expire-after=60m \
         --command="mkdir -p /tmp/artifact_staging/${RUN_ID}" \
-        2>/dev/null || true
+        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        2>/dev/null
+
+      if [ $? -ne 0 ]; then
+        echo "[upload] Staging directory creation failed on attempt $ATTEMPT. Retrying in 15 seconds..."
+        sleep 15
+        continue
+      fi
 
       # SCP tarball to console staging
       timeout 300 gcloud compute scp \
@@ -636,7 +643,7 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
 
       # SSH into console to unpack and install into canonical storage
       timeout 120 gcloud compute ssh "$CONSOLE_INSTANCE" --zone="$CONSOLE_ZONE" \
-        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        --ssh-key-expire-after=60m \
         --command="
           mkdir -p /tmp/artifact_staging/${RUN_ID}/unpacked &&
           cd /tmp/artifact_staging/${RUN_ID}/unpacked &&
@@ -657,7 +664,9 @@ if [ "$FIRE_AND_FORGET_ENABLED" = "1" ] && [ "$ENGINE_EXIT" -eq 0 ]; then
           echo '${CONSOLE_STORAGE}/runs/${RUN_ID}' | sudo -u ${CONSOLE_USER} tee -a ${CONSOLE_STORAGE}/runs/LATEST_RUN.txt > /dev/null &&
           rm -rf /tmp/artifact_staging/${RUN_ID} &&
           echo '[upload] Artifacts installed to console storage and verified.'
-        " 2>/dev/null
+        " \
+        -- -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=30 \
+        2>/dev/null
 
       if [ $? -eq 0 ]; then
         UPLOAD_SUCCESS=1
