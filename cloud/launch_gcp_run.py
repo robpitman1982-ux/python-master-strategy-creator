@@ -94,6 +94,8 @@ class DatasetSpec:
 class RunManifest:
     run_id: str
     created_utc: str
+    created_local: str
+    run_label: str
     instance_name: str
     zone: str
     machine_type: str
@@ -201,6 +203,8 @@ class LauncherStatusStore:
         local_results_dir: str,
         remote_run_root: str,
         created_utc: str,
+        created_local: str,
+        run_label: str,
     ):
         self.run_dir = run_dir
         self.latest_path = run_dir / "launcher_status.json"
@@ -211,6 +215,8 @@ class LauncherStatusStore:
             "zone": zone,
             "config_path": config_path,
             "created_utc": created_utc,
+            "created_local": created_local,
+            "run_label": run_label,
             "local_results_dir": local_results_dir,
             "remote_run_root": remote_run_root,
             "bundle_size_bytes": None,
@@ -259,6 +265,8 @@ class LauncherStatusStore:
                 "zone": self.base_payload["zone"],
                 "config_path": self.base_payload["config_path"],
                 "created_utc": self.base_payload["created_utc"],
+                "created_local": self.base_payload["created_local"],
+                "run_label": self.base_payload["run_label"],
                 "local_results_dir": self.base_payload["local_results_dir"],
                 "remote_run_root": self.base_payload["remote_run_root"],
                 "state": state,
@@ -376,6 +384,26 @@ def sanitize_run_token(value: str) -> str:
 def make_run_id(instance_name: str) -> str:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return sanitize_run_token(f"{instance_name}-{stamp}")
+
+
+def format_local_timestamp(dt: datetime) -> str:
+    local_dt = dt.astimezone()
+    return f"{local_dt.strftime('%Y-%m-%d %H:%M:%S')} {local_dt.tzname() or 'local'}"
+
+
+def summarize_datasets_for_label(datasets: list[DatasetSpec]) -> str:
+    if not datasets:
+        return "no-datasets"
+
+    markets = sorted({ds.market for ds in datasets})
+    timeframes = [ds.timeframe for ds in datasets]
+    market_text = "-".join(markets)
+    timeframe_text = timeframes[0] if len(timeframes) == 1 else f"{len(timeframes)}tf"
+    return f"{market_text}_{timeframe_text}"
+
+
+def make_run_label(created_at: datetime, datasets: list[DatasetSpec]) -> str:
+    return f"{created_at.astimezone().strftime('%Y-%m-%d_%H-%M')}_{summarize_datasets_for_label(datasets)}"
 
 
 def remote_paths_for_run(run_id: str) -> dict[str, str]:
@@ -734,9 +762,12 @@ def build_manifest(
     local_results_dir: Path,
 ) -> RunManifest:
     remote = remote_paths_for_run(run_id)
+    created_at = datetime.now(UTC)
     return RunManifest(
         run_id=run_id,
-        created_utc=datetime.now(UTC).isoformat(timespec="seconds"),
+        created_utc=created_at.isoformat(timespec="seconds"),
+        created_local=format_local_timestamp(created_at),
+        run_label=make_run_label(created_at, datasets),
         instance_name=instance_name,
         zone=zone,
         machine_type=machine_type,
@@ -1606,7 +1637,10 @@ def recover_existing_run(
     if not manifest_path.exists():
         raise FileNotFoundError(f"Cannot recover run without manifest: {manifest_path}")
 
-    manifest = RunManifest(**json.loads(manifest_path.read_text(encoding="utf-8")))
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload.setdefault("created_local", manifest_payload.get("created_utc", ""))
+    manifest_payload.setdefault("run_label", manifest_payload.get("run_id", run_dir.name))
+    manifest = RunManifest(**manifest_payload)
     status_store = LauncherStatusStore(
         run_dir,
         run_id=manifest.run_id,
@@ -1616,6 +1650,8 @@ def recover_existing_run(
         local_results_dir=manifest.local_results_dir,
         remote_run_root=manifest.remote_run_root,
         created_utc=manifest.created_utc,
+        created_local=manifest.created_local,
+        run_label=manifest.run_label,
     )
 
     extracted_dir = run_dir / "artifacts"
@@ -1884,6 +1920,10 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
     print("STRATEGY ENGINE RUN COMPLETE")
     print("=============================")
     print(f"Run ID: {status.get('run_id', local_run_dir.name)}")
+    if status.get("run_label"):
+        print(f"Run Label: {status['run_label']}")
+    if status.get("created_local"):
+        print(f"Created: {status['created_local']}")
     print(f"Local Results Path: {local_run_dir}")
     print(f"Run Outcome: {run_outcome}")
     print(f"Artifacts downloaded: {'YES' if artifacts_downloaded else 'NO'}")
@@ -2115,6 +2155,8 @@ def print_manifest_summary(manifest: RunManifest) -> None:
     print("GCP Strategy Engine Launcher")
     print("=" * 60)
     print(f"Run ID:      {manifest.run_id}")
+    print(f"Run Label:   {manifest.run_label}")
+    print(f"Created:     {manifest.created_local}")
     print(f"Instance:    {manifest.instance_name}")
     print(f"Zone:        {manifest.zone}")
     print(f"Machine:     {manifest.machine_type}")
@@ -2193,6 +2235,8 @@ def main(argv: list[str] | None = None) -> int:
         local_results_dir=manifest.local_results_dir,
         remote_run_root=manifest.remote_run_root,
         created_utc=manifest.created_utc,
+        created_local=manifest.created_local,
+        run_label=manifest.run_label,
     )
 
     manifest_path = local_run_dir / "run_manifest.json"
@@ -2343,6 +2387,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("FIRE-AND-FORGET MODE")
                 print("====================")
                 print(f"Run ID: {manifest.run_id}")
+                print(f"Run Label: {manifest.run_label}")
                 print(f"VM: {manifest.instance_name} ({manifest.zone}, {manifest.machine_type})")
                 print()
                 print("The engine is running. When it finishes, the VM will:")
