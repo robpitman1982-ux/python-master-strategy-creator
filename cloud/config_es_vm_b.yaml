@@ -51,7 +51,7 @@ leaderboard:
 output_dir: "Outputs"
 
 cloud:
-  zone: "us-central1-a"
+  zone: "us-central1-f"
   machine_type: "n2-highcpu-96"
   provisioning_model: "SPOT"
   boot_disk_size: "120GB"
