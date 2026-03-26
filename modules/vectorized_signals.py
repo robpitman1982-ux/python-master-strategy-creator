@@ -37,4 +37,6 @@ def compute_combined_signal_mask(
     for f in filters[1:]:
         combined = combined & f.mask(data)
 
-    return combined.values.astype(bool)
+    if hasattr(combined, "values"):
+        return combined.values.astype(bool)
+    return np.asarray(combined, dtype=bool)

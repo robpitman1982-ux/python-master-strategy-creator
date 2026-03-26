@@ -28,7 +28,7 @@ from modules.strategy_types import get_strategy_type, list_strategy_types
 _cfg = load_config()
 
 CSV_PATH = Path(get_nested(_cfg, "datasets", default=[{}])[0].get("path", "Data/ES_60m_2008_2026_tradestation.csv"))
-STRATEGY_TYPE_NAME = get_nested(_cfg, "strategy_types", default="all")
+STRATEGY_TYPE_SELECTION = get_nested(_cfg, "strategy_types", default="all")
 OUTPUTS_DIR = Path(get_nested(_cfg, "output_dir", default="Outputs"))
 
 MAX_WORKERS_SWEEP = get_nested(_cfg, "pipeline", "max_workers_sweep", default=10)
@@ -101,6 +101,18 @@ def parse_int(value: Any) -> int:
         return int(value)
     text = str(value).replace(",", "").strip()
     return int(float(text)) if text else 0
+
+
+def normalize_strategy_type_names(selection: Any) -> list[str]:
+    if isinstance(selection, str):
+        normalized = selection.strip()
+        return list_strategy_types() if normalized.lower() == "all" else [normalized]
+    if isinstance(selection, list):
+        cleaned = [str(item).strip() for item in selection if str(item).strip()]
+        return cleaned
+    raise TypeError(
+        "Config field 'strategy_types' must be either a string or a list of strings."
+    )
 
 
 def call_first_available(obj: Any, method_names: list[str], *args, **kwargs):
@@ -921,7 +933,7 @@ def _run_dataset(
     """Run the full pipeline for a single dataset and save results to ds_output_dir."""
     ds_output_dir.mkdir(parents=True, exist_ok=True)
 
-    family_names = list_strategy_types() if STRATEGY_TYPE_NAME == "all" else [STRATEGY_TYPE_NAME]
+    family_names = normalize_strategy_type_names(STRATEGY_TYPE_SELECTION)
     dataset_summaries: list[dict[str, Any]] = []
 
     tracker = ProgressTracker(
@@ -1024,7 +1036,7 @@ if __name__ == "__main__":
 
     # Re-derive all constants from the loaded config
     CSV_PATH = Path(get_nested(_cfg, "datasets", default=[{}])[0].get("path", "Data/ES_60m_2008_2026_tradestation.csv"))
-    STRATEGY_TYPE_NAME = get_nested(_cfg, "strategy_types", default="all")
+    STRATEGY_TYPE_SELECTION = get_nested(_cfg, "strategy_types", default="all")
     OUTPUTS_DIR = Path(get_nested(_cfg, "output_dir", default="Outputs"))
     MAX_WORKERS_SWEEP = get_nested(_cfg, "pipeline", "max_workers_sweep", default=10)
     MAX_WORKERS_REFINEMENT = get_nested(_cfg, "pipeline", "max_workers_refinement", default=10)
