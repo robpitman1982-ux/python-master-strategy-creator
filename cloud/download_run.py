@@ -22,7 +22,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Matches cloud/launch_gcp_run.py
@@ -267,7 +267,7 @@ def merge_runs(run_id_a: str, run_id_b: str) -> Path | None:
         return None
 
     # Build merged run ID
-    ts = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     merged_run_id = f"merged-{ts}"
     merged_dir = RUNS_DIR / merged_run_id
     merged_dir.mkdir(parents=True, exist_ok=True)
