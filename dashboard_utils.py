@@ -760,6 +760,9 @@ def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
         "yearly": None,
         "returns": None,
         "cross_tf_correlation": None,
+        "cross_correlation": None,
+        "cross_portfolio": None,
+        "cross_yearly": None,
     }
     if outputs_dir is None or not outputs_dir.exists():
         return result
@@ -793,6 +796,16 @@ def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
     result["yearly"] = _safe_csv(files.get("yearly_stats_breakdown.csv"))
     result["returns"] = _safe_csv(files.get("strategy_returns.csv"))
     result["cross_tf_correlation"] = _safe_csv(files.get("cross_timeframe_correlation_matrix.csv"))
+
+    # Cross-dataset files live in the top-level Outputs dir (parent of dataset subdirs like ES_60m/)
+    outputs_root = (
+        outputs_dir.parent
+        if outputs_dir.name[:2] in ("ES", "CL", "NQ") or "_" in outputs_dir.name
+        else outputs_dir
+    )
+    result["cross_correlation"] = _safe_csv(outputs_root / "cross_timeframe_correlation_matrix.csv") or result["cross_tf_correlation"]
+    result["cross_portfolio"] = _safe_csv(outputs_root / "cross_timeframe_portfolio_review.csv")
+    result["cross_yearly"] = _safe_csv(outputs_root / "cross_timeframe_yearly_stats.csv")
 
     return result
 

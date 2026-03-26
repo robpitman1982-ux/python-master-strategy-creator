@@ -241,11 +241,25 @@ with tab_monitor:
         )
         progress_title = f"Dataset Progress — {ds_label}" if ds_label else "Dataset Progress"
         st.subheader(progress_title)
-        all_families = ["trend", "mean_reversion", "breakout"]
-        fam_emoji    = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥"}
+        fam_emoji = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥"}
+        parent_families = ["mean_reversion", "trend", "breakout"]
 
-        total_families = len(dataset_statuses) * len(all_families)
-        done_families  = sum(len(ds.get("families_completed", [])) for ds in dataset_statuses)
+        def _group_families(family_list: list[str]) -> dict[str, list[str]]:
+            groups: dict[str, list[str]] = {p: [] for p in parent_families}
+            for f in family_list:
+                matched = False
+                for p in parent_families:
+                    if f == p or f.startswith(p + "_"):
+                        groups[p].append(f)
+                        matched = True
+                        break
+                if not matched:
+                    groups.setdefault(f, []).append(f)
+            return groups
+
+        done_families = sum(len(ds.get("families_completed", [])) for ds in dataset_statuses)
+        remaining_families = sum(len(ds.get("families_remaining", [])) for ds in dataset_statuses)
+        total_families = done_families + remaining_families or len(dataset_statuses) * 3
         overall_pct    = (done_families / total_families * 100) if total_families else 0
 
         st.markdown(f"**Overall: {done_families} / {total_families} families complete ({overall_pct:.0f}%)**")
@@ -259,11 +273,15 @@ with tab_monitor:
             cur_fam   = ds.get("current_family", "?")
             cur_stage = ds.get("current_stage", "?")
             completed = ds.get("families_completed", [])
+            remaining = ds.get("families_remaining", [])
             eta_sec   = float(ds.get("eta_seconds", 0) or 0)
             el_sec    = float(ds.get("elapsed_seconds", 0) or 0)
             is_waiting = cur_stage == "WAITING"
             is_done   = not is_waiting and (pct >= 100 or cur_stage == "DONE")
             is_active = not is_done and not is_waiting and pct > 0
+
+            completed_groups = _group_families(completed)
+            all_fams_for_ds  = _group_families(completed + remaining)
 
             col_a, col_b = st.columns([3, 1])
             with col_a:
@@ -271,20 +289,25 @@ with tab_monitor:
                 st.markdown(f"**{icon} {market} {timeframe}**")
                 st.progress(min(pct / 100.0, 1.0))
                 pill_html = ""
-                for fam in all_families:
-                    e = fam_emoji.get(fam, "•")
-                    if fam in completed:
+                for p in parent_families:
+                    e = fam_emoji.get(p, "•")
+                    done_in_group  = len(completed_groups.get(p, []))
+                    total_in_group = max(len(all_fams_for_ds.get(p, [])), 1)
+                    is_cur = cur_fam == p or (cur_fam or "").startswith(p + "_")
+                    is_fam_done = done_in_group >= total_in_group
+                    label = f"{done_in_group}/{total_in_group}" if total_in_group > 1 else ("✓" if is_fam_done else "")
+                    if is_fam_done:
                         pill_html += (f'<span style="background:#1b5e20;color:#a5d6a7;'
                                       f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'{e} {fam} ✓</span>')
-                    elif fam == cur_fam and not is_done:
+                                      f'{e} {p} {label}</span>')
+                    elif is_cur and not is_done:
                         pill_html += (f'<span style="background:#0d47a1;color:#90caf9;'
                                       f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'⚙️ {fam} ({cur_stage})</span>')
+                                      f'⚙️ {p} {label} ({cur_stage})</span>')
                     else:
                         pill_html += (f'<span style="background:#1a2634;color:#546e7a;'
                                       f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'{e} {fam}</span>')
+                                      f'{e} {p} {label}</span>')
                 st.markdown(pill_html, unsafe_allow_html=True)
             with col_b:
                 if is_done:
@@ -376,11 +399,21 @@ with tab_results:
             col_map = {
                 "strategy_name": "Strategy", "leader_strategy_name": "Strategy",
                 "strategy_type": "Family",
+                "quality_flag": "Quality", "accepted_final": "Accepted",
                 "profit_factor": "PF", "leader_pf": "PF",
                 "is_pf": "IS PF", "oos_pf": "OOS PF",
+                "recent_12m_pf": "R12m PF",
                 "net_pnl": "Net PnL", "leader_net_pnl": "Net PnL",
                 "total_trades": "Trades", "leader_trades": "Trades",
-                "quality_flag": "Quality", "accepted_final": "Accepted",
+                "bootcamp_score": "Bootcamp",
+                "leader_trades_per_year": "Trades/Yr",
+                "calmar_ratio": "Calmar",
+                "is_oos_pf_ratio": "IS/OOS",
+                "leader_win_rate": "Win%",
+                "leader_max_drawdown": "Max DD",
+                "leader_pct_profitable_years": "Prof Yrs%",
+                "timeframe": "TF",
+                "market": "Market",
                 "dataset": "Dataset",
             }
             existing = {k: v for k, v in col_map.items() if k in lb.columns}
@@ -395,9 +428,27 @@ with tab_results:
                     else:
                         seen[c] = 0; new_cols.append(c)
                 disp.columns = new_cols
+                # Format monetary columns
+                for money_col in ["Net PnL", "Max DD"]:
+                    if money_col in disp.columns:
+                        disp[money_col] = pd.to_numeric(disp[money_col], errors="coerce").apply(
+                            lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                        )
+                # Format ratio/percentage columns
+                for ratio_col in ["PF", "IS PF", "OOS PF", "R12m PF", "Calmar", "IS/OOS", "Win%", "Prof Yrs%", "Trades/Yr"]:
+                    if ratio_col in disp.columns:
+                        disp[ratio_col] = pd.to_numeric(disp[ratio_col], errors="coerce").round(2)
+                # Quality flag column config
+                col_config: dict = {}
+                if "Quality" in disp.columns:
+                    col_config["Quality"] = st.column_config.TextColumn(
+                        "Quality",
+                        help="ROBUST=strong both periods, STABLE=acceptable, MARGINAL=weak, BROKEN=overfit",
+                    )
+                st.dataframe(disp, column_config=col_config, use_container_width=True)
             else:
                 disp = lb.head(20)
-            render_table(disp)
+                render_table(disp)
             st.caption(f"{len(lb)} strategies")
         else:
             st.info("No leaderboard file found.")
@@ -460,12 +511,13 @@ with tab_results:
                 render_table(yearly_df)
 
         # Cross-timeframe correlation matrix (all accepted strategies across all datasets)
-        if results.get("cross_tf_correlation") is not None:
+        if results.get("cross_correlation") is not None:
             st.divider()
-            st.subheader("Cross-Timeframe Strategy Correlations (all accepted strategies)")
+            st.subheader("Cross-Timeframe Strategy Correlations")
+            st.caption("All accepted strategies across all timeframes — correlation of daily PnL")
             try:
                 import plotly.express as px
-                ctf_df = results["cross_tf_correlation"].copy()
+                ctf_df = results["cross_correlation"].copy()
                 idx_col = ctf_df.columns[0]
                 ctf_df = ctf_df.set_index(idx_col)
 
@@ -488,12 +540,15 @@ with tab_results:
                 fig.update_layout(height=fig_height, margin=dict(l=40, r=20, t=60, b=40))
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
-                render_table(results["cross_tf_correlation"])
+                render_table(results["cross_correlation"])
                 st.caption(f"Heatmap error: {e}")
+            if results.get("cross_portfolio") is not None:
+                with st.expander("Cross-timeframe portfolio review", expanded=False):
+                    render_table(results["cross_portfolio"])
 
         if results["correlation"] is not None:
             st.divider()
-            st.subheader("Strategy Correlation (per-dataset)")
+            st.subheader("Per-Dataset Correlations")
             try:
                 import plotly.express as px
                 corr_df = results["correlation"].copy()
@@ -517,19 +572,33 @@ with tab_results:
 with tab_ultimate:
 
     @st.cache_data(ttl=120)
-    def _load_ultimate_leaderboard() -> pd.DataFrame:
+    def _load_ultimate_leaderboard(bootcamp: bool = False) -> pd.DataFrame:
+        filename = "ultimate_leaderboard_bootcamp.csv" if bootcamp else "ultimate_leaderboard.csv"
         try:
             from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
-            return aggregate_ultimate_leaderboard()
+            df = aggregate_ultimate_leaderboard()
+            if bootcamp and "bootcamp_score" in df.columns:
+                df = df.sort_values("bootcamp_score", ascending=False).reset_index(drop=True)
+                if "rank" in df.columns:
+                    df["rank"] = range(1, len(df) + 1)
+            return df
         except Exception as exc:
             return pd.DataFrame({"error": [str(exc)]})
 
-    col_refresh, col_spacer = st.columns([1, 5])
+    col_refresh, col_spacer, col_view = st.columns([1, 3, 2])
     with col_refresh:
         if st.button("🔄 Refresh", key="ul_refresh"):
             _load_ultimate_leaderboard.clear()
+    with col_view:
+        view_mode = st.radio(
+            "Ranking",
+            ["Classic (PF)", "Bootcamp Score"],
+            horizontal=True,
+            key="ul_view_mode",
+        )
 
-    ul_df = _load_ultimate_leaderboard()
+    use_bootcamp = view_mode == "Bootcamp Score"
+    ul_df = _load_ultimate_leaderboard(bootcamp=use_bootcamp)
 
     if ul_df.empty or "error" in ul_df.columns:
         if "error" in ul_df.columns:
@@ -540,14 +609,19 @@ with tab_ultimate:
         # ── KPI strip ────────────────────────────────────────────────────────
         total_strats  = len(ul_df)
         robust_count  = int((ul_df.get("quality_flag", pd.Series()) == "ROBUST").sum()) if "quality_flag" in ul_df.columns else 0
-        unique_datasets = ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
+        stable_count  = int(ul_df["quality_flag"].str.startswith("STABLE").sum()) if "quality_flag" in ul_df.columns else 0
+        unique_tfs    = ul_df["timeframe"].nunique() if "timeframe" in ul_df.columns else (
+            ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
+        )
+        unique_markets = ul_df["market"].nunique() if "market" in ul_df.columns else "—"
         runs_scanned  = ul_df["run_id"].nunique() if "run_id" in ul_df.columns else 0
 
-        u1, u2, u3, u4 = st.columns(4)
+        u1, u2, u3, u4, u5 = st.columns(5)
         u1.metric("Total Strategies", total_strats)
         u2.metric("ROBUST", robust_count)
-        u3.metric("Unique Datasets", unique_datasets)
-        u4.metric("Runs Scanned", runs_scanned)
+        u3.metric("STABLE", stable_count)
+        u4.metric("Timeframes", unique_tfs)
+        u5.metric("Markets", unique_markets)
 
         st.divider()
 
