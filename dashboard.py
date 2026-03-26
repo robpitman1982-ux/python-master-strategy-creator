@@ -459,9 +459,41 @@ with tab_results:
             except Exception:
                 render_table(yearly_df)
 
+        # Cross-timeframe correlation matrix (all accepted strategies across all datasets)
+        if results.get("cross_tf_correlation") is not None:
+            st.divider()
+            st.subheader("Cross-Timeframe Strategy Correlations (all accepted strategies)")
+            try:
+                import plotly.express as px
+                ctf_df = results["cross_tf_correlation"].copy()
+                idx_col = ctf_df.columns[0]
+                ctf_df = ctf_df.set_index(idx_col)
+
+                def _shorten_label(s: str) -> str:
+                    s = str(s)
+                    if "_Refined" in s:
+                        parts = s.split("_Refined", 1)
+                        return parts[0].split("_")[-1] + "_R" + parts[1][:8]
+                    if "_ES_" in s:
+                        return s.split("_ES_")[-1][-25:]
+                    return s[-25:]
+
+                ctf_df.index   = [_shorten_label(i) for i in ctf_df.index]
+                ctf_df.columns = [_shorten_label(c) for c in ctf_df.columns]
+                n = len(ctf_df)
+                fig_height = max(350, n * 40 + 80)
+                fig = px.imshow(ctf_df, color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
+                                text_auto=".2f", template="plotly_dark",
+                                title=f"Cross-Timeframe Correlation ({n}×{n})")
+                fig.update_layout(height=fig_height, margin=dict(l=40, r=20, t=60, b=40))
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                render_table(results["cross_tf_correlation"])
+                st.caption(f"Heatmap error: {e}")
+
         if results["correlation"] is not None:
             st.divider()
-            st.subheader("Strategy Correlation")
+            st.subheader("Strategy Correlation (per-dataset)")
             try:
                 import plotly.express as px
                 corr_df = results["correlation"].copy()

@@ -20,6 +20,9 @@ RESULT_FILE_NAMES = [
     "strategy_returns.csv",
     "family_leaderboard_results.csv",
     "family_summary_results.csv",
+    "cross_timeframe_correlation_matrix.csv",
+    "cross_timeframe_portfolio_review.csv",
+    "cross_timeframe_yearly_stats.csv",
 ]
 
 UPLOAD_SUFFIXES = {".csv", ".parquet", ".txt", ".zip", ".gz"}
@@ -756,6 +759,7 @@ def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
         "correlation": None,
         "yearly": None,
         "returns": None,
+        "cross_tf_correlation": None,
     }
     if outputs_dir is None or not outputs_dir.exists():
         return result
@@ -788,6 +792,7 @@ def load_strategy_results(outputs_dir: Path | None) -> dict[str, Any]:
     result["correlation"] = _safe_csv(files.get("correlation_matrix.csv"))
     result["yearly"] = _safe_csv(files.get("yearly_stats_breakdown.csv"))
     result["returns"] = _safe_csv(files.get("strategy_returns.csv"))
+    result["cross_tf_correlation"] = _safe_csv(files.get("cross_timeframe_correlation_matrix.csv"))
 
     return result
 
