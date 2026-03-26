@@ -293,7 +293,7 @@ def test_launch_remote_runner_does_not_raise_on_nonzero_ssh_exit(monkeypatch):
 
     assert result.returncode == 1
     assert captured["check"] is False
-    assert "nohup sudo bash" in str(captured["remote_command"])
+    assert "nohup sudo -E bash" in str(captured["remote_command"])
 
 
 def test_run_preflight_validates_config_gcloud_project_and_datasets(tmp_path: Path, monkeypatch):
@@ -462,7 +462,7 @@ def test_launch_remote_runner_creates_log_dir_before_nohup(monkeypatch):
 
     command = captured["command"]
     assert "mkdir -p /tmp/strategy_engine_runs/test-run/logs" in command
-    assert "nohup sudo bash /tmp/strategy_engine_runs/test-run/remote_runner.sh /tmp/strategy_engine_runs/test-run > /tmp/strategy_engine_runs/test-run/logs/runner_stdout.log 2>&1 < /dev/null &" in command
+    assert "nohup sudo -E bash /tmp/strategy_engine_runs/test-run/remote_runner.sh /tmp/strategy_engine_runs/test-run > /tmp/strategy_engine_runs/test-run/logs/runner_stdout.log 2>&1 < /dev/null &" in command
 
 
 def test_write_latest_run_pointer_records_latest_run(tmp_path: Path):

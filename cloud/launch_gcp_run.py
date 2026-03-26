@@ -2003,9 +2003,9 @@ def launch_remote_runner(
         (
             f"mkdir -p {clean_run_root}/logs && "
             f"chmod +x {clean_runner_path} && "
-            f"( nohup sudo bash {clean_runner_path} {clean_run_root} > "
-            f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null & disown ) ; "
-            f"echo launched"
+            f"( nohup sudo -E bash {clean_runner_path} {clean_run_root} > "
+            f"{clean_run_root}/logs/runner_stdout.log 2>&1 < /dev/null & disown ) && "
+            f"sleep 2 && pgrep -f remote_runner.sh > /dev/null && echo launched || echo runner_dead"
         ),
         check=False,
     )
