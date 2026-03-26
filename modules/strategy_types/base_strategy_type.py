@@ -21,6 +21,10 @@ class BaseStrategyType(ABC):
     min_filters_per_combo: int = 3
     max_filters_per_combo: int = 5
 
+    def get_engine_direction(self) -> str:
+        """Return the trade direction for this strategy type: 'long' or 'short'."""
+        return "long"
+
     default_hold_bars: int = 3
     default_stop_distance_points: float = 10.0
 

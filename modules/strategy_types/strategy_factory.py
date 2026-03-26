@@ -19,6 +19,11 @@ from modules.strategy_types.trend_subtypes import (
     TrendPullbackContinuationStrategyType,
     TrendSlopeRecoveryStrategyType,
 )
+from modules.strategy_types.short_strategy_types import (
+    ShortMeanReversionStrategyType,
+    ShortTrendStrategyType,
+    ShortBreakoutStrategyType,
+)
 
 _STRATEGY_TYPES: dict[str, type[BaseStrategyType]] = {
     # Original families (kept for backward compat and single-family runs)
@@ -37,6 +42,10 @@ _STRATEGY_TYPES: dict[str, type[BaseStrategyType]] = {
     "breakout_compression_squeeze": BreakoutCompressionSqueezeStrategyType,
     "breakout_range_expansion": BreakoutRangeExpansionStrategyType,
     "breakout_higher_low_structure": BreakoutHigherLowStructureStrategyType,
+    # Short-side families
+    "short_mean_reversion": ShortMeanReversionStrategyType,
+    "short_trend": ShortTrendStrategyType,
+    "short_breakout": ShortBreakoutStrategyType,
 }
 
 
@@ -49,6 +58,7 @@ def get_strategy_type(name: str) -> BaseStrategyType:
     - MR subtypes: mean_reversion_vol_dip, mean_reversion_mom_exhaustion, mean_reversion_trend_pullback
     - Trend subtypes: trend_pullback_continuation, trend_momentum_breakout, trend_slope_recovery
     - Breakout subtypes: breakout_compression_squeeze, breakout_range_expansion, breakout_higher_low_structure
+    - Short families: short_mean_reversion, short_trend, short_breakout
     """
     normalized = name.strip().lower()
     cls = _STRATEGY_TYPES.get(normalized)
