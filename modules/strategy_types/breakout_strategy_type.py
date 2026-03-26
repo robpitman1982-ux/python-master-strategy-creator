@@ -62,8 +62,21 @@ class _InlineBreakoutStrategy:
         return 1
 
 
-def _run_breakout_combo_case(task: tuple[pd.DataFrame, EngineConfig, list[type]]) -> dict[str, Any]:
-    data, cfg, combo_classes = task
+# Module-level shared state — set once per worker via initializer, avoids re-serialising
+# the full DataFrame with every task (critical for large datasets like 5m).
+_breakout_shared_data: pd.DataFrame | None = None
+_breakout_shared_cfg: EngineConfig | None = None
+
+
+def _breakout_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
+    global _breakout_shared_data, _breakout_shared_cfg
+    _breakout_shared_data = data
+    _breakout_shared_cfg = cfg
+
+
+def _run_breakout_combo_case(combo_classes: list[type]) -> dict[str, Any]:
+    data = _breakout_shared_data
+    cfg = _breakout_shared_cfg
     strat_type = BreakoutStrategyType()
 
     filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
@@ -384,12 +397,15 @@ class BreakoutStrategyType(BaseStrategyType):
             self.max_filters_per_combo,
         )
 
-        tasks = [(data, cfg, combo_classes) for combo_classes in combinations]
         results: list[dict[str, Any]] = []
 
         try:
-            with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                for idx, res in enumerate(executor.map(_run_breakout_combo_case, tasks), start=1):
+            with ProcessPoolExecutor(
+                max_workers=max_workers,
+                initializer=_breakout_worker_init,
+                initargs=(data, cfg),
+            ) as executor:
+                for idx, res in enumerate(executor.map(_run_breakout_combo_case, combinations), start=1):
                     print(
                         f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
                         f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
@@ -401,8 +417,9 @@ class BreakoutStrategyType(BaseStrategyType):
                         progress_callback(idx, len(combinations))
         except (OSError, PermissionError) as exc:
             print(f"\n[WARN] Parallel breakout sweep unavailable ({exc}). Falling back to sequential execution.")
-            for idx, task in enumerate(tasks, start=1):
-                res = _run_breakout_combo_case(task)
+            _breakout_worker_init(data, cfg)
+            for idx, combo_classes in enumerate(combinations, start=1):
+                res = _run_breakout_combo_case(combo_classes)
                 print(
                     f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
                     f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "

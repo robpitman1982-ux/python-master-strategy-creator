@@ -240,7 +240,10 @@ class MasterStrategyEngine:
         high_arr = self.data["high"].values
         low_arr = self.data["low"].values
         timestamps = self.data.index.values
-        
+
+        # Pre-convert all timestamps to pd.Timestamp once — avoids repeated construction in hot loop
+        ts_list: list[pd.Timestamp] = list(pd.DatetimeIndex(timestamps))
+
         # Optional columns
         atr_arr = self.data["atr_20"].values if "atr_20" in self.data.columns else np.full(len(self.data), 10.0)
         
@@ -258,7 +261,7 @@ class MasterStrategyEngine:
         i = 0
         while i < n_bars:
             # 1. Update equity curve for the current bar
-            ts_val = pd.Timestamp(timestamps[i])
+            ts_val = ts_list[i]
             self.equity_curve.append({"datetime": ts_val, "equity": self.current_capital})
 
             # 2. Manage Open Position
@@ -335,14 +338,18 @@ class MasterStrategyEngine:
                         next_signal_i = signal_indices[idx_search]
                         # Jump i to next_signal_i if we were going to iterate over dead space
                         if next_signal_i > i:
-                            # Fill equity curve for skipped bars
-                            for skipped_i in range(i, next_signal_i):
-                                self.equity_curve.append({"datetime": pd.Timestamp(timestamps[skipped_i]), "equity": self.current_capital})
+                            # Fill equity curve for skipped bars (bar i already appended above)
+                            cap = self.current_capital
+                            self.equity_curve.extend(
+                                [{"datetime": ts_list[j], "equity": cap} for j in range(i + 1, next_signal_i)]
+                            )
                             i = next_signal_i
                     else:
                         # No more signals in the entire dataset, we can finish
-                        for skipped_i in range(i, n_bars):
-                            self.equity_curve.append({"datetime": pd.Timestamp(timestamps[skipped_i]), "equity": self.current_capital})
+                        cap = self.current_capital
+                        self.equity_curve.extend(
+                            [{"datetime": ts_list[j], "equity": cap} for j in range(i + 1, n_bars)]
+                        )
                         break
 
                 # Check for signal (now we know i is at a signal bar if signal_indices exists)
