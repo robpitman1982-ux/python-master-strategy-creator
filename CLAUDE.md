@@ -160,6 +160,12 @@ Key sections:
 
 **Breakout filters**: CompressionFilter, ExpansionBarFilter, BreakoutCloseStrengthFilter, TightRangeFilter
 
+**Short MR filters**: AboveFastSMAFilter, DistanceAboveSMAFilter, UpCloseShortFilter, TwoBarUpShortFilter, ReversalDownBarFilter, HighVolatilityRegimeFilter, StretchAboveLongTermSMAFilter
+
+**Short Trend filters**: DowntrendDirectionFilter, RallyInDowntrendFilter, FailureToHoldFilter, LowerHighFilter, DownCloseShortFilter, DowntrendSlopeFilter
+
+**Short Breakout filters**: DownsideBreakoutFilter, WeakCloseFilter
+
 ## Known issues and improvement priorities
 
 <!-- UPDATE THIS SECTION EACH SESSION -->
@@ -217,6 +223,9 @@ Key sections:
 - [x] ultimate_leaderboard_bootcamp.csv — cross-run Bootcamp-ranked accepted strategies
 - [x] Leaderboard enriched with calmar_ratio, is_oos_pf_ratio, win_rate, trades_per_year
 - [x] Cross-dataset portfolio evaluation — all accepted strategies evaluated together, cross-timeframe correlation matrix, MC drawdowns for all strategies (Session 38)
+- [x] Dashboard — new leaderboard columns (calmar, IS/OOS ratio, win%, max DD, prof yrs%), cross-TF correlation heatmap, bootcamp/classic toggle, subtype grouping in Live Monitor (Session 39)
+- [x] Short-side strategies — ShortMR, ShortTrend, ShortBreakout with 15 new filters; direction wired through EngineConfig (Session 39)
+- [ ] Run short validation config: `cloud/config_es_shorts_daily_ondemand.yaml`
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -272,4 +281,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-27 — Session 38: Cross-dataset portfolio evaluation
+2026-03-27 — Session 39: Dashboard modernisation + short-side strategies

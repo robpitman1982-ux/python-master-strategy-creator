@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-03-27 — Session 39: Dashboard modernisation + short-side strategies
+
+**What was done**:
+Dashboard:
+- Results tab now shows calmar_ratio, is_oos_pf_ratio, win_rate, trades_per_year,
+  max_drawdown, pct_profitable_years with proper formatting ($1,234 money cols, 2dp ratios)
+- Cross-timeframe correlation matrix (from Session 38) shown first in Results tab when available
+- Ultimate Leaderboard tab: Bootcamp/Classic toggle, summary stats row (total, ROBUST count,
+  STABLE_BORDERLINE count, timeframes, markets)
+- Live Monitor: subtypes grouped by parent family (MR/Trend/Breakout) for cleaner progress display
+
+Shorts:
+- Added `direction` field to EngineConfig (default "long")
+- Added short trade execution logic in engine.py (short entry/exit, stop above entry, PnL = entry-exit)
+- Added 15 short-side filter mirrors in modules/filters.py:
+  AboveFastSMA, DistanceAboveSMA, UpCloseShort, TwoBarUpShort, ReversalDownBar,
+  HighVolatilityRegime, StretchAboveLongTermSMA (Short MR);
+  DowntrendDirection, RallyInDowntrend, FailureToHold, LowerHigh, DownCloseShort,
+  DowntrendSlope (Short Trend); DownsideBreakout, WeakClose (Short Breakout)
+- Added modules/strategy_types/short_strategy_types.py:
+  ShortMeanReversionStrategyType, ShortTrendStrategyType, ShortBreakoutStrategyType
+- Registered 3 short types in strategy_factory.py — list_strategy_types() now returns 15
+- base_strategy_type.py: added get_engine_direction() default method returning "long"
+- master_strategy_engine.py: reads get_engine_direction() and passes direction to EngineConfig
+- Created cloud/config_es_shorts_daily_ondemand.yaml for validation (~$0.50 on-demand)
+- Added tests/test_short_strategies.py — 4 tests (all pass)
+
+**Why this matters**:
+- Short strategies double the discovery universe
+- Bear market and high-vol periods (2008, 2022) now searchable
+- Short MR on overbought ES historically produces edges distinct from long setups
+- All found short strategies flow directly into ultimate_leaderboard.csv
+
+**Test result**: 33/33 pass (all test files)
+
+**Next session**: Session 40 — Regime veto layer (ADX-based entry blocking)
+
+---
+
 ## 2026-03-27 — Session 38: Cross-Dataset Portfolio Evaluation
 
 **What was done**:
