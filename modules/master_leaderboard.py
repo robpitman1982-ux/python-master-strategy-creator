@@ -151,6 +151,17 @@ def write_master_leaderboards(
     if not bootcamp.empty:
         bootcamp.to_csv(outputs_root / "master_leaderboard_bootcamp.csv", index=False)
 
+    # Print locations of cross-timeframe output files if they exist
+    cross_tf_files = [
+        "cross_timeframe_correlation_matrix.csv",
+        "cross_timeframe_portfolio_review.csv",
+        "cross_timeframe_yearly_stats.csv",
+    ]
+    for fname in cross_tf_files:
+        fpath = outputs_root / fname
+        if fpath.exists():
+            print(f"  Cross-TF output available: {fpath}")
+
     return classic, bootcamp
 
 
