@@ -518,6 +518,7 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "recent_12m_pf": row.get("best_combo_recent_12m_pf", 0.0),
         "leader_trades_per_year": row.get("best_combo_trades_per_year", 0.0),
         "leader_max_drawdown": row.get("best_combo_max_drawdown", 0.0),
+        "leader_win_rate": row.get("best_combo_win_rate", 0.0),
         "leader_hold_bars": 0,
         "leader_stop_distance_atr": 0.0,
         "leader_min_avg_range": 0.0,
@@ -551,6 +552,7 @@ def _choose_family_leader(row: pd.Series) -> dict[str, Any]:
         "recent_12m_pf": row.get("best_refined_recent_12m_pf", 0.0),
         "leader_trades_per_year": row.get("best_refined_trades_per_year", 0.0),
         "leader_max_drawdown": row.get("best_refined_max_drawdown", 0.0),
+        "leader_win_rate": row.get("best_refined_win_rate", 0.0),
         "leader_hold_bars": row.get("best_refined_hold_bars", 0),
         "leader_stop_distance_atr": row.get("best_refined_stop_distance_atr", 0.0),
         "leader_min_avg_range": row.get("best_refined_min_avg_range", 0.0),
@@ -615,6 +617,15 @@ def _compute_calmar_ratio(row: pd.Series) -> float:
     return round(abs(annual_return / max_dd), 4)
 
 
+def _compute_is_oos_pf_ratio(row: pd.Series) -> float:
+    """OOS PF / IS PF. Close to 1.0 = consistent. >1 = OOS-heavy. <1 = IS-heavy (overfit)."""
+    is_pf = float(row.get("is_pf", 0.0) or 0.0)
+    oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
+    if is_pf < 0.01:
+        return 0.0
+    return round(oos_pf / is_pf, 4)
+
+
 def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
@@ -625,6 +636,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
 
     leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
     leaderboard["calmar_ratio"] = leaderboard.apply(_compute_calmar_ratio, axis=1)
+    leaderboard["is_oos_pf_ratio"] = leaderboard.apply(_compute_is_oos_pf_ratio, axis=1)
     leaderboard = add_bootcamp_scores(leaderboard)
 
     leaderboard = leaderboard.sort_values(
@@ -653,7 +665,9 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_trades",
         "leader_trades_per_year",
         "leader_max_drawdown",
+        "leader_win_rate",
         "calmar_ratio",
+        "is_oos_pf_ratio",
         "leader_quality_score",
         "leader_pct_profitable_years",
         "leader_max_consecutive_losing_years",
