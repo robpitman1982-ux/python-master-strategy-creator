@@ -22,6 +22,7 @@ class EngineConfig:
     dollars_per_point: float = 50.0
     oos_split_date: str = "2019-01-01"
     timeframe: str = "60m"
+    direction: str = "long"  # "long" or "short"
 
 
 @dataclass
@@ -96,8 +97,12 @@ class MasterStrategyEngine:
 
         entry_price = float(self.position["entry_price"])
         contracts = int(self.position["contracts"])
+        pos_direction = self.position.get("direction", "long")
 
-        gross_pnl = (exit_price - entry_price) * self.config.dollars_per_point * contracts
+        if pos_direction == "short":
+            gross_pnl = (entry_price - exit_price) * self.config.dollars_per_point * contracts
+        else:
+            gross_pnl = (exit_price - entry_price) * self.config.dollars_per_point * contracts
         commission_cost = contracts * self.config.commission_per_contract * 2.0
         net_pnl = gross_pnl - commission_cost
 
@@ -106,7 +111,7 @@ class MasterStrategyEngine:
         trade = Trade(
             entry_time=self.position["entry_time"],
             exit_time=exit_time,
-            direction="LONG",
+            direction=pos_direction.upper(),
             entry_price=entry_price,
             exit_price=float(exit_price),
             contracts=contracts,
@@ -270,61 +275,113 @@ class MasterStrategyEngine:
                 low_p = low_arr[i]
                 high_p = high_arr[i]
                 close_p = close_arr[i]
-                
+
                 bars_held = i - int(self.position["entry_index"])
-                
-                # Update excursions
                 entry_p = float(self.position["entry_price"])
-                self.position["mae_points"] = min(float(self.position["mae_points"]), low_p - entry_p)
-                self.position["mfe_points"] = max(float(self.position["mfe_points"]), high_p - entry_p)
-                self.position["highest_high_since_entry"] = max(float(self.position["highest_high_since_entry"]), high_p)
+                pos_dir = self.position.get("direction", "long")
+                is_long_pos = pos_dir == "long"
 
                 # Exit Checks
                 protective_stop_price = float(self.position["stop_price"])
                 exit_config: ExitConfig = self.position["exit_config"]
 
-                if low_p <= protective_stop_price:
-                    stop_exit_price = protective_stop_price - (slippage_points / 2.0)
-                    self._close_position(exit_time=ts_val, exit_price=stop_exit_price, bars_held=bars_held, exit_reason="STOP")
-                    i += 1
-                    continue
+                if is_long_pos:
+                    # Long: update excursions
+                    self.position["mae_points"] = min(float(self.position["mae_points"]), low_p - entry_p)
+                    self.position["mfe_points"] = max(float(self.position["mfe_points"]), high_p - entry_p)
+                    self.position["highest_high_since_entry"] = max(float(self.position["highest_high_since_entry"]), high_p)
 
-                if exit_config.exit_type == ExitType.PROFIT_TARGET and exit_config.profit_target_atr:
-                    target_price = float(self.position["profit_target_price"])
-                    if high_p >= target_price:
-                        self._close_position(exit_time=ts_val, exit_price=target_price - (slippage_points / 2.0), bars_held=bars_held, exit_reason="PROFIT_TARGET")
+                    # Long stop
+                    if low_p <= protective_stop_price:
+                        stop_exit_price = protective_stop_price - (slippage_points / 2.0)
+                        self._close_position(exit_time=ts_val, exit_price=stop_exit_price, bars_held=bars_held, exit_reason="STOP")
                         i += 1
                         continue
 
-                if exit_config.exit_type == ExitType.TRAILING_STOP and exit_config.trailing_stop_atr:
-                    current_atr = atr_arr[i] if not np.isnan(atr_arr[i]) else 10.0
-                    trailing_stop_price = (
-                        float(self.position["highest_high_since_entry"])
-                        - float(exit_config.trailing_stop_atr) * current_atr
-                    )
-                    self.position["trailing_stop_price"] = max(
-                        float(self.position["trailing_stop_price"]),
-                        trailing_stop_price,
-                    )
-                    if low_p <= float(self.position["trailing_stop_price"]):
-                        self._close_position(
-                            exit_time=ts_val,
-                            exit_price=float(self.position["trailing_stop_price"]) - (slippage_points / 2.0),
-                            bars_held=bars_held,
-                            exit_reason="TRAILING_STOP",
+                    # Long profit target
+                    if exit_config.exit_type == ExitType.PROFIT_TARGET and exit_config.profit_target_atr:
+                        target_price = float(self.position["profit_target_price"])
+                        if high_p >= target_price:
+                            self._close_position(exit_time=ts_val, exit_price=target_price - (slippage_points / 2.0), bars_held=bars_held, exit_reason="PROFIT_TARGET")
+                            i += 1
+                            continue
+
+                    # Long trailing stop
+                    if exit_config.exit_type == ExitType.TRAILING_STOP and exit_config.trailing_stop_atr:
+                        current_atr = atr_arr[i] if not np.isnan(atr_arr[i]) else 10.0
+                        trailing_stop_price = (
+                            float(self.position["highest_high_since_entry"])
+                            - float(exit_config.trailing_stop_atr) * current_atr
                         )
+                        self.position["trailing_stop_price"] = max(
+                            float(self.position["trailing_stop_price"]),
+                            trailing_stop_price,
+                        )
+                        if low_p <= float(self.position["trailing_stop_price"]):
+                            self._close_position(
+                                exit_time=ts_val,
+                                exit_price=float(self.position["trailing_stop_price"]) - (slippage_points / 2.0),
+                                bars_held=bars_held,
+                                exit_reason="TRAILING_STOP",
+                            )
+                            i += 1
+                            continue
+
+                    # Long signal exit
+                    signal_exit_price = self._resolve_signal_exit_price(strategy, self.data.iloc[i], close_p)
+                    if signal_exit_price is not None:
+                        self._close_position(exit_time=ts_val, exit_price=signal_exit_price - (slippage_points / 2.0), bars_held=bars_held, exit_reason="SIGNAL_EXIT")
                         i += 1
                         continue
 
-                # Simplified signal exit for fast-path
-                signal_exit_price = self._resolve_signal_exit_price(strategy, self.data.iloc[i], close_p)
-                if signal_exit_price is not None:
-                    self._close_position(exit_time=ts_val, exit_price=signal_exit_price - (slippage_points / 2.0), bars_held=bars_held, exit_reason="SIGNAL_EXIT")
-                    i += 1
-                    continue
+                else:
+                    # SHORT position management
+                    self.position["mae_points"] = min(float(self.position["mae_points"]), -(high_p - entry_p))
+                    self.position["mfe_points"] = max(float(self.position["mfe_points"]), -(low_p - entry_p))
+                    self.position["lowest_low_since_entry"] = min(float(self.position["lowest_low_since_entry"]), low_p)
 
+                    # Short stop (stop is ABOVE entry)
+                    if high_p >= protective_stop_price:
+                        stop_exit_price = protective_stop_price + (slippage_points / 2.0)
+                        self._close_position(exit_time=ts_val, exit_price=stop_exit_price, bars_held=bars_held, exit_reason="STOP")
+                        i += 1
+                        continue
+
+                    # Short profit target (target is BELOW entry)
+                    if exit_config.exit_type == ExitType.PROFIT_TARGET and exit_config.profit_target_atr:
+                        target_price = float(self.position["profit_target_price"])
+                        if low_p <= target_price:
+                            self._close_position(exit_time=ts_val, exit_price=target_price + (slippage_points / 2.0), bars_held=bars_held, exit_reason="PROFIT_TARGET")
+                            i += 1
+                            continue
+
+                    # Short trailing stop (tracks lowest low since entry)
+                    if exit_config.exit_type == ExitType.TRAILING_STOP and exit_config.trailing_stop_atr:
+                        current_atr = atr_arr[i] if not np.isnan(atr_arr[i]) else 10.0
+                        trailing_stop_price = (
+                            float(self.position["lowest_low_since_entry"])
+                            + float(exit_config.trailing_stop_atr) * current_atr
+                        )
+                        self.position["trailing_stop_price"] = min(
+                            float(self.position["trailing_stop_price"]),
+                            trailing_stop_price,
+                        )
+                        if high_p >= float(self.position["trailing_stop_price"]):
+                            self._close_position(
+                                exit_time=ts_val,
+                                exit_price=float(self.position["trailing_stop_price"]) + (slippage_points / 2.0),
+                                bars_held=bars_held,
+                                exit_reason="TRAILING_STOP",
+                            )
+                            i += 1
+                            continue
+
+                # Time exit (same for both long and short)
                 if bars_held >= hb:
-                    time_exit_price = close_p - (slippage_points / 2.0)
+                    if is_long_pos:
+                        time_exit_price = close_p - (slippage_points / 2.0)
+                    else:
+                        time_exit_price = close_p + (slippage_points / 2.0)
                     self._close_position(exit_time=ts_val, exit_price=time_exit_price, bars_held=bars_held, exit_reason="TIME")
                     i += 1
                     continue
@@ -354,12 +411,14 @@ class MasterStrategyEngine:
 
                 # Check for signal (now we know i is at a signal bar if signal_indices exists)
                 signal = precomputed_signals[i] if precomputed_signals is not None else strategy.generate_signal(self.data, i)
-                
+                cfg_direction = getattr(self.config, "direction", "long")
+
                 if signal:
                     cur_close = close_arr[i]
                     cur_high = high_arr[i]
+                    cur_low  = low_arr[i]
                     cur_atr = atr_arr[i] if not np.isnan(atr_arr[i]) else 10.0
-                    
+
                     if stop_distance_atr is not None:
                         stop_dist_pts = float(stop_distance_atr) * cur_atr
                     else:
@@ -373,27 +432,50 @@ class MasterStrategyEngine:
                     contracts = self.calculate_position_size_contracts(stop_distance_points=stop_dist_pts)
 
                     if contracts > 0:
-                        entry_price = cur_close + (slippage_points / 2.0)
-                        stop_price = entry_price - stop_dist_pts
-
-                        self.position = {
-                            "entry_index": i,
-                            "entry_time": ts_val,
-                            "entry_price": entry_price,
-                            "stop_price": stop_price,
-                            "entry_atr": cur_atr,
-                            "highest_high_since_entry": cur_high,
-                            "trailing_stop_price": stop_price,
-                            "profit_target_price": (
-                                entry_price + float(exit_config.profit_target_atr) * cur_atr
-                                if exit_config.profit_target_atr is not None
-                                else float("nan")
-                            ),
-                            "exit_config": exit_config,
-                            "contracts": contracts,
-                            "mae_points": 0.0,
-                            "mfe_points": 0.0,
-                        }
+                        if cfg_direction == "short":
+                            entry_price = cur_close - (slippage_points / 2.0)
+                            stop_price = entry_price + stop_dist_pts
+                            self.position = {
+                                "direction": "short",
+                                "entry_index": i,
+                                "entry_time": ts_val,
+                                "entry_price": entry_price,
+                                "stop_price": stop_price,
+                                "entry_atr": cur_atr,
+                                "lowest_low_since_entry": cur_low,
+                                "trailing_stop_price": stop_price,
+                                "profit_target_price": (
+                                    entry_price - float(exit_config.profit_target_atr) * cur_atr
+                                    if exit_config.profit_target_atr is not None
+                                    else float("nan")
+                                ),
+                                "exit_config": exit_config,
+                                "contracts": contracts,
+                                "mae_points": 0.0,
+                                "mfe_points": 0.0,
+                            }
+                        else:
+                            entry_price = cur_close + (slippage_points / 2.0)
+                            stop_price = entry_price - stop_dist_pts
+                            self.position = {
+                                "direction": "long",
+                                "entry_index": i,
+                                "entry_time": ts_val,
+                                "entry_price": entry_price,
+                                "stop_price": stop_price,
+                                "entry_atr": cur_atr,
+                                "highest_high_since_entry": cur_high,
+                                "trailing_stop_price": stop_price,
+                                "profit_target_price": (
+                                    entry_price + float(exit_config.profit_target_atr) * cur_atr
+                                    if exit_config.profit_target_atr is not None
+                                    else float("nan")
+                                ),
+                                "exit_config": exit_config,
+                                "contracts": contracts,
+                                "mae_points": 0.0,
+                                "mfe_points": 0.0,
+                            }
 
             i += 1
 
@@ -402,16 +484,27 @@ class MasterStrategyEngine:
             final_time = self.data.index[-1]
             final_close = float(close_arr[-1])
             bars_held = len(self.data) - 1 - int(self.position["entry_index"])
+            final_entry = float(self.position["entry_price"])
+            pos_dir_final = self.position.get("direction", "long")
 
-            self.position["mae_points"] = min(float(self.position["mae_points"]), low_arr[-1] - float(self.position["entry_price"]))
-            self.position["mfe_points"] = max(float(self.position["mfe_points"]), high_arr[-1] - float(self.position["entry_price"]))
-
-            self._close_position(
-                exit_time=final_time,
-                exit_price=final_close - (slippage_points / 2.0),
-                bars_held=bars_held,
-                exit_reason="FINAL_BAR",
-            )
+            if pos_dir_final == "short":
+                self.position["mae_points"] = min(float(self.position["mae_points"]), -(high_arr[-1] - final_entry))
+                self.position["mfe_points"] = max(float(self.position["mfe_points"]), -(low_arr[-1] - final_entry))
+                self._close_position(
+                    exit_time=final_time,
+                    exit_price=final_close + (slippage_points / 2.0),
+                    bars_held=bars_held,
+                    exit_reason="FINAL_BAR",
+                )
+            else:
+                self.position["mae_points"] = min(float(self.position["mae_points"]), low_arr[-1] - final_entry)
+                self.position["mfe_points"] = max(float(self.position["mfe_points"]), high_arr[-1] - final_entry)
+                self._close_position(
+                    exit_time=final_time,
+                    exit_price=final_close - (slippage_points / 2.0),
+                    bars_held=bars_held,
+                    exit_reason="FINAL_BAR",
+                )
 
     def trades_dataframe(self) -> pd.DataFrame:
         if not self.trades:
