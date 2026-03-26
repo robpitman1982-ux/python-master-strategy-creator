@@ -407,6 +407,28 @@ def aggregate_ultimate_leaderboard(runs_root: Path | None = None) -> None:
     _write_csv(output_path, all_fields, deduped)
     print(f"[ultimate_leaderboard] {len(deduped)} strategies ({len(all_rows) - len(deduped)} duplicates removed) -> {output_path}")
 
+    # --- Bootcamp ultimate leaderboard (accepted-only, bootcamp-ranked) ---
+    accepted = [
+        r for r in deduped
+        if str(r.get("accepted_final", "")).strip().lower() in ("true", "1", "yes")
+    ]
+
+    if accepted:
+        def _boot_sort_key(r: dict[str, str]) -> float:
+            try:
+                return -float(r.get("bootcamp_score") or r.get("leader_pf") or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        accepted.sort(key=_boot_sort_key)
+
+        # Re-rank
+        for i, r in enumerate(accepted, start=1):
+            r["rank"] = str(i)
+
+        boot_output_path = runs_root.parent / "ultimate_leaderboard_bootcamp.csv"
+        _write_csv(boot_output_path, all_fields, accepted)
+        print(f"[ultimate_leaderboard] Bootcamp: {len(accepted)} accepted strategies -> {boot_output_path}")
+
 
 # ---------------------------------------------------------------------------
 # CLI

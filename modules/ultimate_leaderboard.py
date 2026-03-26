@@ -193,6 +193,22 @@ def aggregate_ultimate_leaderboard(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(output_path, index=False)
 
+    # --- Bootcamp ultimate leaderboard (accepted-only, bootcamp-ranked) ---
+    if "bootcamp_score" in combined.columns or "leader_pf" in combined.columns:
+        sort_col = "bootcamp_score" if "bootcamp_score" in combined.columns else (pf_col or "leader_pf")
+        boot_df = combined.copy()
+        boot_sort = pd.to_numeric(boot_df.get(sort_col, pd.Series(0, index=boot_df.index)), errors="coerce").fillna(0)
+        boot_df = boot_df.assign(_boot_sort=boot_sort).sort_values("_boot_sort", ascending=False)
+        boot_df = boot_df.drop(columns=["_boot_sort"])
+        boot_df = boot_df.reset_index(drop=True)
+        if "rank" in boot_df.columns:
+            boot_df = boot_df.drop(columns=["rank"])
+        boot_df.insert(0, "rank", boot_df.index + 1)
+        boot_output_path = output_path.parent / "ultimate_leaderboard_bootcamp.csv"
+        boot_df.to_csv(boot_output_path, index=False)
+        if verbose:
+            print(f"Bootcamp ultimate leaderboard: {len(boot_df)} strategies -> {boot_output_path}")
+
     if verbose:
         print(
             f"\nUltimate leaderboard: {len(combined)} strategies "
