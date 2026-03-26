@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-03-27 — Session 38: Cross-Dataset Portfolio Evaluation
+
+**What was done**:
+- Created `modules/cross_dataset_evaluator.py` — runs after all per-dataset evaluations
+  complete, collects all accepted strategies across all timeframes, normalises to
+  daily PnL, produces cross-timeframe correlation matrix and portfolio review table
+- Wired `evaluate_cross_dataset_portfolio()` into `master_strategy_engine.py` after
+  the dataset loop, wrapped in try/except so it never crashes the main run
+- `dashboard_utils.py`: added cross-TF files to RESULT_FILE_NAMES; `load_strategy_results()`
+  now returns `cross_tf_correlation` key
+- `dashboard.py`: shows cross-timeframe correlation heatmap first when available,
+  then per-dataset heatmap below it
+- `modules/master_leaderboard.py`: prints location of cross-TF output files after writing master leaderboard
+- New outputs written to top-level `Outputs/`: `cross_timeframe_correlation_matrix.csv`,
+  `cross_timeframe_portfolio_review.csv`, `cross_timeframe_yearly_stats.csv`
+- `cloud/download_run.py`: no change needed — tarball includes full `Outputs/` tree
+- Added `tests/test_cross_dataset_evaluator.py` — 3 tests (all pass)
+
+**Why this matters**:
+- Previously only 2 of 9 accepted strategies had correlation data computed
+- Now ALL accepted strategies across all timeframes are evaluated together
+- The critical 30m MR vs 60m MR correlation can now be measured
+- Foundation for portfolio selection when the ultimate leaderboard is large enough
+
+**Test result**: 29/29 pass (test_smoke.py + test_subtypes.py + test_cross_dataset_evaluator.py)
+
+**Next session**: Session 39 — Trade density expansion via filter threshold softening
+
+---
+
 ## 2026-03-26 — Session 37: Leaderboard enrichment + strategy subtypes
 
 **What was done**:

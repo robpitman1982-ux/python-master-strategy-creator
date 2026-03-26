@@ -52,6 +52,7 @@ python-master-strategy-creator/
 │   ├── refiner.py                     # Refinement engine (parallel parameter sweep)
 │   ├── portfolio_evaluator.py         # Portfolio metrics, Monte Carlo, stress tests
 │   ├── prop_firm_simulator.py         # Prop firm challenge simulator (The5ers Bootcamp/HighStakes/HyperGrowth)
+│   ├── cross_dataset_evaluator.py     # Cross-timeframe portfolio evaluation (runs after all datasets)
 │   └── strategy_types/
 │       ├── __init__.py
 │       ├── base_strategy_type.py      # Abstract base — all families implement this
@@ -215,6 +216,7 @@ Key sections:
 - [x] Strategy subtypes — 9 named subtypes across 3 families, each with tight semantically coherent filter pool
 - [x] ultimate_leaderboard_bootcamp.csv — cross-run Bootcamp-ranked accepted strategies
 - [x] Leaderboard enriched with calmar_ratio, is_oos_pf_ratio, win_rate, trades_per_year
+- [x] Cross-dataset portfolio evaluation — all accepted strategies evaluated together, cross-timeframe correlation matrix, MC drawdowns for all strategies (Session 38)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -242,7 +244,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py tests/test_subtypes.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 26+ tests fast, others require tmp dir permissions
+- Tests: `python -m pytest tests/test_smoke.py tests/test_subtypes.py tests/test_cross_dataset_evaluator.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 29+ tests fast, others require tmp dir permissions
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -270,4 +272,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-26 — Session 37: Leaderboard enrichment + strategy subtypes
+2026-03-27 — Session 38: Cross-dataset portfolio evaluation
