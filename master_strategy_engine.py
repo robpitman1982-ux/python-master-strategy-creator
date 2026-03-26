@@ -1072,6 +1072,23 @@ if __name__ == "__main__":
         print(f"\n{'=' * 72}")
         print(f"All {len(datasets)} datasets complete.")
 
+        # Cross-dataset portfolio evaluation (runs after all individual datasets complete)
+        print(f"\n{'=' * 72}")
+        print("CROSS-DATASET PORTFOLIO EVALUATION")
+        print(f"{'=' * 72}")
+        try:
+            from modules.cross_dataset_evaluator import evaluate_cross_dataset_portfolio
+            evaluate_cross_dataset_portfolio(
+                outputs_root=OUTPUTS_DIR,
+                datasets=datasets,
+                oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
+            )
+        except Exception as e:
+            print(f"[Warning] Cross-dataset evaluation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            print("Individual dataset results are unaffected.")
+
         from modules.master_leaderboard import write_master_leaderboards
 
         master_lb, bootcamp_master_lb = write_master_leaderboards(outputs_root=str(OUTPUTS_DIR))
