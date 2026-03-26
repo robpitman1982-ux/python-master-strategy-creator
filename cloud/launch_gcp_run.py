@@ -2218,6 +2218,8 @@ def main(argv: list[str] | None = None) -> int:
         args.boot_disk_size = cloud_cfg["boot_disk_size"]
     if "image_family" in cloud_cfg and args.image_family == DEFAULT_IMAGE_FAMILY:
         args.image_family = cloud_cfg["image_family"]
+    if "instance_name" in cloud_cfg and args.instance_name == DEFAULT_INSTANCE_NAME:
+        args.instance_name = cloud_cfg["instance_name"]
     remote_config = build_remote_config(config, datasets)
     bucket_uri = DEFAULT_BUCKET_URI
 
