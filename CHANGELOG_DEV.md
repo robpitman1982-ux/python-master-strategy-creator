@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-03-26 — Session 37: Leaderboard enrichment + strategy subtypes
+
+**What was done**:
+- Added `calmar_ratio`, `is_oos_pf_ratio`, `leader_win_rate`, `leader_trades_per_year`,
+  `leader_max_drawdown`, `leader_pct_profitable_years`, `leader_max_consecutive_losing_years`
+  to `master_leaderboard.csv` and `ultimate_leaderboard.csv`
+- Added `ultimate_leaderboard_bootcamp.csv` to download pipeline (accepted-only, bootcamp-ranked)
+  in both `cloud/download_run.py` (stdlib) and `modules/ultimate_leaderboard.py` (pandas)
+- Implemented 9 strategy subtypes across 3 families:
+  - MR: `vol_dip`, `mom_exhaustion`, `trend_pullback`
+  - Trend: `pullback_continuation`, `mom_breakout`, `slope_recovery`
+  - Breakout: `compression_squeeze`, `range_expansion`, `higher_low`
+- Registered all 9 subtypes in `strategy_factory.py` (originals kept for backward compat)
+  — `list_strategy_types()` now returns all 12 names
+- Created `cloud/config_es_subtypes_daily_ondemand.yaml` for fast subtype validation (~$0.70 on-demand)
+- Added `tests/test_subtypes.py` — 4 tests covering registration, filter pools, combo sizes (all pass)
+
+**Why this matters**:
+- Subtypes make the search space 3-4x faster while being more semantically meaningful
+- Can now safely expand filter libraries per subtype without combinatorial explosion
+- Better basis for CL/NQ expansion (subtypes transfer cleanly to new instruments)
+- Leaderboard enrichment makes portfolio selection decisions visible at a glance
+
+**Test result**: 26/26 pass (test_smoke.py + test_subtypes.py)
+
+**Next priorities**:
+1. Run `config_es_subtypes_daily_ondemand.yaml` to validate subtypes produce results
+2. If subtypes produce results: run full 5-TF subtypes sweep
+3. Fix portfolio reconstruction gap (get all 9 accepted strategies into portfolio evaluator)
+4. Instrument expansion: export CL and NQ from TradeStation
+
+---
+
 ## 2026-03-26 — Session 35: Multi-VM split + leaderboard consolidation
 
 **What was done**:

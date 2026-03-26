@@ -35,7 +35,8 @@ python-master-strategy-creator/
 │   └── strategy-dashboard.service     # systemd service file for the Streamlit dashboard
 ├── tests/
 │   ├── __init__.py
-│   └── test_smoke.py                  # 19 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
+│   ├── test_smoke.py                  # 22 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
+│   └── test_subtypes.py               # 4 smoke tests covering strategy subtype registration and validity
 ├── modules/
 │   ├── __init__.py
 │   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
@@ -57,7 +58,10 @@ python-master-strategy-creator/
 │       ├── trend_strategy_type.py     # Trend-following family
 │       ├── mean_reversion_strategy_type.py  # Mean reversion family
 │       ├── breakout_strategy_type.py  # Breakout family
-│       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types()
+│       ├── mean_reversion_subtypes.py     # 3 MR subtypes: vol_dip, mom_exhaustion, trend_pullback
+│       ├── trend_subtypes.py              # 3 trend subtypes: pullback_continuation, mom_breakout, slope_recovery
+│       ├── breakout_subtypes.py           # 3 breakout subtypes: compression_squeeze, range_expansion, higher_low
+│       └── strategy_factory.py        # Registry: get_strategy_type(), list_strategy_types() — 12 types total
 ├── docs/
 │   └── TRADESTATION_EXPORT_GUIDE.md   # Step-by-step data export instructions
 ├── cloud/
@@ -73,6 +77,7 @@ python-master-strategy-creator/
 │   ├── config_es_60m_full_sweep.yaml    # ES 60m all 3 families, 94 workers, n2-highcpu-96 SPOT
 │   ├── config_es_all_timeframes_48core.yaml  # 4-dataset 48-core DigitalOcean config
 │   ├── config_es_all_timeframes_gcp96.yaml   # 4-dataset 96-core GCP Iowa SPOT config
+│   ├── config_es_subtypes_daily_ondemand.yaml  # 9 subtypes on ES daily — fast validation (~$0.70 on-demand)
 │   └── SETUP.md                         # DigitalOcean setup guide
 ├── Dockerfile
 ├── requirements.txt
@@ -207,6 +212,9 @@ Key sections:
 - [x] `download_run.py` merge + ultimate leaderboard — `--merge`/`--latest-pair` flags; pure stdlib CSV (no pandas); regenerates `ultimate_leaderboard.csv` after every download
 - [x] Ultimate leaderboard moved from launcher to download script — `run_cloud_sweep.py` no longer needs pandas
 - [ ] Quick real-run validation still needed (relaunch from strategy-console after Session 34 fix)
+- [x] Strategy subtypes — 9 named subtypes across 3 families, each with tight semantically coherent filter pool
+- [x] ultimate_leaderboard_bootcamp.csv — cross-run Bootcamp-ranked accepted strategies
+- [x] Leaderboard enriched with calmar_ratio, is_oos_pf_ratio, win_rate, trades_per_year
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -234,7 +242,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 110 tests, all fast
+- Tests: `python -m pytest tests/test_smoke.py tests/test_subtypes.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 26+ tests fast, others require tmp dir permissions
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -262,4 +270,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-26 — Session 35: Parallel dual-VM split + leaderboard consolidation
+2026-03-26 — Session 37: Leaderboard enrichment + strategy subtypes
