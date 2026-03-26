@@ -746,6 +746,7 @@ def run_single_family(
 
     data = load_tradestation_csv(dataset_path, debug=True)
 
+    direction = getattr(strategy_type, "get_engine_direction", lambda: "long")()
     cfg = EngineConfig(
         initial_capital=get_nested(_cfg, "engine", "initial_capital", default=250_000.0),
         risk_per_trade=get_nested(_cfg, "engine", "risk_per_trade", default=0.01),
@@ -756,6 +757,7 @@ def run_single_family(
         dollars_per_point=get_nested(_cfg, "engine", "dollars_per_point", default=50.0),
         oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
         timeframe=timeframe,
+        direction=direction,
     )
 
     # Memory estimation — warn if parallel copies of the dataframe may exceed RAM budget
