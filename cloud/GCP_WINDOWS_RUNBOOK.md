@@ -91,6 +91,47 @@ At the end of each run the launcher prints a final summary including:
 - whether verification passed
 - whether billing should now be stopped
 
+## Parallel dual-VM runs
+
+To halve wall-clock time, split the workload across two VMs (VM-A handles ES 5m, VM-B handles daily/60m/30m/15m).
+
+Launch both VMs (fire-and-forget, both self-delete after uploading results):
+
+```powershell
+python run_cloud_parallel.py --fire-and-forget
+```
+
+Dry run to verify manifests only:
+
+```powershell
+python run_cloud_parallel.py --dry-run
+```
+
+Use on-demand VMs when SPOT is unavailable:
+
+```powershell
+python run_cloud_parallel.py --config-a cloud/config_es_vm_a_ondemand.yaml --config-b cloud/config_es_vm_b_ondemand.yaml --fire-and-forget
+```
+
+After both VMs complete, merge and download results:
+
+```powershell
+# Auto-discover and merge the two most recent runs
+python cloud/download_run.py --latest-pair
+
+# Or manually specify run IDs
+python cloud/download_run.py --merge strategy-sweep-a-20260326T120000Z strategy-sweep-b-20260326T120001Z
+```
+
+Download a single run (original flow, still supported):
+
+```powershell
+python cloud/download_run.py --latest
+python cloud/download_run.py strategy-sweep-20260326T120000Z
+```
+
+After any download, `ultimate_leaderboard.csv` is automatically regenerated from all locally available runs.
+
 ## Prerequisites
 
 - Windows machine with Python available as `python`

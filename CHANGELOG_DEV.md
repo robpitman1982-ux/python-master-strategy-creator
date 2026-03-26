@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-03-26 — Session 35: Multi-VM split + leaderboard consolidation
+
+**What was done**:
+
+- **Step 0**: Verified all 5 data files exist including `ES_5m_2008_2026_tradestation.csv`
+- **Step 1**: Created 4 split VM configs: `config_es_vm_a.yaml` (5m only), `config_es_vm_b.yaml` (daily/60m/30m/15m), and on-demand variants. Both SPOT configs set `instance_name` in the `cloud:` block.
+- **Step 2**: Added `cloud.instance_name` override to `launch_gcp_run.py` — if set in config and `--instance-name` not explicitly passed, uses config value. `make_run_id()` already incorporates instance name, so bucket paths like `strategy-sweep-a-<ts>` and `strategy-sweep-b-<ts>` are automatically distinct.
+- **Step 3**: Created `run_cloud_parallel.py` — launches VM-A then VM-B sequentially in fire-and-forget mode; prints summary of both; hints to run `download_run.py --latest-pair` when done.
+- **Step 4+5**: Rewrote `cloud/download_run.py` with: `--merge RUN_ID_A RUN_ID_B`, `--latest-pair` (auto-discovers 2 most recent runs by instance prefix), merged leaderboard re-ranking, dataset output dir copying, merge manifest, and `aggregate_ultimate_leaderboard()` in pure stdlib CSV (no pandas). Ultimate leaderboard regenerates after every download.
+- **Step 6**: Removed pandas-dependent ultimate leaderboard call from `run_cloud_sweep.py`. Now prints "Run ultimate leaderboard locally after downloading results."
+- **Step 7**: Added `tests/test_parallel_vm.py` — 30 tests covering config validation, disjoint datasets, instance name override, parallel launcher, merge logic, ultimate leaderboard dedup, and `--latest-pair` pair detection.
+
+**Test result**: 110/110 pass
+
+**Next step**: Relaunch from strategy-console (Session 34 GCS fix is in place):
+```bash
+cd /home/robpitman1982/python-master-strategy-creator && git pull && python3 run_cloud_parallel.py --fire-and-forget
+```
+Or single-VM if 192 vCPU quota is a concern:
+```bash
+python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_gcp96.yaml --fire-and-forget
+```
+
+---
+
 ## 2026-03-26 — Session 34: Diagnose all-timeframes launch failure + GCS bundle staging fix
 
 **Root cause of 2026-03-25 launch failure** (`strategy-sweep-20260325T202915Z`):

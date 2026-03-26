@@ -202,6 +202,10 @@ Key sections:
 - [x] Python 3.14 / numpy issues — scripts/setup_dashboard_venv.sh pins numpy<2.2, uses python3.12 preferred
 - [ ] Dashboard: equity curve per strategy from trade-level data (equity curves now shown from strategy_returns.csv)
 - [x] GCS bundle staging — in fire-and-forget mode, input bundle uploaded to GCS before VM creation; runner downloads it; eliminates SCP CalledProcessError from SPOT preemption during large (43MB) bundle upload
+- [x] Parallel dual-VM split — VM-A (5m) + VM-B (daily/60m/30m/15m) run independently; `run_cloud_parallel.py` launches both; `download_run.py --latest-pair` merges results
+- [x] Per-config instance names — `cloud.instance_name` in YAML overrides DEFAULT_INSTANCE_NAME so bucket paths don't collide
+- [x] `download_run.py` merge + ultimate leaderboard — `--merge`/`--latest-pair` flags; pure stdlib CSV (no pandas); regenerates `ultimate_leaderboard.csv` after every download
+- [x] Ultimate leaderboard moved from launcher to download script — `run_cloud_sweep.py` no longer needs pandas
 - [ ] Quick real-run validation still needed (relaunch from strategy-console after Session 34 fix)
 
 ### Prop firm system (System 2 — in progress)
@@ -230,7 +234,7 @@ Key sections:
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v` — 22 tests, all fast
+- Tests: `python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 110 tests, all fast
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -258,4 +262,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-26 — Session 34: GCS bundle staging fix (eliminates SCP CalledProcessError on large bundles)
+2026-03-26 — Session 35: Parallel dual-VM split + leaderboard consolidation
