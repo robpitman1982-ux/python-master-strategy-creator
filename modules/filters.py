@@ -877,3 +877,327 @@ class StretchFromLongTermSMAFilter(BaseFilter):
         result = ((slow - data["close"]) >= (current_atr * self.min_distance_atr)).copy()
         result.iloc[:warmup] = False
         return result.fillna(False)
+
+
+# ─── Short MR filters ────────────────────────────────────────────────────────
+
+
+class AboveFastSMAFilter(BaseFilter):
+    """Price above fast SMA — baseline overbought condition for short MR."""
+    name = "AboveFastSMA"
+
+    def __init__(self, fast_length: int = 20):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+        col = f"sma_{self.fast_length}"
+        sma = data[col].iloc[i] if col in data.columns else data["close"].iloc[i - self.fast_length:i].mean()
+        return data["close"].iloc[i] > sma
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.fast_length}"
+        if col in data.columns:
+            return data["close"].values > data[col].values
+        sma = data["close"].rolling(self.fast_length).mean().values
+        return data["close"].values > sma
+
+
+class DistanceAboveSMAFilter(BaseFilter):
+    """Price is meaningfully above fast SMA — short MR stretch condition."""
+    name = "DistanceAboveSMA"
+
+    def __init__(self, fast_length: int = 20, min_distance_atr: float = 0.8):
+        self.fast_length = fast_length
+        self.min_distance_atr = min_distance_atr
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+        col = f"sma_{self.fast_length}"
+        atr_col = f"atr_{self.fast_length}"
+        sma = data[col].iloc[i] if col in data.columns else data["close"].iloc[i - self.fast_length:i].mean()
+        atr = data[atr_col].iloc[i] if atr_col in data.columns else 1.0
+        return (data["close"].iloc[i] - sma) >= atr * self.min_distance_atr
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.fast_length}"
+        atr_col = f"atr_{self.fast_length}"
+        close = data["close"].values
+        sma = data[col].values if col in data.columns else pd.Series(close).rolling(self.fast_length).mean().values
+        atr = data[atr_col].values if atr_col in data.columns else np.ones(len(close))
+        return (close - sma) >= atr * self.min_distance_atr
+
+
+class UpCloseShortFilter(BaseFilter):
+    """Current close above previous close — short-side selling pressure confirmation."""
+    name = "UpCloseShort"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return data["close"].iloc[i] > data["close"].iloc[i - 1]
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        close = data["close"].values
+        result = np.zeros(len(close), dtype=bool)
+        result[1:] = close[1:] > close[:-1]
+        return result
+
+
+class TwoBarUpShortFilter(BaseFilter):
+    """Two consecutive up closes — short exhaustion pattern."""
+    name = "TwoBarUpShort"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 2:
+            return False
+        return (data["close"].iloc[i] > data["close"].iloc[i - 1] and
+                data["close"].iloc[i - 1] > data["close"].iloc[i - 2])
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        close = data["close"].values
+        result = np.zeros(len(close), dtype=bool)
+        result[2:] = (close[2:] > close[1:-1]) & (close[1:-1] > close[:-2])
+        return result
+
+
+class ReversalDownBarFilter(BaseFilter):
+    """Current close below current open — short-side reversal trigger."""
+    name = "ReversalDownBar"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        return data["close"].iloc[i] < data["open"].iloc[i]
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        return data["close"].values < data["open"].values
+
+
+class HighVolatilityRegimeFilter(BaseFilter):
+    """ATR above regime threshold — short MR in elevated vol (mirror of LowVolatilityRegime)."""
+    name = "HighVolatilityRegime"
+
+    def __init__(self, lookback: int = 20, min_atr_mult: float = 1.1):
+        self.lookback = lookback
+        self.min_atr_mult = min_atr_mult
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback * 2:
+            return False
+        atr_col = f"atr_{self.lookback}"
+        current_atr = data[atr_col].iloc[i] if atr_col in data.columns else 1.0
+        long_term_atr = data[atr_col].iloc[i - self.lookback:i].mean()
+        return current_atr >= long_term_atr * self.min_atr_mult
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        atr_col = f"atr_{self.lookback}"
+        if atr_col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        atr = data[atr_col].values
+        long_term = pd.Series(atr).rolling(self.lookback).mean().values
+        return atr >= long_term * self.min_atr_mult
+
+
+class StretchAboveLongTermSMAFilter(BaseFilter):
+    """Price meaningfully above 200 SMA — short MR long-term stretch."""
+    name = "StretchAboveLongTermSMA"
+
+    def __init__(self, slow_length: int = 200, min_distance_atr: float = 0.5):
+        self.slow_length = slow_length
+        self.min_distance_atr = min_distance_atr
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.slow_length:
+            return False
+        col = f"sma_{self.slow_length}"
+        atr_col = "atr_20"
+        sma = data[col].iloc[i] if col in data.columns else data["close"].iloc[i - self.slow_length:i].mean()
+        atr = data[atr_col].iloc[i] if atr_col in data.columns else 1.0
+        return (data["close"].iloc[i] - sma) >= atr * self.min_distance_atr
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.slow_length}"
+        atr_col = "atr_20"
+        if col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        close = data["close"].values
+        sma = data[col].values
+        atr = data[atr_col].values if atr_col in data.columns else np.ones(len(close))
+        return (close - sma) >= atr * self.min_distance_atr
+
+
+# ─── Short Trend filters ────────────────────────────────────────────────────
+
+
+class DowntrendDirectionFilter(BaseFilter):
+    """Fast SMA below slow SMA — confirms downtrend regime."""
+    name = "DowntrendDirection"
+
+    def __init__(self, fast_length: int = 50, slow_length: int = 200):
+        self.fast_length = fast_length
+        self.slow_length = slow_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.slow_length:
+            return False
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+        fast = data[fast_col].iloc[i] if fast_col in data.columns else data["close"].iloc[i - self.fast_length:i].mean()
+        slow = data[slow_col].iloc[i] if slow_col in data.columns else data["close"].iloc[i - self.slow_length:i].mean()
+        return fast < slow
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        fast_col = f"sma_{self.fast_length}"
+        slow_col = f"sma_{self.slow_length}"
+        if fast_col not in data.columns or slow_col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        return data[fast_col].values < data[slow_col].values
+
+
+class RallyInDowntrendFilter(BaseFilter):
+    """Previous close at or above fast SMA — rally within downtrend (short entry setup)."""
+    name = "RallyInDowntrend"
+
+    def __init__(self, fast_length: int = 50):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        col = f"sma_{self.fast_length}"
+        sma = data[col].iloc[i - 1] if col in data.columns else data["close"].iloc[i - 1 - self.fast_length:i - 1].mean()
+        return data["close"].iloc[i - 1] >= sma
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.fast_length}"
+        if col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        prev_close = np.roll(data["close"].values, 1)
+        prev_sma = np.roll(data[col].values, 1)
+        result = prev_close >= prev_sma
+        result[0] = False
+        return result
+
+
+class FailureToHoldFilter(BaseFilter):
+    """Current close back below fast SMA — rally failed, short trigger."""
+    name = "FailureToHold"
+
+    def __init__(self, fast_length: int = 50):
+        self.fast_length = fast_length
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length:
+            return False
+        col = f"sma_{self.fast_length}"
+        sma = data[col].iloc[i] if col in data.columns else data["close"].iloc[i - self.fast_length:i].mean()
+        return data["close"].iloc[i] < sma
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.fast_length}"
+        if col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        return data["close"].values < data[col].values
+
+
+class LowerHighFilter(BaseFilter):
+    """Current high below previous high — structural downtrend continuation."""
+    name = "LowerHigh"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return data["high"].iloc[i] < data["high"].iloc[i - 1]
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        high = data["high"].values
+        result = np.zeros(len(high), dtype=bool)
+        result[1:] = high[1:] < high[:-1]
+        return result
+
+
+class DownCloseShortFilter(BaseFilter):
+    """Current close below previous close — simple bearish confirmation."""
+    name = "DownCloseShort"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return data["close"].iloc[i] < data["close"].iloc[i - 1]
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        close = data["close"].values
+        result = np.zeros(len(close), dtype=bool)
+        result[1:] = close[1:] < close[:-1]
+        return result
+
+
+class DowntrendSlopeFilter(BaseFilter):
+    """Fast SMA falling — confirms trend is worsening not just negative."""
+    name = "DowntrendSlope"
+
+    def __init__(self, fast_length: int = 50, slope_bars: int = 5):
+        self.fast_length = fast_length
+        self.slope_bars = slope_bars
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.fast_length + self.slope_bars:
+            return False
+        col = f"sma_{self.fast_length}"
+        if col not in data.columns:
+            return False
+        return data[col].iloc[i] < data[col].iloc[i - self.slope_bars]
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        col = f"sma_{self.fast_length}"
+        if col not in data.columns:
+            return np.zeros(len(data), dtype=bool)
+        sma = data[col].values
+        result = np.zeros(len(sma), dtype=bool)
+        result[self.slope_bars:] = sma[self.slope_bars:] < sma[:-self.slope_bars]
+        return result
+
+
+# ─── Short Breakout filters ────────────────────────────────────────────────
+
+
+class DownsideBreakoutFilter(BaseFilter):
+    """Close below prior N-bar low — downside range breakout."""
+    name = "DownsideBreakout"
+
+    def __init__(self, lookback: int = 20):
+        self.lookback = lookback
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+        prior_low = data["low"].iloc[i - self.lookback:i].min()
+        return data["close"].iloc[i] < prior_low
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        prior_low = data["low"].rolling(self.lookback).min().shift(1).values
+        return data["close"].values < prior_low
+
+
+class WeakCloseFilter(BaseFilter):
+    """Close near bar low — weak close confirming selling pressure."""
+    name = "WeakClose"
+
+    def __init__(self, max_close_position: float = 0.35):
+        self.max_close_position = max_close_position
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        bar_range = data["high"].iloc[i] - data["low"].iloc[i]
+        if bar_range < 0.001:
+            return False
+        pos = (data["close"].iloc[i] - data["low"].iloc[i]) / bar_range
+        return pos <= self.max_close_position
+
+    def mask(self, data: pd.DataFrame) -> np.ndarray:
+        high = data["high"].values
+        low = data["low"].values
+        close = data["close"].values
+        bar_range = high - low
+        pos = np.where(bar_range > 0.001, (close - low) / bar_range, 0.5)
+        return pos <= self.max_close_position
