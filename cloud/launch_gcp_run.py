@@ -166,6 +166,7 @@ RUN_OUTCOME_REMOTE_INTERRUPTED_VM_PRESERVED = "remote_interrupted_vm_preserved"
 RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL = "vm_missing_before_retrieval"
 RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE = "unexpected_launcher_failure"
 RUN_OUTCOME_REMOTE_RUN_FAILED = "remote_run_failed"
+RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED = "fire_and_forget_launched"
 
 VM_OUTCOME_DESTROYED = "vm_destroyed"
 VM_OUTCOME_PRESERVED = "vm_preserved_for_inspection"
@@ -184,6 +185,7 @@ TERMINAL_RUN_OUTCOMES = {
     RUN_OUTCOME_VM_MISSING_BEFORE_RETRIEVAL,
     RUN_OUTCOME_UNEXPECTED_LAUNCHER_FAILURE,
     RUN_OUTCOME_REMOTE_RUN_FAILED,
+    RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED,
 }
 
 DEFAULT_MONITOR_TIMEOUT_SECONDS = 24 * 60 * 60
@@ -1956,7 +1958,10 @@ def print_final_run_summary(status_path: Path, local_run_dir: Path) -> None:
             print("Recovery options:")
             for index, command in enumerate(recovery_commands, start=1):
                 print(f"{index}. {command}")
-    if run_outcome not in {RUN_OUTCOME_DRY_RUN_COMPLETE, RUN_OUTCOME_COMPLETED_VERIFIED}:
+    if run_outcome == RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED:
+        print("RUN STATUS: LAUNCHED (fire-and-forget)")
+        print("Engine is running on the remote VM. Download results later.")
+    elif run_outcome not in {RUN_OUTCOME_DRY_RUN_COMPLETE, RUN_OUTCOME_COMPLETED_VERIFIED}:
         print("RUN STATUS: FAILED")
         print("Artifacts incomplete or unverified.")
         print(f"Inspect logs in: {local_run_dir}")
@@ -2417,6 +2422,14 @@ def main(argv: list[str] | None = None) -> int:
                 remote_restart_guard=runner_guard,
             )
             if fire_and_forget:
+                run_outcome = RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED
+                status_store.update(
+                    run_outcome,
+                    "fire_and_forget_launched",
+                    "Fire-and-forget launch successful. Engine running on remote VM.",
+                    run_outcome=run_outcome,
+                    destroy_allowed=False,
+                )
                 print()
                 print("FIRE-AND-FORGET MODE")
                 print("====================")
