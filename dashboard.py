@@ -146,6 +146,8 @@ else:
     run_category = "unknown"
 
 is_running = (run_category == "running")
+display_run_outcome = "running" if is_running else run_outcome
+display_vm_outcome = vm_outcome
 
 # ─── Banner ────────────────────────────────────────────────────────────────────
 
@@ -154,8 +156,8 @@ st.markdown(f"""
 <div class="console-banner">
     <h1>📈 Strategy Console</h1>
     <p>Run: <strong>{run_id_display}</strong> &nbsp;|&nbsp;
-       Outcome: <strong>{badge_for_value(run_outcome)}</strong> &nbsp;|&nbsp;
-       VM: <strong>{badge_for_value(vm_outcome)}</strong> &nbsp;|&nbsp;
+       Outcome: <strong>{badge_for_value(display_run_outcome)}</strong> &nbsp;|&nbsp;
+       VM: <strong>{badge_for_value(display_vm_outcome)}</strong> &nbsp;|&nbsp;
        Billing: <strong>{billing_status}</strong></p>
 </div>
 """, unsafe_allow_html=True)

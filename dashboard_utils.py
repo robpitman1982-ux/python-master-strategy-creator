@@ -228,7 +228,13 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
     launcher_status = read_json_file(run_dir / "launcher_status.json")
 
     state = str(launcher_status.get("state", "")).strip()
-    is_active = state == "running"
+    remote_guard = launcher_status.get("remote_restart_guard", {})
+    guard_state = str(remote_guard.get("status_state", "")).strip()
+    guard_terminal = bool(remote_guard.get("status_terminal"))
+    guard_runner_active = bool(remote_guard.get("runner_process_active"))
+    is_active = state == "running" or (
+        guard_state == "running" and not guard_terminal and guard_runner_active
+    )
 
     if not is_active or not manifest:
         return collect_launcher_dataset_statuses(run_dir)
@@ -438,10 +444,16 @@ def classify_run_status(launcher_status: dict[str, Any]) -> str:
     state = str(launcher_status.get("state", "")).strip()
     run_outcome = str(launcher_status.get("run_outcome", "")).strip()
     vm_outcome = str(launcher_status.get("vm_outcome", "")).strip()
+    remote_guard = launcher_status.get("remote_restart_guard", {})
+    guard_state = str(remote_guard.get("status_state", "")).strip()
+    guard_terminal = bool(remote_guard.get("status_terminal"))
+    guard_runner_active = bool(remote_guard.get("runner_process_active"))
 
     if state == "dry_run_complete" or run_outcome == "dry_run_complete":
         return "dry-run"
     if state == "running":
+        return "running"
+    if guard_state == "running" and not guard_terminal and guard_runner_active:
         return "running"
     if vm_outcome == "vm_preserved_for_inspection":
         return "preserved"
