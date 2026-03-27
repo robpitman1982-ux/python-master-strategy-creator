@@ -914,6 +914,17 @@ def run_single_family(
 # MAIN
 # =============================================================================
 
+def _estimate_combo_count(family_name: str) -> int:
+    """Estimate the number of filter combinations for a family without running the sweep."""
+    from math import comb
+    st = get_strategy_type(family_name)
+    pool = st.get_filter_pool() if hasattr(st, "get_filter_pool") else st.get_filter_classes()
+    min_f = getattr(st, "min_filters_per_combo", 3)
+    max_f = getattr(st, "max_filters_per_combo", 5)
+    n = len(pool)
+    return sum(comb(n, k) for k in range(min_f, min(max_f, n) + 1))
+
+
 def _run_dataset(
     ds_path: Path,
     ds_market: str,
@@ -963,8 +974,25 @@ def _run_dataset(
     )
     print(f"   {len(precomputed_data.columns)} columns on {len(precomputed_data):,} rows in {time.perf_counter() - feat_start:.1f}s")
 
-    # ── Run each family with the shared precomputed data ────────────────
-    for family_name in family_names:
+    # ── Split families into large (sequential) and small (concurrent) ──
+    SMALL_FAMILY_THRESHOLD = 200
+    large_families: list[tuple[str, int]] = []
+    small_families: list[tuple[str, int]] = []
+    for name in family_names:
+        count = _estimate_combo_count(name)
+        if count >= SMALL_FAMILY_THRESHOLD:
+            large_families.append((name, count))
+        else:
+            small_families.append((name, count))
+
+    print(f"\n  Family split: {len(large_families)} large (sequential), {len(small_families)} small (concurrent)")
+    for name, count in large_families:
+        print(f"   LARGE: {name} ({count} combos)")
+    for name, count in small_families:
+        print(f"   SMALL: {name} ({count} combos)")
+
+    # ── Run large families sequentially (they saturate cores) ───────────
+    for family_name, _combo_count in large_families:
         summary_row = run_single_family(
             strategy_type_name=family_name,
             data=precomputed_data,
@@ -977,6 +1005,39 @@ def _run_dataset(
             tracker=tracker,
         )
         dataset_summaries.append(summary_row)
+
+    # ── Run small families concurrently ─────────────────────────────────
+    if small_families:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        max_concurrent = min(3, len(small_families))
+        print(f"\n  Running {len(small_families)} small families with concurrency={max_concurrent}")
+
+        def _run_small_family(family_name: str) -> dict[str, Any]:
+            return run_single_family(
+                strategy_type_name=family_name,
+                data=precomputed_data,
+                dataset_path=ds_path,
+                outputs_dir=ds_output_dir,
+                max_workers_sweep=max(MAX_WORKERS_SWEEP // max_concurrent, 2),
+                max_workers_refinement=max(MAX_WORKERS_REFINEMENT // max_concurrent, 2),
+                market_symbol=ds_market,
+                timeframe=ds_timeframe,
+                tracker=tracker,
+            )
+
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            futures = {
+                executor.submit(_run_small_family, name): name
+                for name, _ in small_families
+            }
+            for future in as_completed(futures):
+                family_name = futures[future]
+                try:
+                    summary_row = future.result()
+                    dataset_summaries.append(summary_row)
+                except Exception as e:
+                    print(f"\n  Family {family_name} failed: {e}")
 
     family_summary_df = pd.DataFrame(dataset_summaries)
     family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)
