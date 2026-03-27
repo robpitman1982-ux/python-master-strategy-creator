@@ -714,3 +714,123 @@ def test_refinement_results_expose_exit_metadata():
     assert not result_df.empty
     assert {"exit_type", "profit_target_atr", "trailing_stop_atr", "signal_exit_reference"}.issubset(result_df.columns)
     assert set(result_df["exit_type"]) == {"time_stop", "profit_target"}
+
+
+def test_run_dataset_caches_data_across_families():
+    """Verify that _run_dataset loads CSV once and precomputes features once for all families."""
+    from unittest.mock import patch, MagicMock
+    from modules.feature_builder import add_precomputed_features
+    from modules.data_loader import load_tradestation_csv
+    from modules.strategy_types import get_strategy_type, list_strategy_types
+
+    # Build a synthetic DF that add_precomputed_features can work with
+    data = make_synthetic_ohlcv(n_bars=200)
+
+    load_call_count = 0
+    feat_call_count = 0
+
+    original_add_features = add_precomputed_features
+
+    def mock_load(*args, **kwargs):
+        nonlocal load_call_count
+        load_call_count += 1
+        return data.copy()
+
+    def mock_features(df, **kwargs):
+        nonlocal feat_call_count
+        feat_call_count += 1
+        return original_add_features(df, **kwargs)
+
+    def mock_evaluate_portfolio(**kwargs):
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    with patch("master_strategy_engine.load_tradestation_csv", side_effect=mock_load), \
+         patch("master_strategy_engine.add_precomputed_features", side_effect=mock_features), \
+         patch("master_strategy_engine.evaluate_portfolio", side_effect=mock_evaluate_portfolio), \
+         patch("master_strategy_engine.run_single_family", return_value={
+             "strategy_type": "mock",
+             "dataset": "test.csv",
+             "rows": 200,
+             "start": "2015-01-01",
+             "end": "2025-12-31",
+             "promotion_status": "NO_PROMOTED_CANDIDATES",
+             "promoted_candidates": 0,
+             "best_combo_strategy_name": "NONE",
+             "best_combo_profit_factor": 0.0,
+             "best_combo_average_trade": 0.0,
+             "best_combo_net_pnl": 0.0,
+             "best_combo_total_trades": 0,
+             "best_combo_filters": "",
+             "best_combo_filter_class_names": "",
+             "best_combo_is_trades": 0,
+             "best_combo_oos_trades": 0,
+             "best_combo_is_pf": 0.0,
+             "best_combo_oos_pf": 0.0,
+             "best_combo_recent_12m_trades": 0,
+             "best_combo_recent_12m_pf": 0.0,
+             "best_combo_trades_per_year": 0.0,
+             "best_combo_max_drawdown": 0.0,
+             "best_combo_quality_flag": "UNKNOWN",
+             "best_combo_quality_score": 0.0,
+             "best_combo_pct_profitable_years": 0.0,
+             "best_combo_max_consecutive_losing_years": 0,
+             "best_combo_consistency_flag": "INSUFFICIENT_DATA",
+             "best_combo_exit_type": "time_stop",
+             "best_combo_trailing_stop_atr": None,
+             "best_combo_profit_target_atr": None,
+             "best_combo_signal_exit_reference": None,
+             "refinement_ran": False,
+             "accepted_refinement_rows": 0,
+             "best_refined_strategy_name": "NONE",
+             "best_refined_profit_factor": 0.0,
+             "best_refined_average_trade": 0.0,
+             "best_refined_net_pnl": 0.0,
+             "best_refined_total_trades": 0,
+             "best_refined_hold_bars": 0,
+             "best_refined_stop_distance_atr": 0.0,
+             "best_refined_min_avg_range": 0.0,
+             "best_refined_momentum_lookback": 0,
+             "best_refined_is_trades": 0,
+             "best_refined_oos_trades": 0,
+             "best_refined_is_pf": 0.0,
+             "best_refined_oos_pf": 0.0,
+             "best_refined_recent_12m_trades": 0,
+             "best_refined_recent_12m_pf": 0.0,
+             "best_refined_trades_per_year": 0.0,
+             "best_refined_max_drawdown": 0.0,
+             "best_refined_quality_flag": "UNKNOWN",
+             "best_refined_quality_score": 0.0,
+             "best_refined_pct_profitable_years": 0.0,
+             "best_refined_max_consecutive_losing_years": 0,
+             "best_refined_consistency_flag": "INSUFFICIENT_DATA",
+             "best_refined_exit_type": "time_stop",
+             "best_refined_trailing_stop_atr": None,
+             "best_refined_profit_target_atr": None,
+             "best_refined_signal_exit_reference": None,
+         }) as mock_run_family:
+        from pathlib import Path
+        import master_strategy_engine as mse
+
+        # Temporarily override module-level config for test
+        orig_selection = mse.STRATEGY_TYPE_SELECTION
+        mse.STRATEGY_TYPE_SELECTION = ["trend", "mean_reversion", "breakout"]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            mse._run_dataset(
+                ds_path=Path("Data/fake.csv"),
+                ds_market="ES",
+                ds_timeframe="60m",
+                ds_output_dir=Path(tmpdir),
+            )
+
+        mse.STRATEGY_TYPE_SELECTION = orig_selection
+
+    # CSV loaded exactly once
+    assert load_call_count == 1, f"Expected 1 CSV load, got {load_call_count}"
+    # Features computed exactly once
+    assert feat_call_count == 1, f"Expected 1 feature precompute, got {feat_call_count}"
+    # run_single_family called once per family
+    assert mock_run_family.call_count == 3, f"Expected 3 family runs, got {mock_run_family.call_count}"
+    # Verify the precomputed data was passed (not a path)
+    for call in mock_run_family.call_args_list:
+        assert "data" in call.kwargs or (len(call.args) >= 2 and isinstance(call.args[1], pd.DataFrame))
