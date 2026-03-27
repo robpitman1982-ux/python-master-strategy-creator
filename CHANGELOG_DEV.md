@@ -5,6 +5,32 @@
 
 ---
 
+## 2026-03-27 — Session 40: 96-vCPU utilisation + exit grid activation
+
+**What was done**:
+Performance:
+- Dataset load + feature precompute cached per timeframe (1 load instead of 15)
+- Small subtype families run concurrently (ThreadPoolExecutor, concurrency=3)
+- Eliminates ~70 min wasted serial work on ES_5m, plus ~15 min inter-family gaps
+
+Exits:
+- Exit parameter grids verified already merged into active refinement grids for all 3 base families
+- Trend: time_stop + trailing_stop, Breakout: time_stop + trailing_stop
+- MR: time_stop + profit_target + signal_exit
+- Every cloud run now automatically tests all supported exit types
+
+Tests:
+- Added smoke test for per-timeframe dataset caching (load once, feature once)
+
+**Test result**: 40/40 pass (test_smoke + test_subtypes + test_cross_dataset_evaluator + test_exit_architecture)
+
+**Next priorities**:
+1. Full 5TF run with exits active — compare leaderboard
+2. Analyze which families improve with non-time-stop exits
+3. CL/NQ instrument expansion
+
+---
+
 ## 2026-03-27 — Session 39: Dashboard modernisation + short-side strategies
 
 **What was done**:

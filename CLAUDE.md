@@ -226,6 +226,9 @@ Key sections:
 - [x] Dashboard — new leaderboard columns (calmar, IS/OOS ratio, win%, max DD, prof yrs%), cross-TF correlation heatmap, bootcamp/classic toggle, subtype grouping in Live Monitor (Session 39)
 - [x] Short-side strategies — ShortMR, ShortTrend, ShortBreakout with 15 new filters; direction wired through EngineConfig (Session 39)
 - [ ] Run short validation config: `cloud/config_es_shorts_daily_ondemand.yaml`
+- [x] Per-timeframe dataset caching — CSV loaded once and features precomputed once per timeframe, not 15x per family (Session 40)
+- [x] Concurrent small-family execution — subtypes with <200 combos batched via ThreadPoolExecutor (concurrency=3) (Session 40)
+- [x] Exit types active in refinement grids — all 3 base families merge exit parameter grids (trailing_stop, profit_target, signal_exit) into default refinement (verified Session 40)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -281,4 +284,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-27 — Session 39: Dashboard modernisation + short-side strategies
+2026-03-27 — Session 40: 96-vCPU utilisation + exit grid activation
