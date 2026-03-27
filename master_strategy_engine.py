@@ -738,6 +738,7 @@ def build_family_bootcamp_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
 
 def run_single_family(
     strategy_type_name: str,
+    data: pd.DataFrame,
     dataset_path: Path,
     outputs_dir: Path,
     max_workers_sweep: int,
@@ -754,9 +755,6 @@ def run_single_family(
 
     print(f"\nSelected strategy type: {strategy_type_name}")
     print(f"Available strategy types: {list_strategy_types()}")
-    print("\nLoading data from:", dataset_path)
-
-    data = load_tradestation_csv(dataset_path, debug=True)
 
     direction = getattr(strategy_type, "get_engine_direction", lambda: "long")()
     cfg = EngineConfig(
@@ -784,14 +782,6 @@ def run_single_family(
         max_workers_sweep = adjusted_workers
     elif est_parallel_mb > 60_000:
         print(f"   WARNING: Estimated memory usage ({est_parallel_mb:.0f} MB) is high — consider reducing max_workers or adding max_memory_gb to config.")
-
-    print(f"\n Adding precomputed feature columns for strategy type: {strategy_type_name} (timeframe={timeframe})")
-    data = add_precomputed_features(
-        data,
-        sma_lengths=get_required_sma_lengths(strategy_type, timeframe=timeframe),
-        avg_range_lookbacks=get_required_avg_range_lookbacks(strategy_type, timeframe=timeframe),
-        momentum_lookbacks=get_required_momentum_lookbacks(strategy_type, timeframe=timeframe),
-    )
 
     sanity_check = run_sanity_check(strategy_type=strategy_type, data=data, cfg=cfg)
 
@@ -942,9 +932,42 @@ def _run_dataset(
     )
     tracker.set_families(family_names)
 
+    # ── Load CSV once for all families in this dataset ──────────────────
+    print(f"\n  Loading data once for {ds_market}_{ds_timeframe}: {ds_path}")
+    load_start = time.perf_counter()
+    raw_data = load_tradestation_csv(ds_path, debug=True)
+    print(f"   Loaded {len(raw_data):,} rows in {time.perf_counter() - load_start:.1f}s")
+
+    # ── Compute superset of features across ALL families ────────────────
+    all_sma: set[int] = set()
+    all_avg_range: set[int] = set()
+    all_momentum: set[int] = set()
+
+    for family_name in family_names:
+        st = get_strategy_type(family_name)
+        all_sma.update(get_required_sma_lengths(st, timeframe=ds_timeframe))
+        all_avg_range.update(get_required_avg_range_lookbacks(st, timeframe=ds_timeframe))
+        all_momentum.update(get_required_momentum_lookbacks(st, timeframe=ds_timeframe))
+
+    feat_start = time.perf_counter()
+    print(f"\n  Precomputing superset features for {len(family_names)} families:")
+    print(f"   SMA lengths: {sorted(all_sma)}")
+    print(f"   ATR/range lookbacks: {sorted(all_avg_range)}")
+    print(f"   Momentum lookbacks: {sorted(all_momentum)}")
+
+    precomputed_data = add_precomputed_features(
+        raw_data,
+        sma_lengths=sorted(all_sma),
+        avg_range_lookbacks=sorted(all_avg_range),
+        momentum_lookbacks=sorted(all_momentum),
+    )
+    print(f"   {len(precomputed_data.columns)} columns on {len(precomputed_data):,} rows in {time.perf_counter() - feat_start:.1f}s")
+
+    # ── Run each family with the shared precomputed data ────────────────
     for family_name in family_names:
         summary_row = run_single_family(
             strategy_type_name=family_name,
+            data=precomputed_data,
             dataset_path=ds_path,
             outputs_dir=ds_output_dir,
             max_workers_sweep=MAX_WORKERS_SWEEP,
