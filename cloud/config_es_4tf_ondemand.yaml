@@ -51,4 +51,4 @@ output_dir: "Outputs"
 cloud:
   machine_type: "n2-highcpu-96"
   zone: "us-central1-c"
-  preemptible: false
+  provisioning_model: "STANDARD"
