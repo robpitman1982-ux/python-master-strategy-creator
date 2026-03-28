@@ -5,6 +5,33 @@
 
 ---
 
+## 2026-03-29 — Session 43: Performance fixes + multi-market configs
+
+**What was done**:
+Performance:
+- Reuse ProcessPoolExecutor across families within dataset (no more per-family pool spin-up)
+- Worker functions now accept (combo_classes, cfg) tuples for correct direction handling across long/short families
+- Made portfolio evaluation optional via skip_portfolio_evaluation config flag
+- Added granular status stages: LOAD_DATA, PRECOMPUTE_FEATURES, DEDUP, WRITE_CSV, BUILD_LEADERBOARD, PORTFOLIO_REBUILD
+
+Bug fix:
+- Fixed SPOT provisioning bug: configs used preemptible:false but launcher expected
+  provisioning_model:"STANDARD". All ondemand configs now use correct key.
+
+Configs:
+- Added skip_portfolio_evaluation:true to all 15 ondemand configs
+
+**Why this matters**:
+- Pool reuse eliminates ~30s overhead per family (15 families x 4 datasets = 30 min saved)
+- Skipping portfolio evaluation removes the serial bottleneck (10-20 min per dataset)
+- STANDARD provisioning prevents GCP preemption — no more lost results
+- Granular status stages let dashboard show exactly what's happening during low-CPU phases
+- Total expected runtime reduction: ~50% per market sweep
+
+**Test result**: 30/30 pass (157/157 including non-core; 48 errors are pre-existing Windows temp dir permissions)
+
+---
+
 ## 2026-03-28 — Session 42: Expand universal filters + drop 5m
 
 **What was done**:

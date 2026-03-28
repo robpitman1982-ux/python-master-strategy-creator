@@ -148,7 +148,7 @@ The code reads from config with hardcoded fallback defaults if config.yaml is mi
 Key sections:
 - `datasets`: list of CSV paths with market/timeframe labels (supports multi-dataset runs)
 - `engine`: initial_capital, risk_per_trade, commission, slippage, tick_value, dollars_per_point
-- `pipeline`: max_workers, oos_split_date, max_candidates_to_refine
+- `pipeline`: max_workers, oos_split_date, max_candidates_to_refine, skip_portfolio_evaluation
 - `promotion_gate`: min_pf, min_trades, min_trades_per_year, max_promoted_candidates
 - `leaderboard`: final acceptance thresholds (min_pf, min_oos_pf, min_total_trades)
 
@@ -236,6 +236,10 @@ Key sections:
 - [x] Expanded filter pools — wired into all 6 strategy families (long + short), ~2-3x search space (Session 42)
 - [x] ES 4TF config — dropped 5m (zero accepted, ~50% compute), on-demand us-central1-c (Session 42)
 - [x] CL config template — 3TF (daily, 60m, 30m), $1000/point, ready for data (Session 42)
+- [x] Shared ProcessPoolExecutor — one sweep pool per dataset, eliminates per-family spin-up overhead (Session 43)
+- [x] Optional portfolio evaluation — `skip_portfolio_evaluation` config flag defers serial rebuild to post-run (Session 43)
+- [x] Granular status stages — LOAD_DATA, PRECOMPUTE_FEATURES, DEDUP, WRITE_CSV, BUILD_LEADERBOARD, PORTFOLIO_REBUILD (Session 43)
+- [x] All ondemand configs updated with skip_portfolio_evaluation:true (Session 43)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -291,4 +295,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-28 — Session 42: Expand universal filters + drop 5m
+2026-03-29 — Session 43: Performance fixes + multi-market configs
