@@ -186,7 +186,7 @@ class MeanReversionStrategyType(BaseStrategyType):
     ) -> dict[str, list]:
         return {
             "exit_type": [ExitType.TIME_STOP, ExitType.PROFIT_TARGET, ExitType.SIGNAL_EXIT],
-            "profit_target_atr": [0.5, 0.75, 1.0, 1.25, 1.5],
+            "profit_target_atr": [0.5, 1.0, 1.5, 2.0, 3.0],
             "signal_exit_reference": ["fast_sma"],
         }
 
