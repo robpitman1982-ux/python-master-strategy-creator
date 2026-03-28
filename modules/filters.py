@@ -1275,3 +1275,35 @@ class GapDownFilter(BaseFilter):
         result = gap_down.copy()
         result.iloc[0] = False
         return result.fillna(False)
+
+
+class ATRPercentileFilter(BaseFilter):
+    """Checks whether current ATR is in a specific percentile range of its own history."""
+    name = "ATRPercentileFilter"
+
+    def __init__(self, lookback: int = 100, min_percentile: float = 0.0, max_percentile: float = 0.5):
+        self.lookback = lookback
+        self.min_percentile = min_percentile
+        self.max_percentile = max_percentile
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+        atr_col = f"atr_{min(self.lookback, 20)}"
+        if atr_col in data.columns:
+            current_atr = data.iloc[i][atr_col]
+        else:
+            current_atr = data["true_range"].iloc[max(0, i - 19):i + 1].mean()
+        window = data["true_range"].iloc[i - self.lookback + 1:i + 1]
+        rank = (window < current_atr).sum() / len(window)
+        return bool(self.min_percentile <= rank <= self.max_percentile)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        tr = data["true_range"] if "true_range" in data.columns else (data["high"] - data["low"])
+        rolling_rank = tr.rolling(self.lookback).apply(
+            lambda w: (w[:-1] < w.iloc[-1]).sum() / (len(w) - 1) if len(w) > 1 else 0.5,
+            raw=False,
+        )
+        result = (rolling_rank >= self.min_percentile) & (rolling_rank <= self.max_percentile)
+        result.iloc[:self.lookback] = False
+        return result.fillna(False)
