@@ -1307,3 +1307,33 @@ class ATRPercentileFilter(BaseFilter):
         result = (rolling_rank >= self.min_percentile) & (rolling_rank <= self.max_percentile)
         result.iloc[:self.lookback] = False
         return result.fillna(False)
+
+
+class HigherHighFilter(BaseFilter):
+    """Current high > previous high (trend continuation structure)."""
+    name = "HigherHighFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(data.iloc[i]["high"] > data.iloc[i - 1]["high"])
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        result = (data["high"] > data["high"].shift(1)).copy()
+        result.iloc[0] = False
+        return result.fillna(False)
+
+
+class LowerLowFilter(BaseFilter):
+    """Current low < previous low (breakdown structure)."""
+    name = "LowerLowFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(data.iloc[i]["low"] < data.iloc[i - 1]["low"])
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        result = (data["low"] < data["low"].shift(1)).copy()
+        result.iloc[0] = False
+        return result.fillna(False)
