@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-03-28 — Session 42: Expand universal filters + drop 5m
+
+**What was done**:
+Filters:
+- Added 7 new market-agnostic filters: InsideBar, OutsideBar, GapUp, GapDown,
+  ATRPercentile, HigherHigh, LowerLow
+- All have vectorized mask() methods
+- Wired into appropriate family filter pools (trend, MR, breakout, shorts)
+- Vectorized filter tests added for all 7
+
+Config:
+- Created config_es_4tf_ondemand.yaml (daily, 60m, 30m, 15m — no 5m)
+- 5m dropped: zero accepted strategies across all runs, ~50% of compute time
+- Created config_cl_3tf_ondemand.yaml template for CL expansion
+
+**Why this matters**:
+- InsideBar/OutsideBar are universal compression/expansion patterns
+- GapUp/GapDown especially relevant for CL (overnight inventory gaps)
+- ATRPercentile is more adaptive than fixed VolatilityFilter threshold
+- HigherHigh/LowerLow complete the structural pattern vocabulary
+- Expanded filter pools increase combinatorial search space ~2-3x per family
+- Dropping 5m cuts runtime ~50% with zero quality loss
+
+**Test result**: 157/157 pass (48 pre-existing cloud launcher permission errors)
+
+**Next priorities**:
+1. Run ES 4TF sweep with expanded filters
+2. Export CL data from TradeStation
+3. Run CL 3TF sweep
+4. Cross-instrument correlation analysis
+
+---
+
 ## 2026-03-28 — Session 41: Widen exit grids for trend rescue
 
 **What was done**:

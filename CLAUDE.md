@@ -154,17 +154,19 @@ Key sections:
 
 ## Current filter inventory
 
-**Trend filters**: TrendDirectionFilter, PullbackFilter, RecoveryTriggerFilter, VolatilityFilter, MomentumFilter, TwoBarUpFilter, TrendSlopeFilter, HigherLowFilter
+**Trend filters**: TrendDirectionFilter, PullbackFilter, RecoveryTriggerFilter, VolatilityFilter, MomentumFilter, TwoBarUpFilter, TrendSlopeFilter, HigherLowFilter, HigherHighFilter, OutsideBarFilter
 
-**Mean reversion filters**: DistanceBelowSMAFilter, DownCloseFilter, TwoBarDownFilter, ReversalUpBarFilter, LowVolatilityRegimeFilter
+**Mean reversion filters**: DistanceBelowSMAFilter, DownCloseFilter, TwoBarDownFilter, ReversalUpBarFilter, LowVolatilityRegimeFilter, InsideBarFilter, ATRPercentileFilter, GapDownFilter
 
-**Breakout filters**: CompressionFilter, ExpansionBarFilter, BreakoutCloseStrengthFilter, TightRangeFilter
+**Breakout filters**: CompressionFilter, ExpansionBarFilter, BreakoutCloseStrengthFilter, TightRangeFilter, InsideBarFilter, OutsideBarFilter, ATRPercentileFilter, HigherHighFilter, GapUpFilter
 
-**Short MR filters**: AboveFastSMAFilter, DistanceAboveSMAFilter, UpCloseShortFilter, TwoBarUpShortFilter, ReversalDownBarFilter, HighVolatilityRegimeFilter, StretchAboveLongTermSMAFilter
+**Short MR filters**: AboveFastSMAFilter, DistanceAboveSMAFilter, UpCloseShortFilter, TwoBarUpShortFilter, ReversalDownBarFilter, HighVolatilityRegimeFilter, StretchAboveLongTermSMAFilter, InsideBarFilter, GapUpFilter
 
-**Short Trend filters**: DowntrendDirectionFilter, RallyInDowntrendFilter, FailureToHoldFilter, LowerHighFilter, DownCloseShortFilter, DowntrendSlopeFilter
+**Short Trend filters**: DowntrendDirectionFilter, RallyInDowntrendFilter, FailureToHoldFilter, LowerHighFilter, DownCloseShortFilter, DowntrendSlopeFilter, LowerLowFilter, OutsideBarFilter
 
-**Short Breakout filters**: DownsideBreakoutFilter, WeakCloseFilter
+**Short Breakout filters**: DownsideBreakoutFilter, WeakCloseFilter, InsideBarFilter, GapDownFilter, LowerLowFilter
+
+**Universal filters** (shared across families): InsideBarFilter, OutsideBarFilter, GapUpFilter, GapDownFilter, ATRPercentileFilter, HigherHighFilter, LowerLowFilter
 
 ## Known issues and improvement priorities
 
@@ -230,6 +232,10 @@ Key sections:
 - [x] Concurrent small-family execution — subtypes with <200 combos batched via ThreadPoolExecutor (concurrency=3) (Session 40)
 - [x] Exit types active in refinement grids — all 3 base families merge exit parameter grids (trailing_stop, profit_target, signal_exit) into default refinement (verified Session 40)
 - [x] Widened exit grids — trend trailing_stop_atr [1.5,2.5,3.5,5.0,7.0], breakout [1.5,2.5,3.5,5.0], MR profit_target_atr [0.5,1.0,1.5,2.0,3.0] (Session 41)
+- [x] 7 universal filters — InsideBar, OutsideBar, GapUp, GapDown, ATRPercentile, HigherHigh, LowerLow (Session 42)
+- [x] Expanded filter pools — wired into all 6 strategy families (long + short), ~2-3x search space (Session 42)
+- [x] ES 4TF config — dropped 5m (zero accepted, ~50% compute), on-demand us-central1-c (Session 42)
+- [x] CL config template — 3TF (daily, 60m, 30m), $1000/point, ready for data (Session 42)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -285,4 +291,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-28 — Session 41: Widen exit grids for trend rescue
+2026-03-28 — Session 42: Expand universal filters + drop 5m
