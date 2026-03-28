@@ -13,8 +13,10 @@ from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
     BaseFilter,
     CloseAboveFastSMAFilter,
+    HigherHighFilter,
     HigherLowFilter,
     MomentumFilter,
+    OutsideBarFilter,
     PullbackFilter,
     RecoveryTriggerFilter,
     TrendDirectionFilter,
@@ -232,6 +234,8 @@ class TrendStrategyType(BaseStrategyType):
             TrendSlopeFilter,
             CloseAboveFastSMAFilter,
             HigherLowFilter,
+            HigherHighFilter,
+            OutsideBarFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:

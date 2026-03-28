@@ -11,23 +11,28 @@ from modules.strategy_types.trend_strategy_type import TrendStrategyType
 from modules.strategy_types.breakout_strategy_type import BreakoutStrategyType
 from modules.filters import (
     AboveFastSMAFilter,
-    DistanceAboveSMAFilter,
-    UpCloseShortFilter,
-    TwoBarUpShortFilter,
-    ReversalDownBarFilter,
-    HighVolatilityRegimeFilter,
-    StretchAboveLongTermSMAFilter,
-    DowntrendDirectionFilter,
-    RallyInDowntrendFilter,
-    FailureToHoldFilter,
-    LowerHighFilter,
-    DownCloseShortFilter,
-    DowntrendSlopeFilter,
-    DownsideBreakoutFilter,
-    WeakCloseFilter,
-    CompressionFilter,
-    TightRangeFilter,
     BreakoutCloseStrengthFilter,
+    CompressionFilter,
+    DistanceAboveSMAFilter,
+    DownCloseShortFilter,
+    DownsideBreakoutFilter,
+    DowntrendDirectionFilter,
+    DowntrendSlopeFilter,
+    FailureToHoldFilter,
+    GapDownFilter,
+    GapUpFilter,
+    HighVolatilityRegimeFilter,
+    InsideBarFilter,
+    LowerHighFilter,
+    LowerLowFilter,
+    OutsideBarFilter,
+    RallyInDowntrendFilter,
+    ReversalDownBarFilter,
+    StretchAboveLongTermSMAFilter,
+    TightRangeFilter,
+    TwoBarUpShortFilter,
+    UpCloseShortFilter,
+    WeakCloseFilter,
 )
 
 
@@ -43,6 +48,8 @@ class ShortMeanReversionStrategyType(MeanReversionStrategyType):
             ReversalDownBarFilter,
             HighVolatilityRegimeFilter,
             StretchAboveLongTermSMAFilter,
+            InsideBarFilter,
+            GapUpFilter,
         ]
 
     def get_engine_direction(self) -> str:
@@ -63,6 +70,8 @@ class ShortTrendStrategyType(TrendStrategyType):
             LowerHighFilter,
             DownCloseShortFilter,
             DowntrendSlopeFilter,
+            LowerLowFilter,
+            OutsideBarFilter,
         ]
 
     def get_engine_direction(self) -> str:
@@ -83,6 +92,9 @@ class ShortBreakoutStrategyType(BreakoutStrategyType):
             TightRangeFilter,
             BreakoutCloseStrengthFilter,
             DowntrendDirectionFilter,
+            InsideBarFilter,
+            GapDownFilter,
+            LowerLowFilter,
         ]
 
     def get_engine_direction(self) -> str:

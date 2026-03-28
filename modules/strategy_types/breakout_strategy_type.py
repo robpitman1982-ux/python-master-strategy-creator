@@ -11,6 +11,7 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
+    ATRPercentileFilter,
     BaseFilter,
     BreakoutCloseStrengthFilter,
     BreakoutDistanceFilter,
@@ -18,6 +19,10 @@ from modules.filters import (
     BreakoutTrendFilter,
     CompressionFilter,
     ExpansionBarFilter,
+    GapUpFilter,
+    HigherHighFilter,
+    InsideBarFilter,
+    OutsideBarFilter,
     PriorRangePositionFilter,
     RangeBreakoutFilter,
     RisingBaseFilter,
@@ -230,6 +235,11 @@ class BreakoutStrategyType(BaseStrategyType):
             BreakoutDistanceFilter,
             RisingBaseFilter,
             TightRangeFilter,
+            InsideBarFilter,
+            OutsideBarFilter,
+            ATRPercentileFilter,
+            HigherHighFilter,
+            GapUpFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -261,6 +271,8 @@ class BreakoutStrategyType(BaseStrategyType):
                 filters.append(RisingBaseFilter(lookback=max(3, round(5 * mult))))
             elif cls is TightRangeFilter:
                 filters.append(TightRangeFilter(lookback=lookback, max_bar_range_mult=0.90))
+            elif cls is ATRPercentileFilter:
+                filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
             else:
                 filters.append(cls())
 
@@ -320,6 +332,8 @@ class BreakoutStrategyType(BaseStrategyType):
                 filters.append(RisingBaseFilter(lookback=max(3, round(5 * mult))))
             elif cls is TightRangeFilter:
                 filters.append(TightRangeFilter(lookback=lookback, max_bar_range_mult=0.90))
+            elif cls is ATRPercentileFilter:
+                filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
             else:
                 filters.append(cls())
 

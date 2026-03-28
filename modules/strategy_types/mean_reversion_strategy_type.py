@@ -11,12 +11,15 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
+    ATRPercentileFilter,
     AboveLongTermSMAFilter,
     BaseFilter,
     BelowFastSMAFilter,
     CloseNearLowFilter,
     DistanceBelowSMAFilter,
     DownCloseFilter,
+    GapDownFilter,
+    InsideBarFilter,
     LowVolatilityRegimeFilter,
     ReversalUpBarFilter,
     StretchFromLongTermSMAFilter,
@@ -233,6 +236,9 @@ class MeanReversionStrategyType(BaseStrategyType):
             AboveLongTermSMAFilter,
             CloseNearLowFilter,
             StretchFromLongTermSMAFilter,
+            InsideBarFilter,
+            ATRPercentileFilter,
+            GapDownFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -264,6 +270,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(CloseNearLowFilter(max_close_position=0.35))
             elif cls is StretchFromLongTermSMAFilter:
                 filters.append(StretchFromLongTermSMAFilter(slow_length=slow_sma, min_distance_atr=0.6))
+            elif cls is ATRPercentileFilter:
+                filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
             else:
                 filters.append(cls())
 
@@ -323,6 +331,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(CloseNearLowFilter(max_close_position=0.35))
             elif cls is StretchFromLongTermSMAFilter:
                 filters.append(StretchFromLongTermSMAFilter(slow_length=slow_sma, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
+            elif cls is ATRPercentileFilter:
+                filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
             else:
                 filters.append(cls())
 
