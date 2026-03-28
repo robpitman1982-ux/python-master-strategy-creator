@@ -1201,3 +1201,45 @@ class WeakCloseFilter(BaseFilter):
         bar_range = high - low
         pos = np.where(bar_range > 0.001, (close - low) / bar_range, 0.5)
         return pos <= self.max_close_position
+
+
+# ============================================================
+# Universal / market-agnostic filters
+# ============================================================
+
+class InsideBarFilter(BaseFilter):
+    """Current bar's range entirely within previous bar's range (compression)."""
+    name = "InsideBarFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(
+            data.iloc[i]["high"] <= data.iloc[i - 1]["high"]
+            and data.iloc[i]["low"] >= data.iloc[i - 1]["low"]
+        )
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        inside = (data["high"] <= data["high"].shift(1)) & (data["low"] >= data["low"].shift(1))
+        result = inside.copy()
+        result.iloc[0] = False
+        return result.fillna(False)
+
+
+class OutsideBarFilter(BaseFilter):
+    """Current bar's range engulfs the previous bar entirely (expansion)."""
+    name = "OutsideBarFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(
+            data.iloc[i]["high"] > data.iloc[i - 1]["high"]
+            and data.iloc[i]["low"] < data.iloc[i - 1]["low"]
+        )
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        outside = (data["high"] > data["high"].shift(1)) & (data["low"] < data["low"].shift(1))
+        result = outside.copy()
+        result.iloc[0] = False
+        return result.fillna(False)
