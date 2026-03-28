@@ -2,8 +2,7 @@
 # run_cl_nq.sh — Sequential sweep: CL then NQ
 # Run from strategy-console: bash run_cl_nq.sh
 # Each market launches a VM, waits for completion, force-deletes, then next.
-
-set -e
+# Checks bucket after each market to confirm artifacts uploaded.
 
 REPO_DIR="/home/robpitman1982/python-master-strategy-creator"
 cd "$REPO_DIR"
@@ -19,6 +18,8 @@ echo "=========================================="
 echo " CL + NQ SWEEP"
 echo "=========================================="
 
+BUCKET="gs://strategy-artifacts-robpitman/runs/"
+
 for i in "${!CONFIGS[@]}"; do
     CONFIG="${CONFIGS[$i]}"
     MARKET="${MARKETS[$i]}"
@@ -27,6 +28,9 @@ for i in "${!CONFIGS[@]}"; do
     echo "=========================================="
     echo " Starting $MARKET — $(date)"
     echo "=========================================="
+    
+    # Record runs before launch to detect new one
+    RUNS_BEFORE=$(gcloud storage ls "$BUCKET" 2>/dev/null | wc -l)
     
     python3 run_cloud_sweep.py --config "$CONFIG" --fire-and-forget
     
@@ -41,12 +45,13 @@ for i in "${!CONFIGS[@]}"; do
         STATUS=$(gcloud compute instances describe strategy-sweep --zone us-central1-c --format="value(status)" 2>/dev/null || echo "GONE")
         
         if [ "$STATUS" = "GONE" ]; then
-            echo "$MARKET — VM already deleted. Done."
+            echo "$MARKET — VM self-deleted."
             break
         elif [ "$STATUS" = "TERMINATED" ] || [ "$STATUS" = "STOPPED" ]; then
-            echo "$MARKET — VM terminated. Force deleting..."
+            echo "$MARKET — VM terminated. Waiting 30s for upload to finish..."
+            sleep 30
+            echo "Force deleting VM..."
             gcloud compute instances delete strategy-sweep --zone us-central1-c --quiet 2>/dev/null
-            echo "$MARKET — Done."
             break
         else
             echo "  $(date +%H:%M:%S) — $MARKET VM status: $STATUS"
@@ -54,6 +59,27 @@ for i in "${!CONFIGS[@]}"; do
         fi
     done
     
+    # Check if artifacts made it to the bucket
+    RUNS_AFTER=$(gcloud storage ls "$BUCKET" 2>/dev/null | wc -l)
+    if [ "$RUNS_AFTER" -gt "$RUNS_BEFORE" ]; then
+        LATEST=$(gcloud storage ls "$BUCKET" 2>/dev/null | sort | tail -1)
+        echo "SUCCESS: $MARKET artifacts uploaded -> $LATEST"
+        
+        # Verify run_status.json exists and shows completed
+        STATUS_JSON=$(gcloud storage cat "${LATEST}run_status.json" 2>/dev/null || echo "NO_STATUS")
+        if echo "$STATUS_JSON" | grep -q '"completed"'; then
+            echo "CONFIRMED: $MARKET engine completed successfully"
+        else
+            echo "WARNING: $MARKET status unclear. Check manually."
+            echo "$STATUS_JSON"
+        fi
+    else
+        echo "FAILED: $MARKET artifacts NOT found in bucket!"
+        echo "Check strategy-console storage: ~/strategy_console_storage/runs/"
+    fi
+    
+    echo ""
+    echo "--- $MARKET finished at $(date) ---"
     echo ""
 done
 
