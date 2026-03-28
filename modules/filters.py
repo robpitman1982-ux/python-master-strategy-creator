@@ -1243,3 +1243,35 @@ class OutsideBarFilter(BaseFilter):
         result = outside.copy()
         result.iloc[0] = False
         return result.fillna(False)
+
+
+class GapUpFilter(BaseFilter):
+    """Current bar opens above previous bar's high."""
+    name = "GapUpFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(data.iloc[i]["open"] > data.iloc[i - 1]["high"])
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        gap_up = data["open"] > data["high"].shift(1)
+        result = gap_up.copy()
+        result.iloc[0] = False
+        return result.fillna(False)
+
+
+class GapDownFilter(BaseFilter):
+    """Current bar opens below previous bar's low."""
+    name = "GapDownFilter"
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 1:
+            return False
+        return bool(data.iloc[i]["open"] < data.iloc[i - 1]["low"])
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        gap_down = data["open"] < data["low"].shift(1)
+        result = gap_down.copy()
+        result.iloc[0] = False
+        return result.fillna(False)
