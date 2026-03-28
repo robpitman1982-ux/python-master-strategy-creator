@@ -948,6 +948,7 @@ def _run_dataset(
     tracker.set_families(family_names)
 
     # ── Load CSV once for all families in this dataset ──────────────────
+    tracker.log_load_data(f"{ds_market}_{ds_timeframe}")
     print(f"\n  Loading data once for {ds_market}_{ds_timeframe}: {ds_path}")
     load_start = time.perf_counter()
     raw_data = load_tradestation_csv(ds_path, debug=True)
@@ -964,6 +965,7 @@ def _run_dataset(
         all_avg_range.update(get_required_avg_range_lookbacks(st, timeframe=ds_timeframe))
         all_momentum.update(get_required_momentum_lookbacks(st, timeframe=ds_timeframe))
 
+    tracker.log_precompute_features(len(family_names))
     feat_start = time.perf_counter()
     print(f"\n  Precomputing superset features for {len(family_names)} families:")
     print(f"   SMA lengths: {sorted(all_sma)}")
@@ -1083,6 +1085,7 @@ def _run_dataset(
     family_summary_df = pd.DataFrame(dataset_summaries)
     family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)
 
+    tracker.log_build_leaderboard()
     leaderboard_df = build_family_leaderboard(family_summary_df)
     bootcamp_leaderboard_df = build_family_bootcamp_leaderboard(family_summary_df)
     leaderboard_path = ds_output_dir / "family_leaderboard_results.csv"
@@ -1124,6 +1127,7 @@ def _run_dataset(
 
             n_accepted = int(leaderboard_df.get("accepted_final", pd.Series(dtype=bool)).sum()) if "accepted_final" in leaderboard_df.columns else len(leaderboard_df)
             tracker.log_portfolio(n_accepted)
+            tracker.log_portfolio_rebuild(n_accepted)
 
             review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
                 leaderboard_csv=leaderboard_path,

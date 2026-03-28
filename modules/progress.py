@@ -89,6 +89,30 @@ class ProgressTracker:
         self.log("", "PORTFOLIO", f"Evaluating {n_strategies} strategies...")
         self._write_status("PORTFOLIO", 0, 0, n_strategies)
 
+    def log_load_data(self, dataset_label: str) -> None:
+        self.log("", "LOAD_DATA", f"Loading CSV for {dataset_label}")
+        self._write_status("LOAD_DATA", 0, 0, 0)
+
+    def log_precompute_features(self, n_families: int) -> None:
+        self.log("", "PRECOMPUTE_FEATURES", f"Computing features for {n_families} families")
+        self._write_status("PRECOMPUTE_FEATURES", 0, 0, n_families)
+
+    def log_dedup(self, family: str) -> None:
+        self.log(family, "DEDUP", "Deduplicating promoted candidates")
+        self._write_status("DEDUP", 0, 0, 0)
+
+    def log_write_csv(self, family: str, filename: str) -> None:
+        self.log(family, "WRITE_CSV", f"Writing {filename}")
+        self._write_status("WRITE_CSV", 0, 0, 0)
+
+    def log_build_leaderboard(self) -> None:
+        self.log("", "BUILD_LEADERBOARD", "Building family leaderboard")
+        self._write_status("BUILD_LEADERBOARD", 0, 0, 0)
+
+    def log_portfolio_rebuild(self, n_strategies: int) -> None:
+        self.log("", "PORTFOLIO_REBUILD", f"Rebuilding {n_strategies} strategies for portfolio evaluation")
+        self._write_status("PORTFOLIO_REBUILD", 0, 0, n_strategies)
+
     def log_done(self) -> None:
         total = self._elapsed()
         self.log("", "DONE", f"Total runtime: {total:.1f}s")
