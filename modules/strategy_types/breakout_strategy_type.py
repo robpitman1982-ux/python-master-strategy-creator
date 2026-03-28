@@ -184,7 +184,7 @@ class BreakoutStrategyType(BaseStrategyType):
     ) -> dict[str, list]:
         return {
             "exit_type": [ExitType.TIME_STOP, ExitType.TRAILING_STOP],
-            "trailing_stop_atr": [1.0, 1.5, 2.0, 2.5],
+            "trailing_stop_atr": [1.5, 2.5, 3.5, 5.0],
         }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
