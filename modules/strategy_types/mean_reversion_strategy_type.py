@@ -79,9 +79,12 @@ def _mr_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
     _mr_shared_cfg = cfg
 
 
-def _run_mr_combo_case(combo_classes: list[type]) -> dict[str, Any]:
+def _run_mr_combo_case(args) -> dict[str, Any]:
+    if isinstance(args, tuple):
+        combo_classes, cfg = args
+    else:
+        combo_classes, cfg = args, _mr_shared_cfg
     data = _mr_shared_data
-    cfg = _mr_shared_cfg
     strat_type = MeanReversionStrategyType()
 
     filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
@@ -409,6 +412,7 @@ class MeanReversionStrategyType(BaseStrategyType):
         cfg: EngineConfig,
         max_workers: int = 10,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        executor: Optional[Any] = None,
     ) -> pd.DataFrame:
         combinations = generate_filter_combinations(
             self.get_filter_classes(),
@@ -419,12 +423,17 @@ class MeanReversionStrategyType(BaseStrategyType):
         results: list[dict[str, Any]] = []
 
         try:
-            with ProcessPoolExecutor(
-                max_workers=max_workers,
-                initializer=_mr_worker_init,
-                initargs=(data, cfg),
-            ) as executor:
-                for idx, res in enumerate(executor.map(_run_mr_combo_case, combinations), start=1):
+            if executor is not None:
+                _executor = executor
+            else:
+                _executor = ProcessPoolExecutor(
+                    max_workers=max_workers,
+                    initializer=_mr_worker_init,
+                    initargs=(data, cfg),
+                )
+            try:
+                tasks = [(combo, cfg) for combo in combinations]
+                for idx, res in enumerate(_executor.map(_run_mr_combo_case, tasks), start=1):
                     print(
                         f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
                         f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
@@ -434,11 +443,14 @@ class MeanReversionStrategyType(BaseStrategyType):
                     results.append(res)
                     if progress_callback is not None:
                         progress_callback(idx, len(combinations))
+            finally:
+                if executor is None:
+                    _executor.shutdown(wait=True)
         except (OSError, PermissionError) as exc:
             print(f"\n[WARN] Parallel mean reversion sweep unavailable ({exc}). Falling back to sequential execution.")
             _mr_worker_init(data, cfg)
             for idx, combo_classes in enumerate(combinations, start=1):
-                res = _run_mr_combo_case(combo_classes)
+                res = _run_mr_combo_case((combo_classes, cfg))
                 print(
                     f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
                     f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "

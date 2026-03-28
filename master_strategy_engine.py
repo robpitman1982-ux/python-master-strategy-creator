@@ -148,6 +148,7 @@ def run_family_filter_combination_sweep(
     cfg: EngineConfig,
     max_workers: int,
     progress_callback: Any = None,
+    executor: Any = None,
 ) -> pd.DataFrame:
     return call_first_available(
         strategy_type,
@@ -156,6 +157,7 @@ def run_family_filter_combination_sweep(
         cfg=cfg,
         max_workers=max_workers,
         progress_callback=progress_callback,
+        executor=executor,
     )
 
 
@@ -746,6 +748,7 @@ def run_single_family(
     market_symbol: str,
     timeframe: str = "60m",
     tracker: ProgressTracker | None = None,
+    sweep_executor: Any = None,
 ) -> dict[str, Any]:
     family_start = time.perf_counter()
     strategy_type = get_strategy_type(strategy_type_name)
@@ -805,6 +808,7 @@ def run_single_family(
         cfg=cfg,
         max_workers=max_workers_sweep,
         progress_callback=tracker.update_sweep if tracker is not None else None,
+        executor=sweep_executor,
     )
     sweep_elapsed = time.perf_counter() - sweep_start
 
@@ -991,53 +995,90 @@ def _run_dataset(
     for name, count in small_families:
         print(f"   SMALL: {name} ({count} combos)")
 
-    # ── Run large families sequentially (they saturate cores) ───────────
-    for family_name, _combo_count in large_families:
-        summary_row = run_single_family(
-            strategy_type_name=family_name,
+    # ── Create shared sweep pool for all families in this dataset ───────
+    from modules.strategy_types.sweep_worker_pool import create_shared_sweep_pool
+
+    # Build a representative EngineConfig for pool initialisation
+    _first_st = get_strategy_type(family_names[0])
+    _direction = getattr(_first_st, "get_engine_direction", lambda: "long")()
+    _pool_cfg = EngineConfig(
+        initial_capital=get_nested(_cfg, "engine", "initial_capital", default=250_000.0),
+        risk_per_trade=get_nested(_cfg, "engine", "risk_per_trade", default=0.01),
+        symbol=ds_market,
+        commission_per_contract=get_nested(_cfg, "engine", "commission_per_contract", default=2.00),
+        slippage_ticks=get_nested(_cfg, "engine", "slippage_ticks", default=4),
+        tick_value=get_nested(_cfg, "engine", "tick_value", default=12.50),
+        dollars_per_point=get_nested(_cfg, "engine", "dollars_per_point", default=50.0),
+        oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
+        timeframe=ds_timeframe,
+        direction=_direction,
+    )
+
+    try:
+        shared_sweep_pool = create_shared_sweep_pool(
             data=precomputed_data,
-            dataset_path=ds_path,
-            outputs_dir=ds_output_dir,
-            max_workers_sweep=MAX_WORKERS_SWEEP,
-            max_workers_refinement=MAX_WORKERS_REFINEMENT,
-            market_symbol=ds_market,
-            timeframe=ds_timeframe,
-            tracker=tracker,
+            cfg=_pool_cfg,
+            max_workers=MAX_WORKERS_SWEEP,
         )
-        dataset_summaries.append(summary_row)
+        print(f"\n  Shared sweep pool created with {MAX_WORKERS_SWEEP} workers")
+    except (OSError, PermissionError) as exc:
+        print(f"\n  [WARN] Could not create shared sweep pool ({exc}). Each family will create its own.")
+        shared_sweep_pool = None
 
-    # ── Run small families concurrently ─────────────────────────────────
-    if small_families:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-
-        max_concurrent = min(3, len(small_families))
-        print(f"\n  Running {len(small_families)} small families with concurrency={max_concurrent}")
-
-        def _run_small_family(family_name: str) -> dict[str, Any]:
-            return run_single_family(
+    try:
+        # ── Run large families sequentially (they saturate cores) ───────────
+        for family_name, _combo_count in large_families:
+            summary_row = run_single_family(
                 strategy_type_name=family_name,
                 data=precomputed_data,
                 dataset_path=ds_path,
                 outputs_dir=ds_output_dir,
-                max_workers_sweep=max(MAX_WORKERS_SWEEP // max_concurrent, 2),
-                max_workers_refinement=max(MAX_WORKERS_REFINEMENT // max_concurrent, 2),
+                max_workers_sweep=MAX_WORKERS_SWEEP,
+                max_workers_refinement=MAX_WORKERS_REFINEMENT,
                 market_symbol=ds_market,
                 timeframe=ds_timeframe,
                 tracker=tracker,
+                sweep_executor=shared_sweep_pool,
             )
+            dataset_summaries.append(summary_row)
 
-        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-            futures = {
-                executor.submit(_run_small_family, name): name
-                for name, _ in small_families
-            }
-            for future in as_completed(futures):
-                family_name = futures[future]
-                try:
-                    summary_row = future.result()
-                    dataset_summaries.append(summary_row)
-                except Exception as e:
-                    print(f"\n  Family {family_name} failed: {e}")
+        # ── Run small families concurrently ─────────────────────────────────
+        if small_families:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            max_concurrent = min(3, len(small_families))
+            print(f"\n  Running {len(small_families)} small families with concurrency={max_concurrent}")
+
+            def _run_small_family(family_name: str) -> dict[str, Any]:
+                return run_single_family(
+                    strategy_type_name=family_name,
+                    data=precomputed_data,
+                    dataset_path=ds_path,
+                    outputs_dir=ds_output_dir,
+                    max_workers_sweep=max(MAX_WORKERS_SWEEP // max_concurrent, 2),
+                    max_workers_refinement=max(MAX_WORKERS_REFINEMENT // max_concurrent, 2),
+                    market_symbol=ds_market,
+                    timeframe=ds_timeframe,
+                    tracker=tracker,
+                    sweep_executor=shared_sweep_pool,
+                )
+
+            with ThreadPoolExecutor(max_workers=max_concurrent) as thread_executor:
+                futures = {
+                    thread_executor.submit(_run_small_family, name): name
+                    for name, _ in small_families
+                }
+                for future in as_completed(futures):
+                    family_name = futures[future]
+                    try:
+                        summary_row = future.result()
+                        dataset_summaries.append(summary_row)
+                    except Exception as e:
+                        print(f"\n  Family {family_name} failed: {e}")
+    finally:
+        if shared_sweep_pool is not None:
+            shared_sweep_pool.shutdown(wait=True)
+            print("  Shared sweep pool shut down")
 
     family_summary_df = pd.DataFrame(dataset_summaries)
     family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)

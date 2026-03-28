@@ -128,6 +128,7 @@ class BaseStrategyType(ABC):
         cfg: EngineConfig,
         max_workers: int = 10,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        executor: Optional[Any] = None,
     ) -> pd.DataFrame:
         raise NotImplementedError
 
