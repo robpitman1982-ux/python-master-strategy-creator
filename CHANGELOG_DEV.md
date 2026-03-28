@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-28 — Session 41: Widen exit grids for trend rescue
+
+**What was done**:
+- Widened trailing_stop_atr grid for trend: [1.0, 1.5, 2.0, 2.5] -> [1.5, 2.5, 3.5, 5.0, 7.0]
+- Widened trailing_stop_atr grid for breakout: [1.0, 1.5, 2.0, 2.5] -> [1.5, 2.5, 3.5, 5.0]
+- Widened profit_target_atr grid for MR: [0.5, 0.75, 1.0, 1.25, 1.5] -> [0.5, 1.0, 1.5, 2.0, 3.0]
+- Verified subtypes and shorts inherit widened grids (no overrides found)
+
+**Why this matters**:
+- Session 29 showed trailing stops losing to time_stop because the grid was too tight
+- 1.0x ATR on daily ES = $2k-$4k trailing distance — a single intraday whipsaw
+- 5.0x ATR on daily ES = $10k-$20k — enough room for a real trend to develop
+- This is the single most likely fix for the trend family's REGIME_DEPENDENT problem
+
+**Test result**: 27/27 pass (test_smoke + test_subtypes)
+
+**Next priorities**:
+1. Run full 5TF ES sweep with widened grids
+2. Compare: do trend strategies now use trailing_stop? Do they achieve ROBUST?
+3. If trend improves: proceed to CL instrument expansion (Session 42)
+4. If trend still fails: investigate whether the trend FILTERS are the problem, not exits
+
+---
+
 ## 2026-03-27 — Session 40: 96-vCPU utilisation + exit grid activation
 
 **What was done**:

@@ -229,6 +229,7 @@ Key sections:
 - [x] Per-timeframe dataset caching — CSV loaded once and features precomputed once per timeframe, not 15x per family (Session 40)
 - [x] Concurrent small-family execution — subtypes with <200 combos batched via ThreadPoolExecutor (concurrency=3) (Session 40)
 - [x] Exit types active in refinement grids — all 3 base families merge exit parameter grids (trailing_stop, profit_target, signal_exit) into default refinement (verified Session 40)
+- [x] Widened exit grids — trend trailing_stop_atr [1.5,2.5,3.5,5.0,7.0], breakout [1.5,2.5,3.5,5.0], MR profit_target_atr [0.5,1.0,1.5,2.0,3.0] (Session 41)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -284,4 +285,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-27 — Session 40: 96-vCPU utilisation + exit grid activation
+2026-03-28 — Session 41: Widen exit grids for trend rescue
