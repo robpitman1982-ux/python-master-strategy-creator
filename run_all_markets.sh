@@ -57,16 +57,24 @@ for i in "${!CONFIGS[@]}"; do
     echo ""
     echo "Waiting for $MARKET VM to finish and self-delete..."
     
-    # Poll every 60 seconds until VM is gone
+    # Poll every 60 seconds — handle TERMINATED VMs that didn't fully delete
     while true; do
-        VM_COUNT=$(gcloud compute instances list --filter="name=strategy-sweep" --format="value(name)" 2>/dev/null | wc -l)
-        if [ "$VM_COUNT" -eq 0 ]; then
+        STATUS=$(gcloud compute instances describe strategy-sweep --zone us-central1-c --format="value(status)" 2>/dev/null || echo "GONE")
+        
+        if [ "$STATUS" = "GONE" ]; then
             echo "$MARKET complete — VM self-deleted."
             COMPLETED=$((COMPLETED + 1))
             break
+        elif [ "$STATUS" = "TERMINATED" ] || [ "$STATUS" = "STOPPED" ]; then
+            echo "$MARKET — VM terminated. Force deleting..."
+            gcloud compute instances delete strategy-sweep --zone us-central1-c --quiet 2>/dev/null
+            COMPLETED=$((COMPLETED + 1))
+            echo "$MARKET complete."
+            break
+        else
+            echo "  $(date +%H:%M:%S) — $MARKET VM status: $STATUS"
+            sleep 60
         fi
-        echo "  $(date +%H:%M:%S) — VM still running..."
-        sleep 60
     done
     
     echo ""
