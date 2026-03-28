@@ -1300,11 +1300,24 @@ class ATRPercentileFilter(BaseFilter):
 
     def mask(self, data: pd.DataFrame) -> pd.Series:
         tr = data["true_range"] if "true_range" in data.columns else (data["high"] - data["low"])
+        atr_col = f"atr_{min(self.lookback, 20)}"
+        if atr_col in data.columns:
+            current_atr = data[atr_col]
+        else:
+            current_atr = tr.rolling(20).mean()
         rolling_rank = tr.rolling(self.lookback).apply(
-            lambda w: (w[:-1] < w.iloc[-1]).sum() / (len(w) - 1) if len(w) > 1 else 0.5,
+            lambda w: (w < w.iloc[-1]).sum() / len(w),
             raw=False,
         )
-        result = (rolling_rank >= self.min_percentile) & (rolling_rank <= self.max_percentile)
+        # passes() compares window against current_atr, not window's own last value
+        # Recompute using current_atr as the reference
+        ranks = pd.Series(np.nan, index=data.index)
+        tr_vals = tr.values
+        atr_vals = current_atr.values
+        for i in range(self.lookback, len(data)):
+            window = tr_vals[i - self.lookback + 1:i + 1]
+            ranks.iloc[i] = (window < atr_vals[i]).sum() / len(window)
+        result = (ranks >= self.min_percentile) & (ranks <= self.max_percentile)
         result.iloc[:self.lookback] = False
         return result.fillna(False)
 

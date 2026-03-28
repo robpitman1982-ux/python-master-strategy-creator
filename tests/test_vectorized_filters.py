@@ -46,6 +46,7 @@ def add_all_features(data: pd.DataFrame) -> pd.DataFrame:
 
 from modules.filters import (
     AboveLongTermSMAFilter,
+    ATRPercentileFilter,
     BelowFastSMAFilter,
     BreakoutCloseStrengthFilter,
     BreakoutDistanceFilter,
@@ -57,9 +58,15 @@ from modules.filters import (
     DistanceBelowSMAFilter,
     DownCloseFilter,
     ExpansionBarFilter,
+    GapDownFilter,
+    GapUpFilter,
+    HigherHighFilter,
     HigherLowFilter,
+    InsideBarFilter,
+    LowerLowFilter,
     LowVolatilityRegimeFilter,
     MomentumFilter,
+    OutsideBarFilter,
     PriorRangePositionFilter,
     PullbackFilter,
     RangeBreakoutFilter,
@@ -111,6 +118,14 @@ ALL_FILTERS = [
     (ThreeBarDownFilter, {}),
     (CloseNearLowFilter, {"max_close_position": 0.35}),
     (StretchFromLongTermSMAFilter, {"slow_length": 200, "min_distance_atr": 0.5}),
+    # Universal / market-agnostic
+    (InsideBarFilter, {}),
+    (OutsideBarFilter, {}),
+    (GapUpFilter, {}),
+    (GapDownFilter, {}),
+    (ATRPercentileFilter, {"lookback": 100, "min_percentile": 0.0, "max_percentile": 0.5}),
+    (HigherHighFilter, {}),
+    (LowerLowFilter, {}),
 ]
 
 ALL_FILTER_IDS = [cls.__name__ for cls, _ in ALL_FILTERS]
