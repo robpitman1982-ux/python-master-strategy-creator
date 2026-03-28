@@ -1116,41 +1116,45 @@ def _run_dataset(
             print(f"\nBOOTCAMP LEADERBOARD - {ds_market} {ds_timeframe} (Saved to {bootcamp_leaderboard_path})")
             print(bootcamp_leaderboard_df[[c for c in preview_cols if c in bootcamp_leaderboard_df.columns]].to_string(index=False))
 
-        print("\n" + "=" * 72 + "\nSTARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
-
-        n_accepted = int(leaderboard_df.get("accepted_final", pd.Series(dtype=bool)).sum()) if "accepted_final" in leaderboard_df.columns else len(leaderboard_df)
-        tracker.log_portfolio(n_accepted)
-
-        review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
-            leaderboard_csv=leaderboard_path,
-            data_csv=ds_path,
-            market_name=ds_market,
-            timeframe=ds_timeframe,
-            oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
-        )
-
-        if not review_table.empty:
-            review_table.to_csv(ds_output_dir / "portfolio_review_table.csv", index=False)
-            returns_df.to_csv(ds_output_dir / "strategy_returns.csv", index=True)
-            corr_matrix.to_csv(ds_output_dir / "correlation_matrix.csv", index=True)
-            if not yearly_df.empty:
-                yearly_df.to_csv(ds_output_dir / "yearly_stats_breakdown.csv", index=False)
-
-            print("\nPORTFOLIO EVALUATION COMPLETE.")
-            preview_cols = [
-                "strategy_family",
-                "strategy_name",
-                "is_trades",
-                "oos_trades",
-                "is_pf_pre_2019",
-                "oos_pf_post_2019",
-                "mc_max_dd_99",
-                "shock_drop_10pct_pnl",
-            ]
-            print("\n[Final Strategy Review Table]")
-            print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
+        skip_portfolio = get_nested(_cfg, "pipeline", "skip_portfolio_evaluation", default=False)
+        if skip_portfolio:
+            print("\n  Portfolio evaluation SKIPPED (skip_portfolio_evaluation=true). Run offline after downloading results.")
         else:
-            print("\nNo strategies passed final leaderboard acceptance gate for evaluation.")
+            print("\n" + "=" * 72 + "\nSTARTING AUTOMATED PORTFOLIO EVALUATION\n" + "=" * 72)
+
+            n_accepted = int(leaderboard_df.get("accepted_final", pd.Series(dtype=bool)).sum()) if "accepted_final" in leaderboard_df.columns else len(leaderboard_df)
+            tracker.log_portfolio(n_accepted)
+
+            review_table, returns_df, corr_matrix, yearly_df = evaluate_portfolio(
+                leaderboard_csv=leaderboard_path,
+                data_csv=ds_path,
+                market_name=ds_market,
+                timeframe=ds_timeframe,
+                oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
+            )
+
+            if not review_table.empty:
+                review_table.to_csv(ds_output_dir / "portfolio_review_table.csv", index=False)
+                returns_df.to_csv(ds_output_dir / "strategy_returns.csv", index=True)
+                corr_matrix.to_csv(ds_output_dir / "correlation_matrix.csv", index=True)
+                if not yearly_df.empty:
+                    yearly_df.to_csv(ds_output_dir / "yearly_stats_breakdown.csv", index=False)
+
+                print("\nPORTFOLIO EVALUATION COMPLETE.")
+                preview_cols = [
+                    "strategy_family",
+                    "strategy_name",
+                    "is_trades",
+                    "oos_trades",
+                    "is_pf_pre_2019",
+                    "oos_pf_post_2019",
+                    "mc_max_dd_99",
+                    "shock_drop_10pct_pnl",
+                ]
+                print("\n[Final Strategy Review Table]")
+                print(review_table[[c for c in preview_cols if c in review_table.columns]].to_string(index=False))
+            else:
+                print("\nNo strategies passed final leaderboard acceptance gate for evaluation.")
 
     tracker.log_done()
 
