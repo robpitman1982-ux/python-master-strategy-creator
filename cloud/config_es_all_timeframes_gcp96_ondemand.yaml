@@ -27,6 +27,7 @@ engine:
   dollars_per_point: 50.0
 
 pipeline:
+  skip_portfolio_evaluation: true
   max_workers_sweep: 94       # Leave 2 cores free for OS on 96-core
   max_workers_refinement: 94
   max_candidates_to_refine: 5

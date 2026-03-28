@@ -27,6 +27,7 @@ engine:
   dollars_per_point: 50.0
 
 pipeline:
+  skip_portfolio_evaluation: true
   max_workers_sweep: 90
   max_workers_refinement: 90
   max_candidates_to_refine: 3

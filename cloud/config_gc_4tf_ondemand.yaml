@@ -24,6 +24,7 @@ engine:
   tick_value: 10.0
   dollars_per_point: 100.0
 pipeline:
+  skip_portfolio_evaluation: true
   max_workers_sweep: 90
   max_workers_refinement: 90
   max_candidates_to_refine: 3
