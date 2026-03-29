@@ -3,6 +3,40 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-03-30 — Session 47: Portfolio selector module
+
+**What was done**:
+- Built modules/portfolio_selector.py — 6-stage portfolio selection pipeline:
+  1. Hard filter gate (ROBUST/STABLE, OOS PF > 1.4, 60+ trades, dedup, cap at 30)
+  2. Per-trade return extraction + daily resampling + true Pearson correlation matrix
+  3. Combinatorial sweep (C(n,4..8) with 500k guard), reject pairs with |Pearson| > 0.4
+  4. Portfolio Monte Carlo (10,000 sims, independent per-strategy shuffle + interleave)
+  5. Position sizing optimiser (grid search weights [0.5, 1.0, 1.5], 1,000 sims)
+- Portfolio MC is a NEW function — does not reuse single-strategy monte_carlo_pass_rate()
+  because portfolios require independent per-strategy shuffling and interleaving
+- Added tests/test_portfolio_selector.py — 5 smoke tests
+- Wired into master_strategy_engine.py (skip_portfolio_selector config flag)
+- Outputs: portfolio_selector_report.csv, portfolio_selector_matrix.csv
+
+**Why this matters**:
+- Closes the gap between strategy discovery (leaderboard) and portfolio decision
+- First time we have ACTUAL Pearson correlations from real daily-bucketed trade P&L
+- First time we have a Bootcamp Monte Carlo pass rate across portfolio combinations
+- Enables fully automated "which strategies to actually run" decision
+
+**Key design decisions**:
+- Daily resampling before correlation (same pattern as cross_dataset_evaluator.py)
+- Column name matching by endswith(leader_strategy_name) — handles timestamp prefixes
+- Candidate cap at 30 to prevent combinatorial explosion
+- Combination guard at 500k to prevent runaway sweep
+- Sizing MC uses 1,000 sims (not 10,000) for speed — acceptable for relative comparison
+- Diversity score: market variety 40%, direction mix 30%, logic type 30%
+
+**Next priorities**:
+1. Run portfolio_selector on ES + CL data to validate
+2. Wait for NQ/GC runs to complete, rebuild leaderboard, re-run selector
+3. Dashboard integration (Portfolio Selector tab)
+
 ---
 
 ## 2026-03-29 — Session 45: Fix position sizing (critical bug)

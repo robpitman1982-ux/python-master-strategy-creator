@@ -249,6 +249,7 @@ Key sections:
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
 - [x] The5ers Bootcamp $250K config with correct step balances ($100K/$150K/$200K)
 - [x] The5ers High Stakes and Hyper Growth configs
+- [x] Portfolio selector module — Bootcamp MC pass rate, true Pearson correlation gate, position sizing optimiser (modules/portfolio_selector.py) (Session 47)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
@@ -299,4 +300,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-29 — Session 45: Fix position sizing (critical bug — compounding → fixed)
+2026-03-30 — Session 47: Build portfolio_selector.py (Bootcamp MC + correlation + sizing)

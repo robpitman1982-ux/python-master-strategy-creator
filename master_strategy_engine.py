@@ -1260,4 +1260,19 @@ if __name__ == "__main__":
         else:
             print("\nNo accepted strategies found across all datasets for master leaderboard.")
 
+        # Portfolio selection (optional, controlled by config flag)
+        if not get_nested(_cfg, "pipeline", "skip_portfolio_selector", default=False):
+            try:
+                from modules.portfolio_selector import run_portfolio_selection
+                print("Running portfolio selection...")
+                run_portfolio_selection(
+                    leaderboard_path=str(OUTPUTS_DIR / "ultimate_leaderboard_bootcamp.csv"),
+                    runs_base_path=str(OUTPUTS_DIR / "runs"),
+                    output_dir=str(OUTPUTS_DIR),
+                )
+            except Exception as e:
+                print(f"[Warning] Portfolio selection failed: {e}")
+                import traceback
+                traceback.print_exc()
+
     print(f"\n Total script runtime: {time.perf_counter() - total_start:.2f} seconds")
