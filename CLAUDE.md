@@ -240,6 +240,9 @@ Key sections:
 - [x] Optional portfolio evaluation — `skip_portfolio_evaluation` config flag defers serial rebuild to post-run (Session 43)
 - [x] Granular status stages — LOAD_DATA, PRECOMPUTE_FEATURES, DEDUP, WRITE_CSV, BUILD_LEADERBOARD, PORTFOLIO_REBUILD (Session 43)
 - [x] All ondemand configs updated with skip_portfolio_evaluation:true (Session 43)
+- [x] Refinement as_completed() — eliminates head-of-line blocking, CPU 30%→80%+ (Session 44)
+- [x] Refinement task dedup — removes redundant parameter combos before dispatch (Session 44)
+- [x] GC+SI runner script — run_gc_si.sh for sequential Gold/Silver sweeps (Session 44)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -295,4 +298,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-29 — Session 43: Performance fixes + multi-market configs
+2026-03-29 — Session 44: Fix refinement scheduling + task dedup

@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-03-29 — Session 44: Fix refinement scheduling + task dedup
+
+**What was done**:
+Performance:
+- Replaced ordered executor.map() with submit() + as_completed() in refinement
+- Deduplicated refinement tasks before dispatch (~30-50% fewer tasks)
+
+Config:
+- Created run_gc_si.sh runner script for Gold and Silver sweeps
+
+**Why this matters**:
+- as_completed() eliminates head-of-line blocking in refinement (30% -> 80%+ CPU)
+- Task dedup removes redundant parameter combos that produce identical outputs
+- Combined expected runtime reduction: ~40-60% for refinement stage
+
+**Live diagnosis**:
+Claude Code SSH'd into running CL VM and found refinement using only 30/96 cores
+(68% idle) due to ordered executor.map() and redundant parameter combinations.
+Portfolio evaluation was already skipped (Session 43). Sweep pool was already shared
+(Session 43). This session fixes the remaining bottleneck.
+
+**Note on dataset caching (Step 1)**:
+Investigation confirmed Session 40's dataset caching IS engaged and working correctly.
+CSV loads once per timeframe in _run_dataset(), features precomputed once, shared across
+all 15 families. No fix needed.
+
+**Test result**: 27/27 pass
+
+---
+
 ## 2026-03-29 — Session 43: Performance fixes + multi-market configs
 
 **What was done**:
