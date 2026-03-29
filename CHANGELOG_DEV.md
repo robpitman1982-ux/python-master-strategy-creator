@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-03-29 — Session 45: Fix position sizing (critical bug)
+
+**What was done**:
+- Fixed engine to use initial_capital for position sizing instead of current_capital
+- Previous behavior compounded: each winning trade increased next position size
+- Over 18 years with PF 8.0, this produced $20 BILLION PnL on a $250k account
+- Now uses fixed $250k base for all position calculations
+- PF, quality flags, trade counts UNCHANGED (ratio-based, not affected by sizing)
+- Dollar metrics (net_pnl, avg_trade, max_dd) now realistic
+- Sanity check: ES daily MR shows $702k net PnL (was astronomical with compounding)
+
+**Why this matters**:
+- The5ers Bootcamp uses fixed account sizing — compounded results were meaningless
+- All previous dollar-based comparisons between strategies were distorted
+- High-PF strategies on NQ daily were inflated by 1000x+ due to compounding
+- Intraday strategies (30m, 15m) were less affected due to smaller moves
+
+**Impact**:
+- ALL cloud runs need to be re-run to get correct dollar figures
+- PF-based rankings and quality flags remain valid
+- Bootcamp scores that used PnL components need recalculation
+
+---
+
 ## 2026-03-29 — Session 44: Fix refinement scheduling + task dedup
 
 **What was done**:

@@ -173,6 +173,7 @@ Key sections:
 <!-- UPDATE THIS SECTION EACH SESSION -->
 
 ### Critical (fix before cloud deployment)
+- [x] Position sizing used current_capital (compounding) — fixed to use initial_capital (Session 45). ALL cloud runs need re-run for correct dollar figures.
 - [x] Quality flag logic uses hard thresholds — BORDERLINE detection added, quality_score continuous metric added
 - [x] Promotion gate too loose — capped at 20 candidates with composite ranking (quality_score × oos_pf × trades/yr)
 - [ ] Refinement grid is brute-force (4×4×4×4=256) — needs adaptive/Bayesian approach for cloud
@@ -298,4 +299,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-29 — Session 44: Fix refinement scheduling + task dedup
+2026-03-29 — Session 45: Fix position sizing (critical bug — compounding → fixed)
