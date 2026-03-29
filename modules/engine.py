@@ -73,7 +73,7 @@ class MasterStrategyEngine:
         if stop_distance_points <= 0 or dollars_per_point <= 0:
             return 0
 
-        risk_amount = self.current_capital * self.risk_per_trade
+        risk_amount = self.initial_capital * self.risk_per_trade
         if risk_amount <= 0:
             return 0
 
