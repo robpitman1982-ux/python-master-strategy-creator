@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from collections import Counter
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from itertools import product
 from typing import Any, Callable, Optional
@@ -143,6 +143,19 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _task_signature(task: dict[str, Any]) -> tuple:
+    """Build dedup key from parameters that affect results."""
+    return (
+        task.get("hold_bars"),
+        task.get("stop_distance_points"),
+        task.get("min_avg_range"),
+        task.get("momentum_lookback"),
+        task.get("exit_type"),
+        task.get("trailing_stop_atr"),
+        task.get("profit_target_atr"),
+    )
+
+
 @dataclass
 class RefinementResult:
     strategy_name: str
@@ -270,6 +283,19 @@ class StrategyParameterRefiner:
                 else:
                     tasks.append(common)
 
+        # ── Deduplicate tasks before dispatch ────────────────────────────
+        seen: set[tuple] = set()
+        unique_tasks: list[dict[str, Any]] = []
+        for task in tasks:
+            sig = _task_signature(task)
+            if sig not in seen:
+                seen.add(sig)
+                unique_tasks.append(task)
+        removed = len(tasks) - len(unique_tasks)
+        if removed > 0:
+            print(f"Refinement: {len(tasks)} tasks -> {len(unique_tasks)} unique ({removed} duplicates removed)")
+        tasks = unique_tasks
+
         total_runs = len(tasks)
 
         accepted_count = 0
@@ -290,7 +316,19 @@ class StrategyParameterRefiner:
                     initializer=_init_refinement_worker,
                     initargs=(self.engine_class, self.data, self.strategy_factory, self.config, self.precomputed_signals),
                 ) as executor:
-                    for idx, result in enumerate(executor.map(_run_refinement_case, tasks), start=1):
+                    futures = {
+                        executor.submit(_run_refinement_case, task): i
+                        for i, task in enumerate(tasks)
+                    }
+                    completed = 0
+                    for future in as_completed(futures):
+                        completed += 1
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            print(f"  Task failed: {exc}")
+                            continue
+
                         if result["passes_trade_filter"]:
                             accepted_count += 1
                             self.results.append(RefinementResult(**result))
@@ -298,7 +336,7 @@ class StrategyParameterRefiner:
                             rejected_count += 1
 
                         print(
-                            f"  Done {idx}/{total_runs} | "
+                            f"  Done {completed}/{total_runs} | "
                             f"hb={result['hold_bars']}, stop={result['stop_distance_points']}, "
                             f"range={result['min_avg_range']}, mom={result['momentum_lookback']}, "
                             f"exit={result['exit_type']} | "
@@ -306,7 +344,7 @@ class StrategyParameterRefiner:
                             f"trades={result['total_trades']} | {result['reject_reason']}"
                         )
                         if progress_callback is not None:
-                            progress_callback(idx, total_runs)
+                            progress_callback(completed, total_runs)
             except (OSError, PermissionError) as exc:
                 print(f"\n[WARN] Parallel refinement unavailable ({exc}). Falling back to sequential execution.")
                 parallel = False
