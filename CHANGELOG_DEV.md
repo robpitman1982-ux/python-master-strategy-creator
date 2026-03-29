@@ -31,7 +31,7 @@ Investigation confirmed Session 40's dataset caching IS engaged and working corr
 CSV loads once per timeframe in _run_dataset(), features precomputed once, shared across
 all 15 families. No fix needed.
 
-**Test result**: 27/27 pass
+**Test result**: 157/157 pass (48 cloud/parallel test errors pre-existing — tmp dir permissions)
 
 ---
 
