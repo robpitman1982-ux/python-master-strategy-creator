@@ -721,7 +721,7 @@ def optimise_sizing(
                 f"Portfolio {i + 1}: {n_weight_opts}^{n_strats} = {total_weight_combos} weight combos — "
                 f"skipping sizing, using default weights"
             )
-            portfolio["contract_weights"] = {s: 0.1 for s in names}
+            portfolio["micro_multiplier"] = {s: 0.1 for s in names}
             portfolio["sizing_optimised"] = False
             results.append(portfolio)
             continue
@@ -738,7 +738,7 @@ def optimise_sizing(
                     trade_lists[name] = trades
 
         if not trade_lists:
-            portfolio["contract_weights"] = {s: 1.0 for s in names}
+            portfolio["micro_multiplier"] = {s: 0.1 for s in names}
             portfolio["sizing_optimised"] = False
             results.append(portfolio)
             continue
@@ -779,7 +779,7 @@ def optimise_sizing(
                     best_weights = weights.copy()
 
         if best_weights is None:
-            best_weights = {s: 1.0 for s in strat_names_in_matrix}
+            best_weights = {s: 0.1 for s in strat_names_in_matrix}
 
         # Final MC at full sim count with optimised weights — all step rates
         # from the SAME experiment so they're comparable
@@ -789,7 +789,7 @@ def optimise_sizing(
             contract_weights=best_weights,
             seed=99,
         )
-        portfolio["contract_weights"] = best_weights
+        portfolio["micro_multiplier"] = best_weights
         portfolio["sizing_optimised"] = True
         portfolio["opt_step1_pass_rate"] = final_mc["step1_pass_rate"]
         portfolio["opt_step2_pass_rate"] = final_mc["step2_pass_rate"]
@@ -910,7 +910,12 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
         else:
             verdict = "MARGINAL"
 
-        weights = p.get("contract_weights", {})
+        weights = p.get("micro_multiplier", p.get("contract_weights", {}))
+
+        # Display weights as micro contract counts (weight * 10 = micros)
+        micro_display = "|".join(
+            f"{k}={int(round(v * 10))} micros" for k, v in weights.items()
+        ) if weights else ""
 
         rows.append({
             "rank": rank,
@@ -924,7 +929,7 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
             "avg_correlation": round(p.get("avg_corr", 0.0), 4),
             "diversity_score": round(p.get("diversity", 0.0), 4),
             "composite_score": round(p.get("score", 0.0), 4),
-            "contract_weights": "|".join(f"{k}={v}" for k, v in weights.items()) if weights else "",
+            "micro_contracts": micro_display,
             "verdict": verdict,
         })
 
