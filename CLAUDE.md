@@ -269,6 +269,12 @@ Key sections:
 - [x] Portfolio selector: rebalanced scoring — OOS PF * 20 + diversity * 30, market count gates (Session 50)
 - [x] Portfolio selector: micro contract sizing — grid [0.1..0.5] = 1-5 micros, displayed in report (Session 50)
 - [x] Portfolio selector: time-to-fund estimates — median/P75 trades and months in report (Session 50)
+- [x] Portfolio selector: OOS PF threshold lowered 1.4 → 1.0, bootcamp_score > 40 filter added, cap raised to 50 (Session 51)
+- [x] Portfolio selector: sizing optimizer rewritten — minimize time-to-fund (median_trades_to_pass) subject to min_pass_rate >= 40% (Session 51)
+- [x] Portfolio selector: micro grid widened [0.1..1.0] = 1-10 micros for faster funding (Session 51)
+- [x] Portfolio selector: all parameters configurable via config.yaml pipeline.portfolio_selector (Session 51)
+- [x] generate_returns.py: writes strategy_trades.csv (per-trade PnL) alongside strategy_returns.csv (daily) (Session 51)
+- [x] Portfolio selector: _load_raw_trade_lists prefers strategy_trades.csv for accurate MC (Session 51)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
@@ -319,4 +325,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-31 — Session 50: Portfolio selector fixes (step rates, raw trades MC, dedup, diversity scoring, micro contracts, time-to-fund)
+2026-03-31 — Session 51: Portfolio selector overhaul (OOS PF 1.0, time-to-fund sizing, per-trade PnL, config params)

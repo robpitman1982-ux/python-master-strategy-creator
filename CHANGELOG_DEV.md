@@ -3,6 +3,39 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-03-31 — Session 51: Portfolio selector overhaul
+
+**What was done**:
+Portfolio selector produced unrealistic results (96% pass rate, 20-80 month time-to-fund,
+all 1-micro sizing). Root causes identified and fixed:
+
+- **Hard filter too aggressive**: OOS PF threshold lowered from 1.4 to 1.0. Added
+  bootcamp_score > 40 as secondary filter. Candidate cap raised from 30 to 50 for
+  multi-market portfolios. CL had 38 strategies but only 1 passed the old 1.4 threshold.
+- **Sizing optimizer solved wrong problem**: Changed from "maximize pass_rate subject to
+  P95 DD < 4.5%" to "minimize median_trades_to_pass subject to pass_rate >= 40%".
+  This finds the fastest path to funding instead of the safest (which always picked 1 micro).
+- **Micro grid widened**: [0.1, 0.2, 0.3, 0.5, 0.7, 1.0] = 1-10 micros. Per-strategy
+  weights allow NQ daily (high DD) at 1 micro while HG 15m (low DD) can run 5+ micros.
+- **Per-trade PnL file**: generate_returns.py now writes strategy_trades.csv (one row per
+  trade) alongside strategy_returns.csv (daily resampled for correlation). For 15m/30m
+  strategies, multiple trades per day were being collapsed into one value.
+- **_load_raw_trade_lists()**: Now prefers strategy_trades.csv, falls back to
+  strategy_returns.csv if not found.
+- **Config-driven**: All portfolio selector parameters (oos_pf_threshold, bootcamp_score_min,
+  candidate_cap, min_pass_rate, n_sims_mc, n_sims_sizing) now in config.yaml under
+  pipeline.portfolio_selector and wired into run_portfolio_selection().
+
+**Tests**: 41 pass (5 new: OOS PF threshold, bootcamp score filter, configurable threshold,
+sizing weights, sizing min_pass_rate).
+
+**What's next**:
+- Re-run generate_returns.py to produce strategy_trades.csv for all existing runs
+- Run portfolio selector with new parameters on 7-market data
+- GC recovery: check GCS bucket, relaunch if needed (manual step)
+
+---
+
 ## 2026-03-31 — Session 50: Portfolio selector fixes + time-to-fund
 
 **What was done**:
