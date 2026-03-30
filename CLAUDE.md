@@ -35,7 +35,7 @@ python-master-strategy-creator/
 │   └── strategy-dashboard.service     # systemd service file for the Streamlit dashboard
 ├── tests/
 │   ├── __init__.py
-│   ├── test_smoke.py                  # 22 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe)
+│   ├── test_smoke.py                  # 30 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe, daily DD, program selector)
 │   └── test_subtypes.py               # 4 smoke tests covering strategy subtype registration and validity
 ├── modules/
 │   ├── __init__.py
@@ -275,10 +275,14 @@ Key sections:
 - [x] Portfolio selector: all parameters configurable via config.yaml pipeline.portfolio_selector (Session 51)
 - [x] generate_returns.py: writes strategy_trades.csv (per-trade PnL) alongside strategy_returns.csv (daily) (Session 51)
 - [x] Portfolio selector: _load_raw_trade_lists prefers strategy_trades.csv for accurate MC (Session 51)
+- [x] PropFirmConfig: per-step profit targets (step_profit_targets field) for programs like High Stakes (8%/5%) (Session 52)
+- [x] The5ers High Stakes rewritten with step_profit_targets=[0.08, 0.05], mandatory_stop_loss=True (Session 52)
+- [x] The5ers Pro Growth config added ($74 entry, same rules as Hyper Growth) (Session 52)
+- [x] Daily drawdown enforcement in simulate_single_step — trades_per_day grouping, daily PnL accumulator (Session 52)
+- [x] Portfolio selector: configurable prop_firm_program + prop_firm_target in config.yaml (Session 52)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
-- [ ] Daily drawdown simulation (for High Stakes / funded stage)
 - [ ] Position sizing optimizer (max contracts given leverage + DD constraints)
 
 ### Nice to have
@@ -325,4 +329,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-31 — Session 51: Portfolio selector overhaul (OOS PF 1.0, time-to-fund sizing, per-trade PnL, config params)
+2026-03-31 — Session 52: Prop firm program configs (High Stakes per-step targets, Pro Growth, daily DD, program selector)

@@ -3,6 +3,36 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-03-31 — Session 52: Prop firm program configs + daily DD + program selector
+
+**What was done**:
+Extended the prop firm system to support multiple The5ers programs beyond Bootcamp:
+
+- **Per-step profit targets**: Added `step_profit_targets` field to `PropFirmConfig` dataclass.
+  `simulate_single_step` and `simulate_challenge` now use per-step targets when available.
+  High Stakes uses [0.08, 0.05] (8% Step 1, 5% Step 2).
+- **High Stakes config rewritten**: Simplified to single factory (removed variant param),
+  uses new `step_profit_targets` field, $545 entry fee for $100K track.
+- **Hyper Growth updated**: Default changed from $20K to $5K, fee lookup map added.
+- **Pro Growth added**: New factory — same rules as Hyper Growth but $74 entry fee.
+- **Daily drawdown enforcement**: `simulate_single_step` now tracks daily PnL accumulation
+  and fails on daily DD breach. Uses `trades_per_day` grouping for MC approximation.
+  Enforces High Stakes 5% and Hyper/Pro Growth 3% daily limits.
+- **Configurable program selector**: `portfolio_selector.py` reads `prop_firm_program`
+  and `prop_firm_target` from config.yaml. Supports bootcamp, high_stakes, hyper_growth,
+  pro_growth. `run_bootcamp_mc` and `optimise_sizing` accept `prop_config` parameter.
+- **7 new tests**: High Stakes config, per-step targets, Hyper/Pro Growth configs,
+  daily DD breach, daily DD disabled for Bootcamp, program selector resolver.
+
+**Tests**: 37 pass (30 smoke + 4 subtypes + 2 bootcamp report + 1 scoring... 37 total).
+
+**What's next**:
+- Run portfolio selector with `prop_firm_program: high_stakes` to compare vs Bootcamp
+- Task 5: manual step — regenerate returns with strategy_trades.csv
+- Validate daily DD impact on MC pass rates across programs
+
+---
+
 ## 2026-03-31 — Session 51: Portfolio selector overhaul
 
 **What was done**:
