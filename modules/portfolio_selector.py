@@ -138,11 +138,20 @@ def _find_returns_file(candidate: dict, runs_base: str) -> str | None:
     return None
 
 
-def _match_column(columns: list[str], leader_name: str) -> str | None:
+def _match_column(columns: list[str], leader_name: str, strategy_type: str = "") -> str | None:
     """Match a leader strategy name to a column in strategy_returns.csv."""
     leader_name = str(leader_name).strip()
     if not leader_name:
         return None
+
+    # If strategy_type provided, try type-qualified match first
+    if strategy_type:
+        qualified = f"{strategy_type}_{leader_name}"
+        if qualified in columns:
+            return qualified
+        for col in columns:
+            if col.endswith(qualified):
+                return col
 
     # Exact match
     if leader_name in columns:
@@ -193,13 +202,14 @@ def build_return_matrix(
             continue
 
         cols = [c for c in df.columns if c != "exit_time"]
-        matched_col = _match_column(cols, leader_name)
+        strat_type = str(cand.get("strategy_type", "")).strip()
+        matched_col = _match_column(cols, leader_name, strategy_type=strat_type)
 
         if matched_col is None:
             # Try best_refined_strategy_name
             refined_name = str(cand.get("best_refined_strategy_name", "")).strip()
             if refined_name:
-                matched_col = _match_column(cols, refined_name)
+                matched_col = _match_column(cols, refined_name, strategy_type=strat_type)
 
         if matched_col is None:
             logger.warning(f"No matching column for {leader_name} in {returns_path}")
@@ -444,6 +454,8 @@ def portfolio_monte_carlo(
         for step in result.steps:
             if step.passed:
                 step_pass_counts[step.step_number - 1] += 1
+            else:
+                break  # Don't count later steps if this one failed
 
         if result.passed_all_steps:
             pass_count += 1
@@ -588,14 +600,25 @@ def optimise_sizing(
         if best_weights is None:
             best_weights = {s: 1.0 for s in strat_names_in_matrix}
 
+        # Final MC at full sim count with optimised weights — all step rates
+        # from the SAME experiment so they're comparable
+        final_mc = portfolio_monte_carlo(
+            trade_lists, config,
+            n_sims=10_000,
+            contract_weights=best_weights,
+            seed=99,
+        )
         portfolio["contract_weights"] = best_weights
         portfolio["sizing_optimised"] = True
-        portfolio["opt_step3_pass_rate"] = best_pass_rate
-        portfolio["opt_p95_dd"] = best_dd
+        portfolio["opt_step1_pass_rate"] = final_mc["step1_pass_rate"]
+        portfolio["opt_step2_pass_rate"] = final_mc["step2_pass_rate"]
+        portfolio["opt_step3_pass_rate"] = final_mc["step3_pass_rate"]
+        portfolio["opt_p95_dd"] = final_mc["p95_worst_dd_pct"]
+        portfolio["opt_avg_trades_to_pass"] = final_mc["avg_trades_to_pass"]
         results.append(portfolio)
 
         logger.info(
-            f"  Best weights: {best_weights} -> pass={best_pass_rate:.1%}, DD={best_dd:.1%}"
+            f"  Best weights: {best_weights} -> pass={final_mc['step3_pass_rate']:.1%}, DD={final_mc['p95_worst_dd_pct']:.1%}"
         )
 
     return results
@@ -675,6 +698,8 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
 
     rows: list[dict] = []
     for rank, p in enumerate(portfolios, 1):
+        step1 = p.get("opt_step1_pass_rate", p.get("step1_pass_rate", 0.0))
+        step2 = p.get("opt_step2_pass_rate", p.get("step2_pass_rate", 0.0))
         step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
         p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
 
@@ -691,8 +716,8 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
             "rank": rank,
             "strategy_names": "|".join(p.get("strategy_names", [])),
             "n_strategies": p.get("n_strategies", 0),
-            "step1_pass_rate": round(p.get("step1_pass_rate", 0.0), 4),
-            "step2_pass_rate": round(p.get("step2_pass_rate", 0.0), 4),
+            "step1_pass_rate": round(step1, 4),
+            "step2_pass_rate": round(step2, 4),
             "step3_pass_rate": round(step3, 4),
             "p95_worst_dd_pct": round(p95_dd, 4),
             "avg_oos_pf": round(p.get("avg_oos_pf", 0.0), 4),
@@ -731,7 +756,31 @@ def _print_summary(
             names = p.get("strategy_names", [])
             step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
             p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
-            short_names = [n.split("_")[-1][:20] for n in names]
+            # Names are "MARKET_TIMEFRAME_STRATEGYNAME" — show "MARKET TF TYPE" for readability
+            short_names = []
+            for n in names:
+                parts = n.split("_", 2)  # max 3 parts: market, timeframe, rest
+                if len(parts) >= 3:
+                    market, tf = parts[0], parts[1]
+                    # Extract strategy type from the rest (e.g. "mean_reversion_vol_dip_Refined..." -> "MR")
+                    rest = parts[2]
+                    if rest.startswith("mean_reversion"):
+                        stype = "MR"
+                    elif rest.startswith("short_mean_reversion"):
+                        stype = "ShortMR"
+                    elif rest.startswith("short_breakout"):
+                        stype = "ShortBO"
+                    elif rest.startswith("short_trend"):
+                        stype = "ShortTr"
+                    elif rest.startswith("breakout"):
+                        stype = "BO"
+                    elif rest.startswith("trend"):
+                        stype = "Trend"
+                    else:
+                        stype = rest.split("_")[0][:8]
+                    short_names.append(f"{market} {tf} {stype}")
+                else:
+                    short_names.append(n[:25])
             print(f"    {i}. {', '.join(short_names)} -- {step3:.1%} pass, DD {p95_dd:.1%}")
 
     print("=" * 59)
