@@ -343,6 +343,110 @@ def compute_correlation_matrix(
 
 
 # ============================================================================
+# STAGE 3b: Pre-sweep correlation dedup
+# ============================================================================
+
+def correlation_dedup(
+    candidates: list[dict],
+    corr_matrix: pd.DataFrame,
+    return_matrix: pd.DataFrame,
+    threshold: float = 0.6,
+) -> list[dict]:
+    """Remove near-duplicate strategies before combinatorial sweep.
+
+    If two strategies have |Pearson| > threshold, keep the one with
+    higher bootcamp_score. This reduces n before C(n,k) explosion.
+
+    Uses a greedy approach: build graph of high-correlation edges,
+    then for each connected component keep only the highest-scoring node.
+    """
+    # Build label -> candidate mapping (only those in return matrix)
+    cand_by_label: dict[str, dict] = {}
+    for cand in candidates:
+        leader_name = str(cand.get("leader_strategy_name", "")).strip()
+        market = str(cand.get("market", ""))
+        timeframe = str(cand.get("timeframe", ""))
+        label = f"{market}_{timeframe}_{leader_name}"
+        if label in return_matrix.columns:
+            cand_by_label[label] = cand
+
+    labels = list(cand_by_label.keys())
+    if len(labels) < 2:
+        return candidates
+
+    # Build adjacency list of high-correlation pairs
+    adj: dict[str, set[str]] = {l: set() for l in labels}
+    abs_corr = corr_matrix.abs()
+
+    for i in range(len(labels)):
+        for j in range(i + 1, len(labels)):
+            li, lj = labels[i], labels[j]
+            if li in abs_corr.columns and lj in abs_corr.columns:
+                val = float(abs_corr.loc[li, lj])
+                if val > threshold:
+                    adj[li].add(lj)
+                    adj[lj].add(li)
+
+    # Find connected components via BFS
+    visited: set[str] = set()
+    to_remove: set[str] = set()
+
+    for label in labels:
+        if label in visited:
+            continue
+        if not adj[label]:
+            visited.add(label)
+            continue
+
+        # BFS to find component
+        component: list[str] = []
+        queue = [label]
+        while queue:
+            node = queue.pop(0)
+            if node in visited:
+                continue
+            visited.add(node)
+            component.append(node)
+            for neighbor in adj[node]:
+                if neighbor not in visited:
+                    queue.append(neighbor)
+
+        if len(component) <= 1:
+            continue
+
+        # Keep only the highest-scoring member
+        def _score(l: str) -> float:
+            c = cand_by_label[l]
+            return float(c.get("bootcamp_score", c.get("leader_pf", 0)))
+
+        component.sort(key=_score, reverse=True)
+        keeper = component[0]
+        for removed in component[1:]:
+            to_remove.add(removed)
+            logger.info(
+                f"Dedup: removing {removed} (score={_score(removed):.1f}), "
+                f"correlated with {keeper} (score={_score(keeper):.1f})"
+            )
+
+    if not to_remove:
+        logger.info("Correlation dedup: no duplicates found")
+        return candidates
+
+    # Remove candidates whose label is in to_remove
+    kept: list[dict] = []
+    for cand in candidates:
+        leader_name = str(cand.get("leader_strategy_name", "")).strip()
+        market = str(cand.get("market", ""))
+        timeframe = str(cand.get("timeframe", ""))
+        label = f"{market}_{timeframe}_{leader_name}"
+        if label not in to_remove:
+            kept.append(cand)
+
+    logger.info(f"Correlation dedup: {len(candidates)} -> {len(kept)} candidates (removed {len(to_remove)})")
+    return kept
+
+
+# ============================================================================
 # STAGE 4: Sweep combinations
 # ============================================================================
 
@@ -740,6 +844,9 @@ def run_portfolio_selection(
 
     # Stage 3: Correlation matrix (uses daily return matrix — correct for corr)
     corr_matrix = compute_correlation_matrix(return_matrix, output_dir=output_dir)
+
+    # Stage 3b: Pre-sweep correlation dedup
+    candidates = correlation_dedup(candidates, corr_matrix, return_matrix)
 
     # Stage 4: Sweep combinations
     combinations = sweep_combinations(candidates, corr_matrix, return_matrix)
