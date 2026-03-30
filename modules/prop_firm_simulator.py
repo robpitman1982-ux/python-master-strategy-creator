@@ -6,6 +6,7 @@ Supported firms:
     - The5ers Bootcamp ($20K / $100K / $250K)
     - The5ers High Stakes ($2.5K–$100K)
     - The5ers Hyper Growth ($5K–$20K)
+    - The5ers Pro Growth ($5K–$10K)
     - Generic (any prop firm via PropFirmConfig)
 
 Usage:
@@ -177,18 +178,25 @@ def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
     )
 
 
-def The5ersHyperGrowthConfig(target: float = 20_000.0) -> PropFirmConfig:
-    """Factory for The5ers Hyper Growth configuration."""
+def The5ersHyperGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
+    """
+    Factory for The5ers Hyper Growth program.
+
+    1 step, $5K/$10K/$20K accounts.
+    10% profit target, 6% stop out, 3% daily pause.
+    Unlimited time, up to 100% profit split.
+    """
+    fee_map = {5_000: 260.0, 10_000: 520.0, 20_000: 960.0}
     return PropFirmConfig(
         firm_name="The5ers",
-        program_name="Hyper Growth",
+        program_name="HyperGrowth",
         n_steps=1,
         step_balances=[target],
         target_balance=target,
-        profit_target_pct=0.10,
-        max_drawdown_pct=0.06,
+        profit_target_pct=0.10,     # 10% target
+        max_drawdown_pct=0.06,      # 6% stop out
         drawdown_type="static",
-        max_daily_drawdown_pct=0.03,  # 3% daily pause DURING eval
+        max_daily_drawdown_pct=0.03, # 3% daily pause
         max_risk_per_trade_pct=0.02,
         mandatory_stop_loss=False,
         max_violations=5,
@@ -201,7 +209,44 @@ def The5ersHyperGrowthConfig(target: float = 20_000.0) -> PropFirmConfig:
         profit_split_start_pct=0.50,
         profit_split_max_pct=1.00,
         leverage=30.0,
-        entry_fee=850.0,
+        entry_fee=fee_map.get(target, 260.0),
+        funded_fee=0.0,
+        dollars_per_point=50.0,
+        contracts_per_trade=1,
+    )
+
+
+def The5ersProGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
+    """
+    Factory for The5ers Pro Growth program.
+
+    Same rules as Hyper Growth but lower entry fee.
+    1 step, $5K/$10K accounts.
+    10% profit target, 6% stop out, 3% daily pause.
+    """
+    return PropFirmConfig(
+        firm_name="The5ers",
+        program_name="ProGrowth",
+        n_steps=1,
+        step_balances=[target],
+        target_balance=target,
+        profit_target_pct=0.10,
+        max_drawdown_pct=0.06,
+        drawdown_type="static",
+        max_daily_drawdown_pct=0.03,
+        max_risk_per_trade_pct=0.02,
+        mandatory_stop_loss=False,
+        max_violations=5,
+        min_profitable_days=None,
+        max_calendar_days=None,
+        max_inactivity_days=30,
+        funded_profit_target_pct=0.10,
+        funded_max_drawdown_pct=0.06,
+        funded_daily_pause_pct=0.03,
+        profit_split_start_pct=0.50,
+        profit_split_max_pct=1.00,
+        leverage=30.0,
+        entry_fee=74.0 if target == 5_000 else 150.0,
         funded_fee=0.0,
         dollars_per_point=50.0,
         contracts_per_trade=1,
@@ -799,7 +844,11 @@ if __name__ == "__main__":
           f"targets={[f'{t*100:.0f}%' for t in hs.step_profit_targets]}, {hs.max_drawdown_pct*100:.0f}% DD")
 
     hg = The5ersHyperGrowthConfig()
-    print(f"  Hyper Growth $20K: {hg.n_steps} step, "
+    print(f"  Hyper Growth ${hg.target_balance:,.0f}: {hg.n_steps} step, "
           f"{hg.profit_target_pct*100:.0f}% target, {hg.max_drawdown_pct*100:.0f}% DD")
+
+    pg = The5ersProGrowthConfig()
+    print(f"  Pro Growth ${pg.target_balance:,.0f}: {pg.n_steps} step, "
+          f"{pg.profit_target_pct*100:.0f}% target, entry ${pg.entry_fee:.0f}")
 
     print("\nSelf-test complete.")
