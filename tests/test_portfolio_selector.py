@@ -296,6 +296,136 @@ class TestCorrelationDedup:
         assert len(result) == 3
 
 
+class TestHardFilterThreshold:
+    """Test that lowered OOS PF threshold works correctly."""
+
+    def test_hard_filter_oos_pf_threshold(self) -> None:
+        """Strategies with OOS PF > 1.0 should pass hard filter."""
+        from modules.portfolio_selector import hard_filter_candidates
+
+        tmp = _make_tmp_dir()
+        try:
+            rows = [
+                # OOS PF 1.1 — should PASS (above 1.0 threshold)
+                {"leader_strategy_name": "mid_pf", "quality_flag": "ROBUST", "oos_pf": 1.1, "leader_trades": 100, "bootcamp_score": 60, "best_refined_strategy_name": "ref_mid", "market": "CL"},
+                # OOS PF 0.9 — should FAIL (below 1.0)
+                {"leader_strategy_name": "low_pf", "quality_flag": "ROBUST", "oos_pf": 0.9, "leader_trades": 100, "bootcamp_score": 60, "best_refined_strategy_name": "ref_low", "market": "NQ"},
+                # OOS PF 2.0 — should PASS
+                {"leader_strategy_name": "high_pf", "quality_flag": "STABLE", "oos_pf": 2.0, "leader_trades": 100, "bootcamp_score": 80, "best_refined_strategy_name": "ref_high", "market": "ES"},
+            ]
+            df = _make_leaderboard_df(rows)
+            csv_path = tmp / "test_lb_threshold.csv"
+            df.to_csv(csv_path, index=False)
+
+            result = hard_filter_candidates(str(csv_path))
+            names = [r["leader_strategy_name"] for r in result]
+            assert "mid_pf" in names, "OOS PF 1.1 should pass threshold of 1.0"
+            assert "high_pf" in names, "OOS PF 2.0 should pass threshold of 1.0"
+            assert "low_pf" not in names, "OOS PF 0.9 should fail threshold of 1.0"
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_hard_filter_bootcamp_score_filter(self) -> None:
+        """Strategies with bootcamp_score <= 40 should be filtered out."""
+        from modules.portfolio_selector import hard_filter_candidates
+
+        tmp = _make_tmp_dir()
+        try:
+            rows = [
+                {"leader_strategy_name": "good_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_trades": 100, "bootcamp_score": 80, "best_refined_strategy_name": "ref_good", "market": "ES"},
+                {"leader_strategy_name": "low_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_trades": 100, "bootcamp_score": 30, "best_refined_strategy_name": "ref_low", "market": "CL"},
+            ]
+            df = _make_leaderboard_df(rows)
+            csv_path = tmp / "test_lb_bscore.csv"
+            df.to_csv(csv_path, index=False)
+
+            result = hard_filter_candidates(str(csv_path))
+            names = [r["leader_strategy_name"] for r in result]
+            assert "good_score" in names
+            assert "low_score" not in names, "bootcamp_score 30 should fail threshold of 40"
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_hard_filter_configurable_threshold(self) -> None:
+        """Config overrides for threshold and cap should be respected."""
+        from modules.portfolio_selector import hard_filter_candidates
+
+        tmp = _make_tmp_dir()
+        try:
+            rows = [
+                {"leader_strategy_name": f"strat{i}", "quality_flag": "ROBUST",
+                 "oos_pf": 1.2 + i * 0.1, "leader_trades": 100,
+                 "bootcamp_score": 50 + i, "best_refined_strategy_name": f"ref{i}"}
+                for i in range(10)
+            ]
+            df = _make_leaderboard_df(rows)
+            csv_path = tmp / "test_lb_config.csv"
+            df.to_csv(csv_path, index=False)
+
+            # With custom threshold of 1.5 — should filter out oos_pf < 1.5
+            result = hard_filter_candidates(str(csv_path), oos_pf_threshold=1.5)
+            for r in result:
+                assert r["oos_pf"] > 1.5
+
+            # With candidate_cap=3 — should only return 3
+            result = hard_filter_candidates(str(csv_path), candidate_cap=3)
+            assert len(result) <= 3
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class TestSizingObjective:
+    """Test that sizing optimizer minimizes time-to-fund."""
+
+    def test_sizing_returns_weights(self) -> None:
+        """optimise_sizing should return portfolios with micro_multiplier weights."""
+        from modules.portfolio_selector import optimise_sizing
+
+        rng = np.random.RandomState(42)
+        trade_lists = {
+            "strat_a": list(rng.normal(300, 1000, 80)),
+            "strat_b": list(rng.normal(300, 1000, 80)),
+        }
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.normal(300, 1000, 200),
+            "strat_b": rng.normal(300, 1000, 200),
+        })
+
+        portfolios = [{"strategy_names": ["strat_a", "strat_b"]}]
+        result = optimise_sizing(
+            portfolios, return_matrix, n_sims=50,
+            raw_trade_lists=trade_lists, min_pass_rate=0.01,
+        )
+
+        assert len(result) == 1
+        assert "micro_multiplier" in result[0]
+        assert result[0]["sizing_optimised"] is True
+        weights = result[0]["micro_multiplier"]
+        assert all(w in [0.1, 0.2, 0.3, 0.5, 0.7, 1.0] for w in weights.values())
+
+    def test_sizing_accepts_min_pass_rate(self) -> None:
+        """optimise_sizing with very high min_pass_rate should still return results."""
+        from modules.portfolio_selector import optimise_sizing
+
+        rng = np.random.RandomState(42)
+        trade_lists = {
+            "strat_a": list(rng.normal(500, 2000, 100)),
+        }
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.normal(500, 2000, 200),
+        })
+
+        portfolios = [{"strategy_names": ["strat_a"]}]
+        result = optimise_sizing(
+            portfolios, return_matrix, n_sims=50,
+            raw_trade_lists=trade_lists, min_pass_rate=0.99,
+        )
+
+        # Should still return a result (fallback to best pass rate)
+        assert len(result) == 1
+        assert "micro_multiplier" in result[0]
+
+
 class TestEndToEnd:
     """Test full pipeline with mock data."""
 
