@@ -81,6 +81,11 @@ class PropFirmConfig:
     entry_fee: float = 225.0
     funded_fee: float = 350.0
 
+    # --- Per-step profit targets (overrides profit_target_pct per step) ---
+    step_profit_targets: list[float] | None = None
+    # If None, use profit_target_pct for all steps (backward compatible)
+    # If set, use per-step targets: e.g. [0.08, 0.05] for High Stakes
+
     # --- Instrument settings (for PnL scaling) ---
     dollars_per_point: float = 50.0  # ES = $50/pt
     contracts_per_trade: int = 1
@@ -131,33 +136,33 @@ def The5ersBootcampConfig(target: float = 250_000.0) -> PropFirmConfig:
     )
 
 
-def The5ersHighStakesConfig(
-    target: float = 100_000.0,
-    variant: str = "new",
-) -> PropFirmConfig:
+def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
     """
-    Factory for The5ers High Stakes configuration.
+    Factory for The5ers High Stakes (NEW program).
 
-    Args:
-        target: Account size ($2.5K to $100K)
-        variant: "new" (10% step1 target) or "classic" (8% step1 target)
+    $100K track: $100K Step 1 -> $100K Step 2 -> $100K Funded
+    Also available: $2.5K, $5K, $10K, $25K, $50K tracks.
+    Rules:
+    - Step 1: 8% profit target, 10% max loss, 5% daily loss, 3 min profitable days
+    - Step 2: 5% profit target, 10% max loss, 5% daily loss, 3 min profitable days
+    - Funded: 80-100% profit split, refund of entry fee
     """
-    step1_target = 0.10 if variant == "new" else 0.08
     return PropFirmConfig(
         firm_name="The5ers",
-        program_name=f"High Stakes ({variant.title()})",
+        program_name="HighStakes",
         n_steps=2,
         step_balances=[target, target],  # Same balance both steps
         target_balance=target,
-        profit_target_pct=step1_target,  # Step 1 target (step 2 is 5%)
-        max_drawdown_pct=0.10,
+        profit_target_pct=0.08,  # Default (Step 1), overridden by step_profit_targets
+        step_profit_targets=[0.08, 0.05],  # Step 1 = 8%, Step 2 = 5%
+        max_drawdown_pct=0.10,   # 10% max loss
         drawdown_type="static",
-        max_daily_drawdown_pct=0.05,  # 5% daily loss limit DURING eval
+        max_daily_drawdown_pct=0.05,  # 5% daily loss limit
         max_risk_per_trade_pct=0.02,
-        mandatory_stop_loss=False,  # Not required in High Stakes
+        mandatory_stop_loss=True,
         max_violations=5,
-        min_profitable_days=3,  # Required in High Stakes
-        max_calendar_days=None,
+        min_profitable_days=3,
+        max_calendar_days=None,  # Unlimited
         max_inactivity_days=30,
         funded_profit_target_pct=0.10,
         funded_max_drawdown_pct=0.10,
@@ -165,8 +170,8 @@ def The5ersHighStakesConfig(
         profit_split_start_pct=0.80,
         profit_split_max_pct=1.00,
         leverage=30.0,
-        entry_fee=491.0 if variant == "new" else 545.0,
-        funded_fee=0.0,  # Refund model
+        entry_fee=545.0 if target == 100_000 else 0.0,
+        funded_fee=0.0,  # Refund
         dollars_per_point=50.0,
         contracts_per_trade=1,
     )
@@ -266,6 +271,7 @@ def simulate_single_step(
     step_balance: float,
     config: PropFirmConfig,
     source_capital: float = 250_000.0,
+    step_profit_target_pct: float | None = None,
 ) -> StepResult:
     """
     Simulate one step of a prop firm challenge.
@@ -276,11 +282,14 @@ def simulate_single_step(
         step_balance: Starting balance for this step
         config: Prop firm rules
         source_capital: Capital used in the backtest (for scaling)
+        step_profit_target_pct: Override profit target for this step.
+            If None, uses config.profit_target_pct.
 
     Returns:
         StepResult with pass/fail and equity curve
     """
-    profit_target_dollars = step_balance * config.profit_target_pct
+    effective_target_pct = step_profit_target_pct if step_profit_target_pct is not None else config.profit_target_pct
+    profit_target_dollars = step_balance * effective_target_pct
     target_balance = step_balance + profit_target_dollars
     drawdown_floor = step_balance * (1.0 - config.max_drawdown_pct)
 
@@ -377,7 +386,7 @@ def simulate_single_step(
         max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
         trades_taken=len(trade_pnls),
         passed=False,
-        failure_reason=f"Ran out of trades ({len(trade_pnls)}) without hitting +{config.profit_target_pct*100:.0f}% target",
+        failure_reason=f"Ran out of trades ({len(trade_pnls)}) without hitting +{effective_target_pct*100:.0f}% target",
         equity_curve=equity_curve,
         target_hit_trade_idx=None,
     )
@@ -405,6 +414,12 @@ def simulate_challenge(
         step_number = step_idx + 1
         step_balance = config.step_balances[step_idx]
 
+        # Use per-step target if available, else fall back to config default
+        if config.step_profit_targets and step_idx < len(config.step_profit_targets):
+            step_target_pct = config.step_profit_targets[step_idx]
+        else:
+            step_target_pct = config.profit_target_pct
+
         remaining_trades = trade_pnls[trade_cursor:]
 
         if not remaining_trades:
@@ -412,7 +427,7 @@ def simulate_challenge(
                 step_number=step_number,
                 starting_balance=step_balance,
                 ending_balance=step_balance,
-                profit_target=step_balance * config.profit_target_pct,
+                profit_target=step_balance * step_target_pct,
                 max_drawdown_limit=step_balance * (1 - config.max_drawdown_pct),
                 peak_balance=step_balance,
                 trough_balance=step_balance,
@@ -431,6 +446,7 @@ def simulate_challenge(
             step_balance=step_balance,
             config=config,
             source_capital=source_capital,
+            step_profit_target_pct=step_target_pct,
         )
         steps.append(step_result)
         trade_cursor += step_result.trades_taken
@@ -780,7 +796,7 @@ if __name__ == "__main__":
 
     hs = The5ersHighStakesConfig()
     print(f"  High Stakes $100K: {hs.program_name}, {hs.n_steps} steps, "
-          f"{hs.profit_target_pct*100:.0f}% target, {hs.max_drawdown_pct*100:.0f}% DD")
+          f"targets={[f'{t*100:.0f}%' for t in hs.step_profit_targets]}, {hs.max_drawdown_pct*100:.0f}% DD")
 
     hg = The5ersHyperGrowthConfig()
     print(f"  Hyper Growth $20K: {hg.n_steps} step, "
