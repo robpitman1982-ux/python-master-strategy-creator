@@ -249,6 +249,69 @@ def build_return_matrix(
     return matrix
 
 
+def _load_raw_trade_lists(
+    candidates: list[dict],
+    return_matrix_columns: list[str],
+    runs_base_path: str,
+) -> dict[str, list[float]]:
+    """Load raw per-trade PnL for each candidate present in return_matrix.
+
+    Unlike the daily return matrix (which sums same-day trades into one value),
+    this preserves each trade as a separate entry for accurate MC simulation.
+
+    Returns dict mapping strategy label -> list of individual trade PnLs.
+    """
+    result: dict[str, list[float]] = {}
+
+    for cand in candidates:
+        leader_name = str(cand.get("leader_strategy_name", "")).strip()
+        if not leader_name:
+            continue
+
+        market = str(cand.get("market", ""))
+        timeframe = str(cand.get("timeframe", ""))
+        label = f"{market}_{timeframe}_{leader_name}"
+
+        if label not in return_matrix_columns:
+            continue
+
+        returns_path = _find_returns_file(cand, runs_base_path)
+        if returns_path is None:
+            continue
+
+        try:
+            df = pd.read_csv(returns_path)
+        except Exception as e:
+            logger.warning(f"Could not read {returns_path} for raw trades: {e}")
+            continue
+
+        if "exit_time" not in df.columns:
+            continue
+
+        cols = [c for c in df.columns if c != "exit_time"]
+        strat_type = str(cand.get("strategy_type", "")).strip()
+        matched_col = _match_column(cols, leader_name, strategy_type=strat_type)
+
+        if matched_col is None:
+            refined_name = str(cand.get("best_refined_strategy_name", "")).strip()
+            if refined_name:
+                matched_col = _match_column(cols, refined_name, strategy_type=strat_type)
+
+        if matched_col is None:
+            continue
+
+        # Extract ALL non-zero values as individual trades (NOT resampled)
+        raw_vals = pd.to_numeric(df[matched_col], errors="coerce").fillna(0.0)
+        trades = [float(v) for v in raw_vals if v != 0.0]
+
+        if trades:
+            result[label] = trades
+            logger.debug(f"Raw trades for {label}: {len(trades)} trades")
+
+    logger.info(f"Loaded raw trade lists for {len(result)}/{len(return_matrix_columns)} strategies")
+    return result
+
+
 # ============================================================================
 # STAGE 3: Correlation matrix
 # ============================================================================
@@ -479,8 +542,14 @@ def run_bootcamp_mc(
     combinations: list[dict],
     return_matrix: pd.DataFrame,
     n_sims: int = 10_000,
+    raw_trade_lists: dict[str, list[float]] | None = None,
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
+
+    Args:
+        raw_trade_lists: If provided, use raw per-trade PnL instead of
+            extracting from the daily return matrix. This preserves
+            individual trades that would otherwise be summed on the same day.
 
     Returns combinations enriched with MC results, sorted by step3_pass_rate.
     """
@@ -491,10 +560,12 @@ def run_bootcamp_mc(
         names = combo["strategy_names"]
         logger.info(f"Portfolio MC {i + 1}/{len(combinations)}: {len(names)} strategies, {n_sims} sims")
 
-        # Extract trade lists (non-zero values = actual trades)
+        # Use raw trade lists if available, else fall back to return matrix
         trade_lists: dict[str, list[float]] = {}
         for name in names:
-            if name in return_matrix.columns:
+            if raw_trade_lists and name in raw_trade_lists:
+                trade_lists[name] = raw_trade_lists[name]
+            elif name in return_matrix.columns:
                 vals = return_matrix[name].values
                 trades = [float(v) for v in vals if v != 0.0]
                 if trades:
@@ -522,35 +593,41 @@ def optimise_sizing(
     top_portfolios: list[dict],
     return_matrix: pd.DataFrame,
     n_sims: int = 1_000,
+    raw_trade_lists: dict[str, list[float]] | None = None,
 ) -> list[dict]:
-    """Grid-search contract weights [0.5, 1.0, 1.5] for top portfolios.
+    """Grid-search contract weights for top portfolios.
 
-    Uses n_sims=1000 for speed. Maximises step3_pass_rate while keeping
-    p95_worst_dd_pct < 0.045.
+    Uses n_sims=1000 for speed during grid search. After finding best weights,
+    runs a final 10k-sim MC for accurate step rates.
+    Maximises step3_pass_rate while keeping p95_worst_dd_pct < 0.045.
     """
     config = The5ersBootcampConfig()
-    weight_options = [0.5, 1.0, 1.5]
+    weight_options = [0.1, 0.2, 0.3, 0.4, 0.5]
+    n_weight_opts = len(weight_options)
     results: list[dict] = []
 
     for i, portfolio in enumerate(top_portfolios[:10]):
         names = portfolio["strategy_names"]
         n_strats = len(names)
 
-        # Guard: 3^n > 10,000 -> skip sizing
-        if 3 ** n_strats > 10_000:
+        # Guard: n_weight_opts^n > 10,000 -> skip sizing
+        total_weight_combos = n_weight_opts ** n_strats
+        if total_weight_combos > 10_000:
             logger.warning(
-                f"Portfolio {i + 1}: 3^{n_strats} = {3**n_strats} weight combos — "
+                f"Portfolio {i + 1}: {n_weight_opts}^{n_strats} = {total_weight_combos} weight combos — "
                 f"skipping sizing, using default weights"
             )
-            portfolio["contract_weights"] = {s: 1.0 for s in names}
+            portfolio["contract_weights"] = {s: 0.1 for s in names}
             portfolio["sizing_optimised"] = False
             results.append(portfolio)
             continue
 
-        # Extract trade lists
+        # Use raw trade lists if available, else fall back to return matrix
         trade_lists: dict[str, list[float]] = {}
         for name in names:
-            if name in return_matrix.columns:
+            if raw_trade_lists and name in raw_trade_lists:
+                trade_lists[name] = raw_trade_lists[name]
+            elif name in return_matrix.columns:
                 vals = return_matrix[name].values
                 trades = [float(v) for v in vals if v != 0.0]
                 if trades:
@@ -656,7 +733,12 @@ def run_portfolio_selection(
         logger.warning("Return matrix is empty. Aborting.")
         return {"status": "no_returns"}
 
-    # Stage 3: Correlation matrix
+    # Stage 2b: Load raw per-trade PnL for MC (preserves individual trades)
+    raw_trades = _load_raw_trade_lists(
+        candidates, list(return_matrix.columns), runs_base_path,
+    )
+
+    # Stage 3: Correlation matrix (uses daily return matrix — correct for corr)
     corr_matrix = compute_correlation_matrix(return_matrix, output_dir=output_dir)
 
     # Stage 4: Sweep combinations
@@ -667,14 +749,20 @@ def run_portfolio_selection(
 
     n_tested = len(combinations)
 
-    # Stage 5: Bootcamp MC
-    mc_results = run_bootcamp_mc(combinations, return_matrix, n_sims=n_sims_mc)
+    # Stage 5: Bootcamp MC (uses raw trades if available)
+    mc_results = run_bootcamp_mc(
+        combinations, return_matrix, n_sims=n_sims_mc,
+        raw_trade_lists=raw_trades if raw_trades else None,
+    )
     if not mc_results:
         logger.warning("No MC results. Aborting.")
         return {"status": "no_mc_results"}
 
-    # Stage 6: Optimise sizing
-    optimised = optimise_sizing(mc_results, return_matrix, n_sims=n_sims_sizing)
+    # Stage 6: Optimise sizing (uses raw trades if available)
+    optimised = optimise_sizing(
+        mc_results, return_matrix, n_sims=n_sims_sizing,
+        raw_trade_lists=raw_trades if raw_trades else None,
+    )
 
     # Write report
     _write_report(optimised, output_dir)
