@@ -542,7 +542,7 @@ def sweep_combinations(
             )
             avg_corr = mean(pair_corrs) if pair_corrs else 0.0
             diversity = _diversity_score(combo_cands)
-            score = avg_oos_pf * 30 + diversity * 20 + (1 - avg_corr) * 20
+            score = avg_oos_pf * 20 + diversity * 30 + (1 - avg_corr) * 20
 
             results.append({
                 "strategy_names": list(combo),
@@ -898,9 +898,14 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
         step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
         p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
 
-        if step3 > 0.6 and p95_dd < 0.045:
+        # Count unique markets in portfolio
+        strat_names = p.get("strategy_names", [])
+        markets = set(n.split("_")[0] for n in strat_names if "_" in n)
+        n_markets = len(markets)
+
+        if step3 > 0.6 and p95_dd < 0.045 and n_markets >= 3:
             verdict = "RECOMMENDED"
-        elif step3 > 0.3:
+        elif step3 > 0.3 and n_markets >= 2:
             verdict = "VIABLE"
         else:
             verdict = "MARGINAL"
