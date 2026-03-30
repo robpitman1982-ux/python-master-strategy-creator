@@ -28,6 +28,7 @@ Usage:
 """
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from typing import Any
@@ -317,6 +318,7 @@ def simulate_single_step(
     config: PropFirmConfig,
     source_capital: float = 250_000.0,
     step_profit_target_pct: float | None = None,
+    trades_per_day: float = 1.0,
 ) -> StepResult:
     """
     Simulate one step of a prop firm challenge.
@@ -329,6 +331,8 @@ def simulate_single_step(
         source_capital: Capital used in the backtest (for scaling)
         step_profit_target_pct: Override profit target for this step.
             If None, uses config.profit_target_pct.
+        trades_per_day: Approximate trades per trading day, used for
+            daily drawdown grouping. Default 1.0 (daily strategies).
 
     Returns:
         StepResult with pass/fail and equity curve
@@ -337,6 +341,13 @@ def simulate_single_step(
     profit_target_dollars = step_balance * effective_target_pct
     target_balance = step_balance + profit_target_dollars
     drawdown_floor = step_balance * (1.0 - config.max_drawdown_pct)
+
+    # Daily DD tracking
+    daily_dd_limit = None
+    if config.max_daily_drawdown_pct is not None:
+        daily_dd_limit = step_balance * config.max_daily_drawdown_pct
+    trades_per_day_group = max(1, math.ceil(trades_per_day))
+    daily_pnl_accumulator = 0.0
 
     balance = step_balance
     peak = step_balance
@@ -358,6 +369,31 @@ def simulate_single_step(
         dd_from_peak = peak - balance
         if dd_from_peak > max_dd_dollars:
             max_dd_dollars = dd_from_peak
+
+        # Daily drawdown check
+        if daily_dd_limit is not None:
+            daily_pnl_accumulator += scaled_pnl
+            # Check if daily loss exceeds limit (negative PnL)
+            if daily_pnl_accumulator <= -daily_dd_limit:
+                return StepResult(
+                    step_number=step_number,
+                    starting_balance=step_balance,
+                    ending_balance=balance,
+                    profit_target=profit_target_dollars,
+                    max_drawdown_limit=drawdown_floor,
+                    peak_balance=peak,
+                    trough_balance=trough,
+                    max_drawdown_dollars=max_dd_dollars,
+                    max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
+                    trades_taken=i + 1,
+                    passed=False,
+                    failure_reason=f"Daily DD breach: ${daily_pnl_accumulator:,.0f} exceeds -{config.max_daily_drawdown_pct*100:.0f}% (${daily_dd_limit:,.0f})",
+                    equity_curve=equity_curve,
+                    target_hit_trade_idx=None,
+                )
+            # Reset accumulator at day boundary
+            if (i + 1) % trades_per_day_group == 0:
+                daily_pnl_accumulator = 0.0
 
         # Check drawdown breach
         if config.drawdown_type == "static":
@@ -441,6 +477,7 @@ def simulate_challenge(
     trade_pnls: list[float],
     config: PropFirmConfig | None = None,
     source_capital: float = 250_000.0,
+    trades_per_day: float = 1.0,
 ) -> ChallengeResult:
     """
     Simulate a full multi-step prop firm challenge.
@@ -492,6 +529,7 @@ def simulate_challenge(
             config=config,
             source_capital=source_capital,
             step_profit_target_pct=step_target_pct,
+            trades_per_day=trades_per_day,
         )
         steps.append(step_result)
         trade_cursor += step_result.trades_taken
