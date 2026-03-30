@@ -192,6 +192,109 @@ class TestPortfolioMC:
         assert "p95_worst_dd_pct" in result
         assert "avg_trades_to_pass" in result
 
+    def test_step_rates_are_monotonic(self) -> None:
+        """Step pass rates must be monotonically decreasing (sequential steps)."""
+        from modules.portfolio_selector import portfolio_monte_carlo
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        config = The5ersBootcampConfig()
+
+        trade_lists = {
+            "strat_a": list(rng.normal(500, 2000, 200)),
+            "strat_b": list(rng.normal(500, 2000, 200)),
+        }
+
+        result = portfolio_monte_carlo(trade_lists, config, n_sims=500, seed=42)
+        assert result["step1_pass_rate"] >= result["step2_pass_rate"]
+        assert result["step2_pass_rate"] >= result["step3_pass_rate"]
+
+    def test_time_to_fund_fields_present(self) -> None:
+        """MC result should include trades-to-pass and step trades."""
+        from modules.portfolio_selector import portfolio_monte_carlo
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        config = The5ersBootcampConfig()
+
+        trade_lists = {
+            "strat_a": list(rng.normal(500, 2000, 100)),
+            "strat_b": list(rng.normal(500, 2000, 100)),
+        }
+
+        result = portfolio_monte_carlo(trade_lists, config, n_sims=100, seed=42)
+        assert "median_trades_to_pass" in result
+        assert "p75_trades_to_pass" in result
+        assert "step_median_trades" in result
+        assert isinstance(result["step_median_trades"], list)
+
+
+class TestCorrelationDedup:
+    """Test Stage 3b: correlation_dedup."""
+
+    def test_correlation_dedup_removes_clones(self) -> None:
+        """Strategies with r > 0.6 should be deduped, keeping higher score."""
+        from modules.portfolio_selector import correlation_dedup
+
+        rng = np.random.RandomState(42)
+        n_days = 500
+
+        # A and B are highly correlated (clones)
+        base = rng.randn(n_days) * 200
+        col_a = base + rng.randn(n_days) * 20  # ~0.99 correlation
+        col_b = base + rng.randn(n_days) * 20
+
+        # C is independent
+        col_c = rng.randn(n_days) * 200
+
+        return_matrix = pd.DataFrame({
+            "ES_60m_StratA": col_a,
+            "ES_daily_StratB": col_b,
+            "NQ_30m_StratC": col_c,
+        })
+        corr_matrix = return_matrix.corr()
+
+        # Verify A-B correlation is high
+        assert abs(corr_matrix.loc["ES_60m_StratA", "ES_daily_StratB"]) > 0.6
+
+        candidates = [
+            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "bootcamp_score": 80},
+            {"leader_strategy_name": "StratB", "market": "ES", "timeframe": "daily", "bootcamp_score": 90},
+            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "bootcamp_score": 70},
+        ]
+
+        result = correlation_dedup(candidates, corr_matrix, return_matrix, threshold=0.6)
+
+        # Should have 2 candidates: StratB (higher score) and StratC
+        assert len(result) == 2
+        names = [c["leader_strategy_name"] for c in result]
+        assert "StratB" in names  # Higher bootcamp_score kept
+        assert "StratA" not in names  # Lower score removed
+        assert "StratC" in names  # Independent, kept
+
+    def test_correlation_dedup_no_removal_when_uncorrelated(self) -> None:
+        """Independent strategies should all survive dedup."""
+        from modules.portfolio_selector import correlation_dedup
+
+        rng = np.random.RandomState(42)
+        n_days = 500
+
+        return_matrix = pd.DataFrame({
+            "ES_60m_StratA": rng.randn(n_days) * 200,
+            "CL_daily_StratB": rng.randn(n_days) * 200,
+            "NQ_30m_StratC": rng.randn(n_days) * 200,
+        })
+        corr_matrix = return_matrix.corr()
+
+        candidates = [
+            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "bootcamp_score": 80},
+            {"leader_strategy_name": "StratB", "market": "CL", "timeframe": "daily", "bootcamp_score": 90},
+            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "bootcamp_score": 70},
+        ]
+
+        result = correlation_dedup(candidates, corr_matrix, return_matrix, threshold=0.6)
+        assert len(result) == 3
+
 
 class TestEndToEnd:
     """Test full pipeline with mock data."""
