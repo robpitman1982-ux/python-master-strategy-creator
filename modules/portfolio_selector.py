@@ -47,10 +47,11 @@ def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
 
     Filters:
     - quality_flag in (ROBUST, STABLE)
-    - oos_pf > 1.4
+    - oos_pf > 1.0
+    - bootcamp_score > 40
     - leader_trades >= 60 (fallback to total_trades)
     - Dedup: same best_refined_strategy_name + market -> keep highest bootcamp_score
-    - Cap at 30 candidates by bootcamp_score
+    - Cap at 50 candidates by bootcamp_score
     """
     df = pd.read_csv(leaderboard_path)
     n_total = len(df)
@@ -63,8 +64,14 @@ def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
 
     # OOS PF filter
     df["oos_pf"] = pd.to_numeric(df.get("oos_pf", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
-    df = df[df["oos_pf"] > 1.4].copy()
-    logger.info(f"After OOS PF > 1.4: {len(df)}")
+    df = df[df["oos_pf"] > 1.0].copy()
+    logger.info(f"After OOS PF > 1.0: {len(df)}")
+
+    # Bootcamp score filter
+    if "bootcamp_score" in df.columns:
+        df["bootcamp_score"] = pd.to_numeric(df["bootcamp_score"], errors="coerce").fillna(0)
+        df = df[df["bootcamp_score"] > 40].copy()
+        logger.info(f"After bootcamp_score > 40: {len(df)}")
 
     # Trade count filter
     if "leader_trades" in df.columns:
@@ -95,11 +102,11 @@ def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
     df = df.sort_values("_score", ascending=False).drop_duplicates(subset="_dedup_key", keep="first")
     logger.info(f"After dedup: {len(df)}")
 
-    # Cap at 30
-    if len(df) > 30:
+    # Cap at 50
+    if len(df) > 50:
         n_before = len(df)
-        df = df.nlargest(30, "_score")
-        logger.warning(f"Capped candidates from {n_before} to 30 by {score_col}")
+        df = df.nlargest(50, "_score")
+        logger.warning(f"Capped candidates from {n_before} to 50 by {score_col}")
 
     df = df.drop(columns=["_score", "_dedup_key"], errors="ignore")
     result = df.to_dict("records")

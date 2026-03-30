@@ -65,9 +65,9 @@ class TestHardFilter:
                 {"leader_strategy_name": "bad1", "quality_flag": "REGIME_DEPENDENT", "oos_pf": 2.0, "leader_trades": 100, "bootcamp_score": 70},
                 {"leader_strategy_name": "bad2", "quality_flag": "REGIME_DEPENDENT", "oos_pf": 2.0, "leader_trades": 100, "bootcamp_score": 70},
                 {"leader_strategy_name": "bad3", "quality_flag": "REGIME_DEPENDENT", "oos_pf": 2.0, "leader_trades": 100, "bootcamp_score": 70},
-                # 2 with low OOS PF — should be removed
-                {"leader_strategy_name": "low_pf1", "quality_flag": "ROBUST", "oos_pf": 1.2, "leader_trades": 100, "bootcamp_score": 60},
-                {"leader_strategy_name": "low_pf2", "quality_flag": "STABLE", "oos_pf": 1.3, "leader_trades": 100, "bootcamp_score": 60},
+                # 2 with low OOS PF — should be removed (below 1.0)
+                {"leader_strategy_name": "low_pf1", "quality_flag": "ROBUST", "oos_pf": 0.8, "leader_trades": 100, "bootcamp_score": 60},
+                {"leader_strategy_name": "low_pf2", "quality_flag": "STABLE", "oos_pf": 0.9, "leader_trades": 100, "bootcamp_score": 60},
                 # 1 with low trades — should be removed
                 {"leader_strategy_name": "low_trades", "quality_flag": "ROBUST", "oos_pf": 1.8, "leader_trades": 30, "bootcamp_score": 60},
                 # 4 valid candidates
