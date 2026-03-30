@@ -256,6 +256,31 @@ def build_return_matrix(
     return matrix
 
 
+def _find_trades_file(candidate: dict, runs_base: str) -> str | None:
+    """Find strategy_trades.csv for a candidate (per-trade PnL)."""
+    run_id = str(candidate.get("run_id", ""))
+    dataset = str(candidate.get("dataset", ""))
+
+    if not run_id or not dataset:
+        return None
+
+    parts = dataset.replace("_tradestation.csv", "").split("_")
+    if len(parts) >= 2:
+        dataset_folder = f"{parts[0]}_{parts[1]}"
+    else:
+        dataset_folder = dataset.replace(".csv", "")
+
+    path = os.path.join(runs_base, run_id, "Outputs", dataset_folder, "strategy_trades.csv")
+    if os.path.exists(path):
+        return path
+
+    path2 = os.path.join(runs_base, run_id, "artifacts", "Outputs", dataset_folder, "strategy_trades.csv")
+    if os.path.exists(path2):
+        return path2
+
+    return None
+
+
 def _load_raw_trade_lists(
     candidates: list[dict],
     return_matrix_columns: list[str],
@@ -263,8 +288,8 @@ def _load_raw_trade_lists(
 ) -> dict[str, list[float]]:
     """Load raw per-trade PnL for each candidate present in return_matrix.
 
-    Unlike the daily return matrix (which sums same-day trades into one value),
-    this preserves each trade as a separate entry for accurate MC simulation.
+    Prefers strategy_trades.csv (one row per trade) for accurate MC simulation.
+    Falls back to strategy_returns.csv (daily resampled) if trades file not found.
 
     Returns dict mapping strategy label -> list of individual trade PnLs.
     """
@@ -282,6 +307,28 @@ def _load_raw_trade_lists(
         if label not in return_matrix_columns:
             continue
 
+        strat_type = str(cand.get("strategy_type", "")).strip()
+        qualified_name = f"{strat_type}_{leader_name}" if strat_type else leader_name
+
+        # Try strategy_trades.csv first (per-trade PnL)
+        trades_path = _find_trades_file(cand, runs_base_path)
+        if trades_path:
+            try:
+                df = pd.read_csv(trades_path)
+                if "strategy" in df.columns and "net_pnl" in df.columns:
+                    mask = df["strategy"] == qualified_name
+                    if mask.sum() == 0:
+                        # Try partial match
+                        mask = df["strategy"].str.contains(leader_name, na=False)
+                    trades = pd.to_numeric(df.loc[mask, "net_pnl"], errors="coerce").dropna().tolist()
+                    if trades:
+                        result[label] = trades
+                        logger.debug(f"Raw trades for {label}: {len(trades)} trades (from strategy_trades.csv)")
+                        continue
+            except Exception as e:
+                logger.debug(f"Could not read {trades_path}: {e}")
+
+        # Fall back to strategy_returns.csv (daily resampled)
         returns_path = _find_returns_file(cand, runs_base_path)
         if returns_path is None:
             continue
@@ -296,7 +343,6 @@ def _load_raw_trade_lists(
             continue
 
         cols = [c for c in df.columns if c != "exit_time"]
-        strat_type = str(cand.get("strategy_type", "")).strip()
         matched_col = _match_column(cols, leader_name, strategy_type=strat_type)
 
         if matched_col is None:
@@ -313,7 +359,7 @@ def _load_raw_trade_lists(
 
         if trades:
             result[label] = trades
-            logger.debug(f"Raw trades for {label}: {len(trades)} trades")
+            logger.debug(f"Raw trades for {label}: {len(trades)} trades (from strategy_returns.csv fallback)")
 
     logger.info(f"Loaded raw trade lists for {len(result)}/{len(return_matrix_columns)} strategies")
     return result
