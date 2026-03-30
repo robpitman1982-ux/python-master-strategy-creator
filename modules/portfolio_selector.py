@@ -42,16 +42,21 @@ logger = logging.getLogger(__name__)
 # STAGE 1: Hard filter candidates
 # ============================================================================
 
-def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
+def hard_filter_candidates(
+    leaderboard_path: str,
+    oos_pf_threshold: float = 1.0,
+    bootcamp_score_min: float = 40,
+    candidate_cap: int = 50,
+) -> list[dict]:
     """Load ultimate_leaderboard_bootcamp.csv and apply hard filters.
 
     Filters:
     - quality_flag in (ROBUST, STABLE)
-    - oos_pf > 1.0
-    - bootcamp_score > 40
+    - oos_pf > oos_pf_threshold (default 1.0)
+    - bootcamp_score > bootcamp_score_min (default 40)
     - leader_trades >= 60 (fallback to total_trades)
     - Dedup: same best_refined_strategy_name + market -> keep highest bootcamp_score
-    - Cap at 50 candidates by bootcamp_score
+    - Cap at candidate_cap (default 50) candidates by bootcamp_score
     """
     df = pd.read_csv(leaderboard_path)
     n_total = len(df)
@@ -64,14 +69,14 @@ def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
 
     # OOS PF filter
     df["oos_pf"] = pd.to_numeric(df.get("oos_pf", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
-    df = df[df["oos_pf"] > 1.0].copy()
-    logger.info(f"After OOS PF > 1.0: {len(df)}")
+    df = df[df["oos_pf"] > oos_pf_threshold].copy()
+    logger.info(f"After OOS PF > {oos_pf_threshold}: {len(df)}")
 
     # Bootcamp score filter
     if "bootcamp_score" in df.columns:
         df["bootcamp_score"] = pd.to_numeric(df["bootcamp_score"], errors="coerce").fillna(0)
-        df = df[df["bootcamp_score"] > 40].copy()
-        logger.info(f"After bootcamp_score > 40: {len(df)}")
+        df = df[df["bootcamp_score"] > bootcamp_score_min].copy()
+        logger.info(f"After bootcamp_score > {bootcamp_score_min}: {len(df)}")
 
     # Trade count filter
     if "leader_trades" in df.columns:
@@ -102,11 +107,11 @@ def hard_filter_candidates(leaderboard_path: str) -> list[dict]:
     df = df.sort_values("_score", ascending=False).drop_duplicates(subset="_dedup_key", keep="first")
     logger.info(f"After dedup: {len(df)}")
 
-    # Cap at 50
-    if len(df) > 50:
+    # Cap at candidate_cap
+    if len(df) > candidate_cap:
         n_before = len(df)
-        df = df.nlargest(50, "_score")
-        logger.warning(f"Capped candidates from {n_before} to 50 by {score_col}")
+        df = df.nlargest(candidate_cap, "_score")
+        logger.warning(f"Capped candidates from {n_before} to {candidate_cap} by {score_col}")
 
     df = df.drop(columns=["_score", "_dedup_key"], errors="ignore")
     result = df.to_dict("records")
@@ -899,8 +904,18 @@ def run_portfolio_selection(
     logger.info("PORTFOLIO SELECTOR — Starting")
     logger.info("=" * 60)
 
+    # Read config overrides
+    ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {}) if config else {}
+    n_sims_mc = int(ps_cfg.get("n_sims_mc", n_sims_mc))
+    n_sims_sizing = int(ps_cfg.get("n_sims_sizing", n_sims_sizing))
+
     # Stage 1: Hard filter
-    candidates = hard_filter_candidates(leaderboard_path)
+    candidates = hard_filter_candidates(
+        leaderboard_path,
+        oos_pf_threshold=float(ps_cfg.get("oos_pf_threshold", 1.0)),
+        bootcamp_score_min=float(ps_cfg.get("bootcamp_score_min", 40)),
+        candidate_cap=int(ps_cfg.get("candidate_cap", 50)),
+    )
     if not candidates:
         logger.warning("No candidates passed hard filter. Aborting.")
         return {"status": "no_candidates"}

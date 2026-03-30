@@ -28,6 +28,15 @@ pipeline:
   max_workers_refinement: 2
   max_candidates_to_refine: 3
   oos_split_date: "2019-01-01"
+  skip_portfolio_evaluation: false
+  skip_portfolio_selector: true
+  portfolio_selector:
+    min_pass_rate: 0.40        # Minimum acceptable 3-step pass rate
+    candidate_cap: 50          # Max candidates after hard filter
+    oos_pf_threshold: 1.0      # Hard filter OOS PF minimum
+    bootcamp_score_min: 40     # Hard filter bootcamp score minimum
+    n_sims_mc: 10000           # MC simulations for main sweep
+    n_sims_sizing: 1000        # MC simulations for sizing optimizer
 
 # --- Promotion gate (global defaults, strategy types can override) ---
 promotion_gate:
