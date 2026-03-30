@@ -244,12 +244,31 @@ Key sections:
 - [x] Refinement as_completed() — eliminates head-of-line blocking, CPU 30%→80%+ (Session 44)
 - [x] Refinement task dedup — removes redundant parameter combos before dispatch (Session 44)
 - [x] GC+SI runner script — run_gc_si.sh for sequential Gold/Silver sweeps (Session 44)
+- [x] Strategy rebuild fix — `_rebuild_strategy_from_leaderboard_row()` falls back to `best_combo_filter_class_names` when combo not in promoted_candidates (Session 48)
+- [x] `leader_stop_distance_points` → also reads `leader_stop_distance_atr` column (Session 48)
+- [x] Portfolio evaluator parallelised — ThreadPoolExecutor(max_workers=16) for per-strategy evaluation (Session 48)
+- [x] Portfolio MC step pass rate bug — added `break` on failed step to ensure cumulative counting (Session 48)
+- [x] Portfolio selector display fix — strategy names show "MARKET TF TYPE" instead of "MOM0" (Session 48)
+- [x] `is_oos_pf_ratio` renamed to `oos_is_pf_ratio` — matches actual computation (OOS/IS) (Session 48)
+- [x] Dashboard family pills — larger font (0.95rem), rounded corners, mini progress bars (Session 48)
+- [x] Dashboard engine log — expanded log path candidates including full_rerun.log (Session 48)
+- [x] Config: `skip_portfolio_evaluation: false`, `skip_portfolio_selector: true` (Session 48)
+- [x] Rebuild 0-trade root cause — `min_avg_range` was misused as `LowVolatilityRegimeFilter.max_atr_mult` and `CompressionFilter.max_atr_mult` in `build_candidate_specific_strategy()`; precomputed_signals override meant this was never applied during original runs but was applied during rebuild. Fixed: both now use defaults (1.10 / 0.90) matching `build_filter_objects_from_classes()` (Session 49)
+- [x] Verified rebuild works for ALL 20/20 market/timeframe combos (Session 49)
+- [x] Dashboard: short family support in live monitor (short_mean_reversion, short_trend, short_breakout) (Session 49)
+- [x] Dashboard inline pills: flex layout, skip empty groups, 0.95rem font, mini progress bars with color coding (Session 49)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
 - [x] The5ers Bootcamp $250K config with correct step balances ($100K/$150K/$200K)
 - [x] The5ers High Stakes and Hyper Growth configs
 - [x] Portfolio selector module — Bootcamp MC pass rate, true Pearson correlation gate, position sizing optimiser (modules/portfolio_selector.py) (Session 47)
+- [x] Portfolio selector: step rate reporting fix — final MC with optimised weights for all 3 steps (Session 50)
+- [x] Portfolio selector: raw per-trade PnL for MC — no longer uses daily-resampled returns (Session 50)
+- [x] Portfolio selector: pre-sweep correlation dedup — removes r > 0.6 clones before C(n,k) (Session 50)
+- [x] Portfolio selector: rebalanced scoring — OOS PF * 20 + diversity * 30, market count gates (Session 50)
+- [x] Portfolio selector: micro contract sizing — grid [0.1..0.5] = 1-5 micros, displayed in report (Session 50)
+- [x] Portfolio selector: time-to-fund estimates — median/P75 trades and months in report (Session 50)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
@@ -300,4 +319,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-30 — Session 47: Build portfolio_selector.py (Bootcamp MC + correlation + sizing)
+2026-03-31 — Session 50: Portfolio selector fixes (step rates, raw trades MC, dedup, diversity scoring, micro contracts, time-to-fund)

@@ -3,6 +3,117 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-03-31 — Session 50: Portfolio selector fixes + time-to-fund
+
+**What was done**:
+Portfolio selector bugs and improvements:
+- **BUG 1 — Step rate mixing**: Report previously mixed step1/step2 rates from initial MC
+  (equal weights, 10k sims) with step3 from sizing optimiser (optimised weights, 1k sims).
+  Fixed: run a final 10k-sim MC with optimised weights and report all step rates from it.
+- **BUG 2 — Daily-resampled trades**: MC was using daily-summed returns as "trades" (multiple
+  same-day trades collapsed into one value). Fixed: added `_load_raw_trade_lists()` to preserve
+  individual per-trade PnL. Daily matrix still used for correlation (correct there).
+- **BUG 3 — Combinatorial waste**: Near-duplicate strategies (r > 0.6) were enumerated in C(n,k)
+  then rejected by the 0.4 gate. Fixed: added `correlation_dedup()` between Stage 3 and 4 that
+  removes clones before the sweep, keeping highest bootcamp_score per connected component.
+- **BUG 4 — Market concentration**: OOS PF weight (30) dominated diversity (20), crowding out
+  diversification. Fixed: rebalanced to OOS PF * 20 + diversity * 30 + (1-corr) * 20.
+  Added minimum market count: RECOMMENDED >= 3 markets, VIABLE >= 2 markets.
+- **Micro contracts**: Sizing grid changed from [0.5, 1.0, 1.5] full-contract weights to
+  [0.1, 0.2, 0.3, 0.4, 0.5] (= 1-5 micro contracts). Report displays as "NQ_daily_MR=3 micros".
+- **Time-to-fund**: MC now tracks per-step trade counts for passing sims. Report includes
+  median_trades_to_fund, p75_trades_to_fund, est_months_median, est_months_p75 using each
+  strategy's leader_trades_per_year for calendar time conversion.
+
+**Tests**: 126/126 pass (4 new: step monotonicity, time-to-fund fields, dedup clones, dedup no-op).
+
+**What's next**:
+- Run portfolio selector with full 5-market data after GC/RTY/YM sweeps complete
+- Walk-forward validation (alternative to fixed IS/OOS split)
+- Cloud migration for portfolio selector when candidate count grows
+
+---
+
+## 2026-03-31 — Session 49: Rebuild root cause fix, verification sweep, dashboard
+
+**What was done**:
+Critical fix — strategy rebuild 0-trade root cause:
+- Diagnosed why `_rebuild_strategy_from_leaderboard_row()` produced 0 trades for ES daily,
+  HG daily, HG 15m, ES 15m despite 85-340 trades in original cloud runs
+- Root cause: `min_avg_range` parameter was used as `LowVolatilityRegimeFilter.max_atr_mult`
+  and `CompressionFilter.max_atr_mult` in `build_candidate_specific_strategy()`. During the
+  original cloud refinement, `precomputed_signals` (from default filter params) overrides
+  `strategy.generate_signal()`, so `min_avg_range` never actually affected entry decisions.
+  During rebuild (no precomputed signals), the tighter filter params killed all entries.
+- Fix: `LowVolatilityRegimeFilter` now always uses default `max_atr_mult=1.10` (matching
+  `build_filter_objects_from_classes`). `CompressionFilter` uses default `max_atr_mult=0.90`.
+- Result: 20/20 market/timeframe combos now rebuild successfully (was 16/20 before fix)
+
+Verification:
+- Confirmed Session 48 fixes (rebuild fallback, step rate bug, display, column rename,
+  parallelisation, config) are all working correctly
+- All 33 core tests pass
+
+Dashboard:
+- Added short family support to live monitor: `short_mean_reversion`, `short_trend`, `short_breakout`
+- Inline dataset progress pills: flex layout with wrap, 0.95rem font, mini progress bars,
+  color coding (green=done, blue=running, gray=queued)
+
+**Tests**: 33/33 pass (cloud launcher tests fail on Windows due to pre-existing tmp_path permission issue).
+
+**What's next**:
+- Re-run generate_returns.py for full 193-strategy rebuild
+- Re-run portfolio selector with full 5-market data (ES, CL, NQ, SI, HG)
+- HG, RTY, YM sweeps to complete; then final portfolio selection
+- Walk-forward validation (alternative to fixed IS/OOS split)
+
+---
+
+## 2026-03-31 — Session 48: Rebuild fix, parallelise evaluator, dashboard fixes
+
+**What was done**:
+Critical fixes:
+- Fixed `_rebuild_strategy_from_leaderboard_row()` — was silently failing for most intraday
+  strategies because combo name not found in promoted_candidates.csv. Root cause: promoted
+  candidates get capped at 20 but leaderboard references combos beyond that. Fix: fall back
+  to `best_combo_filter_class_names` column from the leaderboard row itself.
+- Fixed `leader_stop_distance_points` column mismatch — code read `leader_stop_distance_points`
+  but CSV uses `leader_stop_distance_atr`. Now reads both with fallback.
+- Fixed portfolio MC step pass rate bug — added `break` after failed step in
+  `portfolio_monte_carlo()` to ensure step pass counts are cumulative.
+- Fixed portfolio selector display — strategy names showed "MOM0" (last parameter segment)
+  instead of readable "MARKET TF TYPE" format.
+
+Performance:
+- Parallelised `evaluate_portfolio()` with ThreadPoolExecutor(max_workers=16) — per-strategy
+  rebuild+MC now runs concurrently instead of sequentially.
+
+Dashboard:
+- Family pills enlarged: 0.95rem font, rounded corners, mini horizontal progress bars
+  per family with colour coding (green=done, blue=running, gray=queued)
+- Engine log: expanded search paths including full_rerun.log
+- Promoted candidates: better messaging for active runs vs missing outputs
+
+Config:
+- `skip_portfolio_evaluation: false` (generates strategy_returns.csv on cloud runs)
+- `skip_portfolio_selector: true` (manual step after all markets finish)
+
+Cosmetic:
+- Renamed `is_oos_pf_ratio` to `oos_is_pf_ratio` everywhere (column actually stores OOS/IS)
+- Dashboard display label updated from "IS/OOS" to "OOS/IS"
+
+**Tests**: 27/27 pass (smoke + subtypes). Cloud launcher tests have pre-existing Windows
+PermissionError on temp dirs.
+
+**What's next**:
+- Re-run generate_returns.py to validate ALL 167 strategies rebuild
+- Re-run portfolio selector with full 4-market data
+- Run short validation config: `cloud/config_es_shorts_daily_ondemand.yaml`
+- HG, RTY, YM runs still pending
+- Walk-forward validation (alternative to fixed IS/OOS split)
+
+---
+
 ## 2026-03-30 — Session 47: Portfolio selector module
 
 **What was done**:
