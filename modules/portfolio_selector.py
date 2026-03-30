@@ -595,6 +595,7 @@ def portfolio_monte_carlo(
     step_pass_counts = [0] * config.n_steps
     worst_dds: list[float] = []
     trades_to_pass: list[int] = []
+    step_trades_list: list[list[int]] = []  # per-sim [step1_trades, step2_trades, ...]
 
     for _ in range(n_sims):
         # 1. Independently shuffle each strategy's trades
@@ -627,9 +628,17 @@ def portfolio_monte_carlo(
         if result.passed_all_steps:
             pass_count += 1
             trades_to_pass.append(result.total_trades_used)
+            step_trades_list.append([s.trades_taken for s in result.steps])
 
     worst_dd_arr = np.array(worst_dds)
     step_pass_rates = [c / n_sims for c in step_pass_counts]
+
+    # Per-step trade medians for passing sims
+    step_median_trades: list[float] = []
+    if step_trades_list:
+        for i in range(config.n_steps):
+            vals = [st[i] for st in step_trades_list if i < len(st)]
+            step_median_trades.append(float(np.median(vals)) if vals else 0.0)
 
     return {
         "pass_rate": pass_count / n_sims,
@@ -639,6 +648,9 @@ def portfolio_monte_carlo(
         "median_worst_dd_pct": float(np.median(worst_dd_arr)),
         "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
         "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
+        "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
+        "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
+        "step_median_trades": step_median_trades,
     }
 
 
@@ -796,6 +808,9 @@ def optimise_sizing(
         portfolio["opt_step3_pass_rate"] = final_mc["step3_pass_rate"]
         portfolio["opt_p95_dd"] = final_mc["p95_worst_dd_pct"]
         portfolio["opt_avg_trades_to_pass"] = final_mc["avg_trades_to_pass"]
+        portfolio["median_trades_to_pass"] = final_mc["median_trades_to_pass"]
+        portfolio["p75_trades_to_pass"] = final_mc["p75_trades_to_pass"]
+        portfolio["step_median_trades"] = final_mc["step_median_trades"]
         results.append(portfolio)
 
         logger.info(
@@ -871,8 +886,8 @@ def run_portfolio_selection(
         raw_trade_lists=raw_trades if raw_trades else None,
     )
 
-    # Write report
-    _write_report(optimised, output_dir)
+    # Write report (pass candidates for trade frequency estimation)
+    _write_report(optimised, output_dir, candidates)
 
     # Print summary
     _print_summary(candidates, return_matrix, combinations, optimised)
@@ -886,10 +901,24 @@ def run_portfolio_selection(
     }
 
 
-def _write_report(portfolios: list[dict], output_dir: str) -> None:
-    """Write portfolio_selector_report.csv."""
+def _write_report(
+    portfolios: list[dict],
+    output_dir: str,
+    candidates: list[dict] | None = None,
+) -> None:
+    """Write portfolio_selector_report.csv with time-to-fund estimates."""
     os.makedirs(output_dir, exist_ok=True)
     out_path = os.path.join(output_dir, "portfolio_selector_report.csv")
+
+    # Build lookup: strategy label -> candidate dict for trade frequency
+    cand_by_label: dict[str, dict] = {}
+    if candidates:
+        for cand in candidates:
+            leader_name = str(cand.get("leader_strategy_name", "")).strip()
+            market = str(cand.get("market", ""))
+            timeframe = str(cand.get("timeframe", ""))
+            label = f"{market}_{timeframe}_{leader_name}"
+            cand_by_label[label] = cand
 
     rows: list[dict] = []
     for rank, p in enumerate(portfolios, 1):
@@ -917,9 +946,27 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
             f"{k}={int(round(v * 10))} micros" for k, v in weights.items()
         ) if weights else ""
 
+        # Estimate time-to-fund from trade frequency
+        median_trades = p.get("median_trades_to_pass", 0.0)
+        p75_trades = p.get("p75_trades_to_pass", 0.0)
+
+        total_trades_per_year = 0.0
+        for name in strat_names:
+            cand = cand_by_label.get(name, {})
+            tpy = float(cand.get("leader_trades_per_year", 0))
+            if tpy == 0:
+                # Fallback: leader_trades / 18 years (approx data span)
+                lt = float(cand.get("leader_trades", cand.get("total_trades", 0)))
+                tpy = lt / 18 if lt > 0 else 0
+            total_trades_per_year += tpy
+
+        trades_per_month = total_trades_per_year / 12 if total_trades_per_year > 0 else 0
+        est_months_median = median_trades / trades_per_month if trades_per_month > 0 else 0
+        est_months_p75 = p75_trades / trades_per_month if trades_per_month > 0 else 0
+
         rows.append({
             "rank": rank,
-            "strategy_names": "|".join(p.get("strategy_names", [])),
+            "strategy_names": "|".join(strat_names),
             "n_strategies": p.get("n_strategies", 0),
             "step1_pass_rate": round(step1, 4),
             "step2_pass_rate": round(step2, 4),
@@ -930,6 +977,10 @@ def _write_report(portfolios: list[dict], output_dir: str) -> None:
             "diversity_score": round(p.get("diversity", 0.0), 4),
             "composite_score": round(p.get("score", 0.0), 4),
             "micro_contracts": micro_display,
+            "median_trades_to_fund": round(median_trades, 0),
+            "p75_trades_to_fund": round(p75_trades, 0),
+            "est_months_median": round(est_months_median, 1),
+            "est_months_p75": round(est_months_p75, 1),
             "verdict": verdict,
         })
 
