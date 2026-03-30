@@ -834,3 +834,124 @@ def test_run_dataset_caches_data_across_families():
     # Verify the precomputed data was passed (not a path)
     for call in mock_run_family.call_args_list:
         assert "data" in call.kwargs or (len(call.args) >= 2 and isinstance(call.args[1], pd.DataFrame))
+
+
+# ---------------------------------------------------------------------------
+# Test 23: High Stakes config with per-step profit targets
+# ---------------------------------------------------------------------------
+
+def test_high_stakes_config():
+    """Verify The5ers High Stakes config has per-step profit targets."""
+    from modules.prop_firm_simulator import The5ersHighStakesConfig
+    config = The5ersHighStakesConfig()
+    assert config.n_steps == 2
+    assert config.max_drawdown_pct == 0.10
+    assert config.max_daily_drawdown_pct == 0.05
+    assert config.step_profit_targets == [0.08, 0.05]
+    assert config.step_balances == [100_000.0, 100_000.0]
+    assert config.program_name == "HighStakes"
+
+
+def test_per_step_profit_targets():
+    """High Stakes Step 1 (8%) and Step 2 (5%) should use different targets."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersHighStakesConfig
+    config = The5ersHighStakesConfig(100_000)
+    assert config.step_profit_targets[0] == 0.08
+    assert config.step_profit_targets[1] == 0.05
+
+    # Strong winners should pass both steps
+    trades = [5000.0] * 200  # 5% of 100K source each
+    result = simulate_challenge(trades, config, source_capital=100_000.0)
+    assert result.passed_all_steps is True
+    assert len(result.steps) == 2
+    # Step 1 target = $8K (8% of $100K), Step 2 target = $5K (5% of $100K)
+    assert result.steps[0].profit_target == 8_000.0
+    assert result.steps[1].profit_target == 5_000.0
+
+
+# ---------------------------------------------------------------------------
+# Test 24: Hyper Growth and Pro Growth configs
+# ---------------------------------------------------------------------------
+
+def test_hyper_growth_config():
+    """Verify The5ers Hyper Growth config."""
+    from modules.prop_firm_simulator import The5ersHyperGrowthConfig
+    config = The5ersHyperGrowthConfig()
+    assert config.n_steps == 1
+    assert config.max_drawdown_pct == 0.06
+    assert config.max_daily_drawdown_pct == 0.03
+    assert config.profit_target_pct == 0.10
+    assert config.target_balance == 5_000.0
+    assert config.entry_fee == 260.0
+
+
+def test_pro_growth_config():
+    """Verify The5ers Pro Growth config."""
+    from modules.prop_firm_simulator import The5ersProGrowthConfig
+    config = The5ersProGrowthConfig()
+    assert config.n_steps == 1
+    assert config.max_drawdown_pct == 0.06
+    assert config.max_daily_drawdown_pct == 0.03
+    assert config.profit_target_pct == 0.10
+    assert config.entry_fee == 74.0
+
+    # $10K variant has different fee
+    config_10k = The5ersProGrowthConfig(10_000)
+    assert config_10k.entry_fee == 150.0
+
+
+# ---------------------------------------------------------------------------
+# Test 25: Daily drawdown breach
+# ---------------------------------------------------------------------------
+
+def test_daily_dd_breach():
+    """Daily DD should fail the step even if cumulative DD is fine."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersHyperGrowthConfig
+    config = The5ersHyperGrowthConfig(5_000)
+    # 3% daily DD on $5K = $150 limit
+    # A single trade losing $160 (3.2% of source) on day 1 should trigger daily DD
+    # source_capital=5000, trade=-160, scaled = -160/5000 * 5000 = -160
+    trades = [-160.0, 200.0, 300.0]
+    result = simulate_challenge(trades, config, source_capital=5_000.0, trades_per_day=1.0)
+    assert not result.passed_all_steps, "Should fail on daily DD breach"
+    assert "Daily DD breach" in result.steps[0].failure_reason
+
+
+def test_daily_dd_no_breach_when_disabled():
+    """Bootcamp has no daily DD, so large single-day losses should not trigger it."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersBootcampConfig
+    config = The5ersBootcampConfig()
+    assert config.max_daily_drawdown_pct is None
+    # Large loss that would breach a 3% daily DD but should pass cumulative check
+    trades = [-3000.0, 5000.0] * 50  # Net positive over time
+    result = simulate_challenge(trades, config, source_capital=250_000.0)
+    # Should not fail on daily DD (it's disabled)
+    for step in result.steps:
+        if step.failure_reason:
+            assert "Daily DD" not in step.failure_reason
+
+
+# ---------------------------------------------------------------------------
+# Test 26: Program selector resolver
+# ---------------------------------------------------------------------------
+
+def test_program_selector_resolver():
+    """Verify _resolve_prop_config maps program names correctly."""
+    from modules.portfolio_selector import _resolve_prop_config
+    bootcamp = _resolve_prop_config("bootcamp", 250_000)
+    assert bootcamp.program_name == "Bootcamp"
+    assert bootcamp.n_steps == 3
+
+    hs = _resolve_prop_config("high_stakes", 100_000)
+    assert hs.program_name == "HighStakes"
+    assert hs.n_steps == 2
+
+    hg = _resolve_prop_config("hyper_growth", 5_000)
+    assert hg.program_name == "HyperGrowth"
+
+    pg = _resolve_prop_config("pro_growth", 5_000)
+    assert pg.program_name == "ProGrowth"
+
+    # Unknown falls back to bootcamp
+    fallback = _resolve_prop_config("unknown_program", 100_000)
+    assert fallback.program_name == "Bootcamp"
