@@ -31,12 +31,32 @@ import pandas as pd
 
 from modules.prop_firm_simulator import (
     The5ersBootcampConfig,
+    The5ersHighStakesConfig,
+    The5ersHyperGrowthConfig,
+    The5ersProGrowthConfig,
     PropFirmConfig,
     simulate_challenge,
     _scale_trade_pnl,
 )
 
 logger = logging.getLogger(__name__)
+
+_PROGRAM_FACTORIES = {
+    "bootcamp": The5ersBootcampConfig,
+    "high_stakes": The5ersHighStakesConfig,
+    "hyper_growth": The5ersHyperGrowthConfig,
+    "pro_growth": The5ersProGrowthConfig,
+}
+
+
+def _resolve_prop_config(program: str, target: float) -> PropFirmConfig:
+    """Resolve a prop firm config from program name and target balance."""
+    factory = _PROGRAM_FACTORIES.get(program)
+    if factory is None:
+        logger.warning(f"Unknown program '{program}', falling back to bootcamp")
+        factory = The5ersBootcampConfig
+    return factory(target)
+
 
 # ============================================================================
 # STAGE 1: Hard filter candidates
@@ -717,6 +737,7 @@ def run_bootcamp_mc(
     return_matrix: pd.DataFrame,
     n_sims: int = 10_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
+    prop_config: PropFirmConfig | None = None,
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
 
@@ -724,10 +745,11 @@ def run_bootcamp_mc(
         raw_trade_lists: If provided, use raw per-trade PnL instead of
             extracting from the daily return matrix. This preserves
             individual trades that would otherwise be summed on the same day.
+        prop_config: Prop firm config to simulate against. Defaults to Bootcamp $250K.
 
-    Returns combinations enriched with MC results, sorted by step3_pass_rate.
+    Returns combinations enriched with MC results, sorted by final step pass rate.
     """
-    config = The5ersBootcampConfig()
+    config = prop_config or The5ersBootcampConfig()
     results: list[dict] = []
 
     for i, combo in enumerate(combinations):
@@ -754,8 +776,10 @@ def run_bootcamp_mc(
         result = {**combo, **mc}
         results.append(result)
 
-    results.sort(key=lambda r: r.get("step3_pass_rate", 0.0), reverse=True)
-    logger.info(f"Bootcamp MC complete for {len(results)} portfolios")
+    # Sort by final step pass rate (step3 for bootcamp, step2 for high stakes, etc.)
+    final_step_key = f"step{config.n_steps}_pass_rate"
+    results.sort(key=lambda r: r.get(final_step_key, r.get("pass_rate", 0.0)), reverse=True)
+    logger.info(f"MC complete for {len(results)} portfolios ({config.program_name})")
     return results
 
 
@@ -769,6 +793,7 @@ def optimise_sizing(
     n_sims: int = 1_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
     min_pass_rate: float = 0.40,
+    prop_config: PropFirmConfig | None = None,
 ) -> list[dict]:
     """Grid-search contract weights for top portfolios.
 
@@ -778,7 +803,7 @@ def optimise_sizing(
     Objective: minimize median_trades_to_pass subject to pass_rate >= min_pass_rate.
     This finds the fastest path to funding rather than the safest.
     """
-    config = The5ersBootcampConfig()
+    config = prop_config or The5ersBootcampConfig()
     weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
     n_weight_opts = len(weight_options)
     results: list[dict] = []
@@ -836,7 +861,8 @@ def optimise_sizing(
                 contract_weights=weights,
             )
 
-            pass_rate = mc["step3_pass_rate"]
+            final_step_key = f"step{config.n_steps}_pass_rate"
+            pass_rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
             dd = mc["p95_worst_dd_pct"]
             trades = mc["median_trades_to_pass"]
 
@@ -867,9 +893,9 @@ def optimise_sizing(
         )
         portfolio["micro_multiplier"] = best_weights
         portfolio["sizing_optimised"] = True
-        portfolio["opt_step1_pass_rate"] = final_mc["step1_pass_rate"]
-        portfolio["opt_step2_pass_rate"] = final_mc["step2_pass_rate"]
-        portfolio["opt_step3_pass_rate"] = final_mc["step3_pass_rate"]
+        for step_i in range(1, config.n_steps + 1):
+            key = f"step{step_i}_pass_rate"
+            portfolio[f"opt_{key}"] = final_mc.get(key, 0.0)
         portfolio["opt_p95_dd"] = final_mc["p95_worst_dd_pct"]
         portfolio["opt_avg_trades_to_pass"] = final_mc["avg_trades_to_pass"]
         portfolio["median_trades_to_pass"] = final_mc["median_trades_to_pass"]
@@ -877,8 +903,9 @@ def optimise_sizing(
         portfolio["step_median_trades"] = final_mc["step_median_trades"]
         results.append(portfolio)
 
+        final_step_key = f"step{config.n_steps}_pass_rate"
         logger.info(
-            f"  Best weights: {best_weights} -> pass={final_mc['step3_pass_rate']:.1%}, DD={final_mc['p95_worst_dd_pct']:.1%}"
+            f"  Best weights: {best_weights} -> pass={final_mc.get(final_step_key, 0.0):.1%}, DD={final_mc['p95_worst_dd_pct']:.1%}"
         )
 
     return results
@@ -908,6 +935,13 @@ def run_portfolio_selection(
     ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {}) if config else {}
     n_sims_mc = int(ps_cfg.get("n_sims_mc", n_sims_mc))
     n_sims_sizing = int(ps_cfg.get("n_sims_sizing", n_sims_sizing))
+
+    # Resolve prop firm program
+    program = str(ps_cfg.get("prop_firm_program", "bootcamp"))
+    target = float(ps_cfg.get("prop_firm_target", 250_000))
+    prop_config = _resolve_prop_config(program, target)
+    logger.info(f"Prop firm: {prop_config.firm_name} {prop_config.program_name} "
+                f"(${prop_config.target_balance:,.0f}, {prop_config.n_steps} steps)")
 
     # Stage 1: Hard filter
     candidates = hard_filter_candidates(
@@ -945,10 +979,11 @@ def run_portfolio_selection(
 
     n_tested = len(combinations)
 
-    # Stage 5: Bootcamp MC (uses raw trades if available)
+    # Stage 5: Prop firm MC (uses raw trades if available)
     mc_results = run_bootcamp_mc(
         combinations, return_matrix, n_sims=n_sims_mc,
         raw_trade_lists=raw_trades if raw_trades else None,
+        prop_config=prop_config,
     )
     if not mc_results:
         logger.warning("No MC results. Aborting.")
@@ -964,6 +999,7 @@ def run_portfolio_selection(
         mc_results, return_matrix, n_sims=n_sims_sizing,
         raw_trade_lists=raw_trades if raw_trades else None,
         min_pass_rate=min_pass_rate,
+        prop_config=prop_config,
     )
 
     # Write report (pass candidates for trade frequency estimation)
