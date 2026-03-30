@@ -717,15 +717,18 @@ def optimise_sizing(
     return_matrix: pd.DataFrame,
     n_sims: int = 1_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
+    min_pass_rate: float = 0.40,
 ) -> list[dict]:
     """Grid-search contract weights for top portfolios.
 
     Uses n_sims=1000 for speed during grid search. After finding best weights,
     runs a final 10k-sim MC for accurate step rates.
-    Maximises step3_pass_rate while keeping p95_worst_dd_pct < 0.045.
+
+    Objective: minimize median_trades_to_pass subject to pass_rate >= min_pass_rate.
+    This finds the fastest path to funding rather than the safest.
     """
     config = The5ersBootcampConfig()
-    weight_options = [0.1, 0.2, 0.3, 0.4, 0.5]
+    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
     n_weight_opts = len(weight_options)
     results: list[dict] = []
 
@@ -764,12 +767,13 @@ def optimise_sizing(
 
         strat_names_in_matrix = list(trade_lists.keys())
         best_weights: dict[str, float] | None = None
+        best_trades: float | None = None
         best_pass_rate = -1.0
         best_dd = 1.0
 
         logger.info(
             f"Sizing optimisation {i + 1}: {n_strats} strategies, "
-            f"{3**n_strats} weight combos x {n_sims} sims"
+            f"{n_weight_opts**len(strat_names_in_matrix)} weight combos x {n_sims} sims"
         )
 
         for weight_combo in itertools.product(weight_options, repeat=len(strat_names_in_matrix)):
@@ -783,19 +787,21 @@ def optimise_sizing(
 
             pass_rate = mc["step3_pass_rate"]
             dd = mc["p95_worst_dd_pct"]
+            trades = mc["median_trades_to_pass"]
 
-            # Maximise pass rate while p95 DD < 4.5%
-            if dd < 0.045:
-                if pass_rate > best_pass_rate:
+            # Minimize trades-to-pass subject to pass_rate >= min_pass_rate
+            if pass_rate >= min_pass_rate:
+                if trades > 0 and (best_trades is None or trades < best_trades):
+                    best_trades = trades
                     best_pass_rate = pass_rate
                     best_dd = dd
                     best_weights = weights.copy()
             elif best_weights is None:
-                # No combo satisfies constraint yet; track lowest DD
-                if dd < best_dd:
-                    best_dd = dd
+                # No combo meets minimum yet; track best pass rate as fallback
+                if pass_rate > best_pass_rate:
                     best_pass_rate = pass_rate
                     best_weights = weights.copy()
+                    best_dd = dd
 
         if best_weights is None:
             best_weights = {s: 0.1 for s in strat_names_in_matrix}
@@ -888,9 +894,15 @@ def run_portfolio_selection(
         return {"status": "no_mc_results"}
 
     # Stage 6: Optimise sizing (uses raw trades if available)
+    min_pass_rate = 0.40
+    if config:
+        ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {})
+        min_pass_rate = float(ps_cfg.get("min_pass_rate", min_pass_rate))
+
     optimised = optimise_sizing(
         mc_results, return_matrix, n_sims=n_sims_sizing,
         raw_trade_lists=raw_trades if raw_trades else None,
+        min_pass_rate=min_pass_rate,
     )
 
     # Write report (pass candidates for trade frequency estimation)
