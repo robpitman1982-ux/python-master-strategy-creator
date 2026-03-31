@@ -1337,6 +1337,45 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class FailedBreakoutExclusionFilter(BaseFilter):
+    """EXCLUSION filter: rejects entry if any of the last N bars broke above
+    the rolling range high but closed back inside it (failed breakout).
+    passes() returns True when NO failed breakout detected → safe to enter.
+    """
+    name = "FailedBreakoutExclusionFilter"
+
+    def __init__(self, lookback: int = 3, range_lookback: int = 20):
+        self.lookback = lookback
+        self.range_lookback = range_lookback
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.range_lookback + self.lookback:
+            return False
+        for j in range(i - self.lookback + 1, i + 1):
+            prior_high = data["high"].iloc[max(0, j - self.range_lookback):j].max()
+            if data["high"].iloc[j] > prior_high and data["close"].iloc[j] < prior_high:
+                return False
+        return True
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        highs = data["high"].values
+        closes = data["close"].values
+        n = len(data)
+        rolling_high = pd.Series(highs).rolling(self.range_lookback).max().shift(1).values
+        # For each bar, check if it's a failed breakout
+        failed = np.zeros(n, dtype=bool)
+        for i in range(self.range_lookback, n):
+            if highs[i] > rolling_high[i] and closes[i] < rolling_high[i]:
+                failed[i] = True
+        # Now check lookback window: any failed bar in window → exclude
+        failed_f = failed.astype(float)
+        failed_count = pd.Series(failed_f).rolling(self.lookback).sum().values
+        result = pd.Series(failed_count == 0, index=data.index)
+        warmup = self.range_lookback + self.lookback
+        result.iloc[:warmup] = False
+        return result.fillna(False)
+
+
 class DistanceFromExtremeFilter(BaseFilter):
     """Distance from rolling high/low in ATR units.
     far_from_high: (rolling_high - Close) / ATR >= threshold (MR — stretched down)

@@ -1164,3 +1164,36 @@ def test_distance_from_extreme_filter():
     m_near = f_near.mask(df)
     # In first 30 bars: close=100, high=105, distance=(105-100)/10=0.5 <= 0.8 → near
     assert m_near.iloc[20:29].any(), "Should detect near-high condition"
+
+
+# ---------------------------------------------------------------------------
+# Test: FailedBreakoutExclusionFilter
+# ---------------------------------------------------------------------------
+
+def test_failed_breakout_exclusion_filter():
+    from modules.filters import FailedBreakoutExclusionFilter
+
+    n = 60
+    # Stable range: high always 105
+    high = np.full(n, 105.0)
+    close = np.full(n, 100.0)
+    low = np.full(n, 95.0)
+
+    # Bar 35: pokes above range high (110) but closes inside (103) → failed breakout
+    high[35] = 110.0
+    close[35] = 103.0
+
+    df = pd.DataFrame({
+        "open": np.full(n, 100.0),
+        "high": high,
+        "low": low,
+        "close": close,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+
+    f = FailedBreakoutExclusionFilter(lookback=3, range_lookback=20)
+    m = f.mask(df)
+    # Bars 35, 36, 37 should be excluded (False) due to failed breakout in lookback
+    assert not m.iloc[35], "Should reject bar with failed breakout"
+    assert not m.iloc[36], "Should reject bar after failed breakout (within lookback)"
+    # Bar 40+ should be fine (failed breakout out of lookback window)
+    assert m.iloc[40], "Should allow bar well after failed breakout"
