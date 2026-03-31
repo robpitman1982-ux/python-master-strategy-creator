@@ -19,6 +19,7 @@ from modules.filters import (
     BreakoutRetestFilter,
     BreakoutTrendFilter,
     CompressionFilter,
+    ConsecutiveNarrowRangeFilter,
     EfficiencyRatioFilter,
     ExpansionBarFilter,
     GapUpFilter,
@@ -247,6 +248,7 @@ class BreakoutStrategyType(BaseStrategyType):
             GapUpFilter,
             EfficiencyRatioFilter,
             ATRExpansionRatioFilter,
+            ConsecutiveNarrowRangeFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -262,6 +264,8 @@ class BreakoutStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=1.10, mode="expanding"))
+            elif cls is ConsecutiveNarrowRangeFilter:
+                filters.append(ConsecutiveNarrowRangeFilter(lookback=5, range_ratio=0.80, min_narrow_count=3))
             elif cls is CompressionFilter:
                 filters.append(CompressionFilter(lookback=lookback, max_atr_mult=0.90))
             elif cls is RangeBreakoutFilter:
@@ -352,6 +356,8 @@ class BreakoutStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=1.10, mode="expanding"))
+            elif cls is ConsecutiveNarrowRangeFilter:
+                filters.append(ConsecutiveNarrowRangeFilter(lookback=5, range_ratio=0.80, min_narrow_count=3))
             else:
                 filters.append(cls())
 

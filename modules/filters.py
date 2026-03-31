@@ -1337,6 +1337,45 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class ConsecutiveNarrowRangeFilter(BaseFilter):
+    """Multi-bar contraction: counts bars in last N where range < avg_range * ratio.
+    Passes when count >= min_narrow_count. Better than single-bar InsideBar for
+    detecting compression before breakouts.
+    """
+    name = "ConsecutiveNarrowRangeFilter"
+
+    def __init__(self, lookback: int = 5, range_ratio: float = 0.80,
+                 min_narrow_count: int = 3):
+        self.lookback = lookback
+        self.range_ratio = range_ratio
+        self.min_narrow_count = min_narrow_count
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < max(self.lookback, 20):
+            return False
+        avg_col = "avg_range_20"
+        avg_range = data[avg_col].iloc[i] if avg_col in data.columns else data["bar_range"].iloc[max(0, i - 19):i + 1].mean()
+        if pd.isna(avg_range) or avg_range <= 0:
+            return False
+        threshold = avg_range * self.range_ratio
+        count = 0
+        for j in range(i - self.lookback + 1, i + 1):
+            if data["bar_range"].iloc[j] < threshold:
+                count += 1
+        return count >= self.min_narrow_count
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        avg_col = "avg_range_20"
+        avg_range = data[avg_col] if avg_col in data.columns else data["bar_range"].rolling(20).mean()
+        threshold = avg_range * self.range_ratio
+        narrow = (data["bar_range"] < threshold).astype(float)
+        count = narrow.rolling(self.lookback).sum()
+        result = (count >= self.min_narrow_count).copy()
+        warmup = max(self.lookback, 20)
+        result.iloc[:warmup] = False
+        return result.fillna(False)
+
+
 class CumulativeDeclineFilter(BaseFilter):
     """Measures total price decline over N bars in ATR units, regardless of
     individual bar direction. Catches exhaustion moves that consecutive-bar

@@ -1102,3 +1102,32 @@ def test_cumulative_decline_filter():
     m = f.mask(df)
     # At bar 29: close[25]=100, close[29]=80, decline=20, ATR≈10, ratio=2.0 >= 1.5 ✓
     assert m.iloc[29], "Should detect 2-ATR decline over 4 bars"
+
+
+# ---------------------------------------------------------------------------
+# Test: ConsecutiveNarrowRangeFilter
+# ---------------------------------------------------------------------------
+
+def test_consecutive_narrow_range_filter():
+    from modules.filters import ConsecutiveNarrowRangeFilter
+
+    n = 60
+    # Normal range = 10, narrow bars (range=3) at positions 30-34
+    bar_range = np.full(n, 10.0)
+    bar_range[30:35] = 3.0  # 5 narrow bars
+
+    df = pd.DataFrame({
+        "open": np.full(n, 100.0),
+        "high": 100.0 + bar_range / 2,
+        "low": 100.0 - bar_range / 2,
+        "close": np.full(n, 100.0),
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+    from modules.feature_builder import add_precomputed_features
+    df = add_precomputed_features(df, avg_range_lookbacks=[20])
+
+    f = ConsecutiveNarrowRangeFilter(lookback=5, range_ratio=0.80, min_narrow_count=3)
+    m = f.mask(df)
+    # At bars 32-34: 3+ of the last 5 bars have range < avg_range * 0.80
+    assert m.iloc[32:35].any(), "Should detect multi-bar compression"
+    # Before the compression zone, should not fire
+    assert not m.iloc[20:28].any(), "Should not fire before compression"
