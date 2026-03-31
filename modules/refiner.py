@@ -66,6 +66,8 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         profit_target_atr=task.get("profit_target_atr"),
         trailing_stop_atr=task.get("trailing_stop_atr"),
         signal_exit_reference=task.get("signal_exit_reference"),
+        break_even_atr=task.get("break_even_atr"),
+        early_exit_bars=task.get("early_exit_bars"),
     )
 
     engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
@@ -116,6 +118,16 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
             if exit_config is not None and exit_config.signal_exit_reference
             else None
         ),
+        "break_even_atr": (
+            float(exit_config.break_even_atr)
+            if exit_config is not None and exit_config.break_even_atr is not None
+            else None
+        ),
+        "early_exit_bars": (
+            int(exit_config.early_exit_bars)
+            if exit_config is not None and exit_config.early_exit_bars is not None
+            else None
+        ),
         "total_trades": total_trades,
         "trades_per_year": trades_per_year,
         "passes_trade_filter": passes_trade_filter,
@@ -153,6 +165,8 @@ def _task_signature(task: dict[str, Any]) -> tuple:
         task.get("exit_type"),
         task.get("trailing_stop_atr"),
         task.get("profit_target_atr"),
+        task.get("break_even_atr"),
+        task.get("early_exit_bars"),
     )
 
 
@@ -167,6 +181,8 @@ class RefinementResult:
     trailing_stop_atr: float | None
     profit_target_atr: float | None
     signal_exit_reference: str | None
+    break_even_atr: float | None
+    early_exit_bars: int | None
     total_trades: int
     trades_per_year: float
     passes_trade_filter: bool

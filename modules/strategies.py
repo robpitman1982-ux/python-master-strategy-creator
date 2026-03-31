@@ -33,6 +33,9 @@ class ExitConfig:
     profit_target_atr: float | None = None
     trailing_stop_atr: float | None = None
     signal_exit_reference: str | None = None
+    break_even_atr: float | None = None
+    break_even_lock_atr: float = 0.0
+    early_exit_bars: int | None = None
 
 
 def normalize_exit_type(value: ExitType | str | None) -> ExitType:
@@ -52,6 +55,9 @@ def build_exit_config(
     profit_target_atr: float | None = None,
     trailing_stop_atr: float | None = None,
     signal_exit_reference: str | None = None,
+    break_even_atr: float | None = None,
+    break_even_lock_atr: float = 0.0,
+    early_exit_bars: int | None = None,
     default_hold_bars: int = 3,
     default_stop_distance_points: float = 10.0,
 ) -> ExitConfig:
@@ -63,6 +69,9 @@ def build_exit_config(
             profit_target_atr=exit_config.profit_target_atr,
             trailing_stop_atr=exit_config.trailing_stop_atr,
             signal_exit_reference=exit_config.signal_exit_reference,
+            break_even_atr=exit_config.break_even_atr,
+            break_even_lock_atr=exit_config.break_even_lock_atr,
+            early_exit_bars=exit_config.early_exit_bars,
         )
 
     return ExitConfig(
@@ -80,6 +89,9 @@ def build_exit_config(
             None if trailing_stop_atr is None else float(trailing_stop_atr)
         ),
         signal_exit_reference=signal_exit_reference,
+        break_even_atr=break_even_atr,
+        break_even_lock_atr=break_even_lock_atr,
+        early_exit_bars=early_exit_bars,
     )
 
 

@@ -44,6 +44,8 @@ class _InlineTrendStrategy:
         name: str | None = None,
         exit_type: ExitType | str | None = None,
         trailing_stop_atr: float | None = None,
+        break_even_atr: float | None = None,
+        early_exit_bars: int | None = None,
         exit_config=None,
     ):
         self.filters = filters
@@ -55,6 +57,8 @@ class _InlineTrendStrategy:
             hold_bars=hold_bars,
             stop_distance_points=stop_distance_atr,
             trailing_stop_atr=trailing_stop_atr,
+            break_even_atr=break_even_atr,
+            early_exit_bars=early_exit_bars,
             default_hold_bars=hold_bars,
             default_stop_distance_points=stop_distance_atr,
         )
@@ -194,6 +198,7 @@ class TrendStrategyType(BaseStrategyType):
         return {
             "exit_type": [ExitType.TIME_STOP, ExitType.TRAILING_STOP],
             "trailing_stop_atr": [1.5, 2.5, 3.5, 5.0, 7.0],
+            "break_even_atr": [None, 0.75],
         }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
@@ -311,6 +316,8 @@ class TrendStrategyType(BaseStrategyType):
         profit_target_atr: float | None = None,
         trailing_stop_atr: float | None = None,
         signal_exit_reference: str | None = None,
+        break_even_atr: float | None = None,
+        early_exit_bars: int | None = None,
     ) -> _InlineTrendStrategy:
         mult = get_timeframe_multiplier(timeframe)
         fast_sma = max(10, round(50 * mult))
@@ -353,6 +360,8 @@ class TrendStrategyType(BaseStrategyType):
             stop_distance_atr=stop_distance_points,
             exit_type=exit_type or self.get_default_exit_type(),
             trailing_stop_atr=trailing_stop_atr,
+            break_even_atr=break_even_atr,
+            early_exit_bars=early_exit_bars,
             name=f"RefinedTrend_HB{hold_bars}_ATR{stop_distance_points}_VOL{min_avg_range}_MOM{momentum_lookback}",
         )
 

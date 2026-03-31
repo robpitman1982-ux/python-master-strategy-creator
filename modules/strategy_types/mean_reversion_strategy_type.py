@@ -48,6 +48,8 @@ class _InlineMeanReversionStrategy:
         exit_type: ExitType | str | None = None,
         profit_target_atr: float | None = None,
         signal_exit_reference: str | None = None,
+        break_even_atr: float | None = None,
+        early_exit_bars: int | None = None,
         exit_config=None,
     ):
         self.filters = filters
@@ -60,6 +62,8 @@ class _InlineMeanReversionStrategy:
             stop_distance_points=stop_distance_atr,
             profit_target_atr=profit_target_atr,
             signal_exit_reference=signal_exit_reference,
+            break_even_atr=break_even_atr,
+            early_exit_bars=early_exit_bars,
             default_hold_bars=hold_bars,
             default_stop_distance_points=stop_distance_atr,
         )
@@ -199,6 +203,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             "exit_type": [ExitType.TIME_STOP, ExitType.PROFIT_TARGET, ExitType.SIGNAL_EXIT],
             "profit_target_atr": [0.5, 1.0, 1.5, 2.0, 3.0],
             "signal_exit_reference": ["fast_sma"],
+            "break_even_atr": [None, 0.75],
         }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
@@ -325,6 +330,8 @@ class MeanReversionStrategyType(BaseStrategyType):
         profit_target_atr: float | None = None,
         trailing_stop_atr: float | None = None,
         signal_exit_reference: str | None = None,
+        break_even_atr: float | None = None,
+        early_exit_bars: int | None = None,
     ) -> _InlineMeanReversionStrategy:
         mult = get_timeframe_multiplier(timeframe)
         fast_sma = max(5, round(20 * mult))
@@ -381,6 +388,8 @@ class MeanReversionStrategyType(BaseStrategyType):
             exit_type=exit_type or self.get_default_exit_type(),
             profit_target_atr=profit_target_atr,
             signal_exit_reference=signal_exit_reference,
+            break_even_atr=break_even_atr,
+            early_exit_bars=early_exit_bars,
             name=f"RefinedMR_HB{hold_bars}_ATR{stop_distance_points}_DIST{min_avg_range}_MOM{momentum_lookback}",
         )
 

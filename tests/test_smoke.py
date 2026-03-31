@@ -1197,3 +1197,27 @@ def test_failed_breakout_exclusion_filter():
     assert not m.iloc[36], "Should reject bar after failed breakout (within lookback)"
     # Bar 40+ should be fine (failed breakout out of lookback window)
     assert m.iloc[40], "Should allow bar well after failed breakout"
+
+
+# ---------------------------------------------------------------------------
+# Test: Break-even stop modifier
+# ---------------------------------------------------------------------------
+
+def test_break_even_stop_modifier():
+    from modules.strategies import ExitConfig, ExitType
+
+    # Verify ExitConfig accepts break_even_atr
+    ec = ExitConfig(
+        exit_type=ExitType.TIME_STOP,
+        hold_bars=10,
+        stop_distance_points=1.0,
+        break_even_atr=0.75,
+        break_even_lock_atr=0.05,
+    )
+    assert ec.break_even_atr == 0.75
+    assert ec.break_even_lock_atr == 0.05
+
+    # Default should be None / 0.0
+    ec2 = ExitConfig()
+    assert ec2.break_even_atr is None
+    assert ec2.break_even_lock_atr == 0.0

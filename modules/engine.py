@@ -291,6 +291,16 @@ class MasterStrategyEngine:
                     self.position["mfe_points"] = max(float(self.position["mfe_points"]), high_p - entry_p)
                     self.position["highest_high_since_entry"] = max(float(self.position["highest_high_since_entry"]), high_p)
 
+                    # Break-even stop modifier (before checking protective stop)
+                    if exit_config.break_even_atr is not None:
+                        entry_atr = float(self.position.get("entry_atr", 10.0))
+                        mfe = float(self.position["mfe_points"])
+                        if mfe >= exit_config.break_even_atr * entry_atr:
+                            be_stop = entry_p + exit_config.break_even_lock_atr * entry_atr
+                            if be_stop > protective_stop_price:
+                                self.position["stop_price"] = be_stop
+                                protective_stop_price = be_stop
+
                     # Long stop
                     if low_p <= protective_stop_price:
                         stop_exit_price = protective_stop_price - (slippage_points / 2.0)
@@ -339,6 +349,16 @@ class MasterStrategyEngine:
                     self.position["mae_points"] = min(float(self.position["mae_points"]), -(high_p - entry_p))
                     self.position["mfe_points"] = max(float(self.position["mfe_points"]), -(low_p - entry_p))
                     self.position["lowest_low_since_entry"] = min(float(self.position["lowest_low_since_entry"]), low_p)
+
+                    # Break-even stop modifier for shorts
+                    if exit_config.break_even_atr is not None:
+                        entry_atr = float(self.position.get("entry_atr", 10.0))
+                        mfe = float(self.position["mfe_points"])
+                        if mfe >= exit_config.break_even_atr * entry_atr:
+                            be_stop = entry_p - exit_config.break_even_lock_atr * entry_atr
+                            if be_stop < protective_stop_price:
+                                self.position["stop_price"] = be_stop
+                                protective_stop_price = be_stop
 
                     # Short stop (stop is ABOVE entry)
                     if high_p >= protective_stop_price:
