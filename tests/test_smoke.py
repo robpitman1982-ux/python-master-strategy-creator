@@ -995,3 +995,40 @@ def test_efficiency_ratio_filter():
     m_below = f_below.mask(oscillating)
     # Choppy: ratio ≈ 0 → should pass below threshold
     assert m_below.iloc[14:].all()
+
+
+# ---------------------------------------------------------------------------
+# Test: ATRExpansionRatioFilter
+# ---------------------------------------------------------------------------
+
+def test_atr_expansion_ratio_filter():
+    from modules.filters import ATRExpansionRatioFilter
+
+    n = 200
+    rng = np.random.default_rng(99)
+    # First 100 bars: low vol. Next 100 bars: high vol
+    close = np.cumsum(np.concatenate([
+        rng.normal(0, 0.5, 100),
+        rng.normal(0, 5.0, 100),
+    ])) + 4500
+    high = close + np.concatenate([rng.uniform(0.5, 1, 100), rng.uniform(3, 8, 100)])
+    low = close - np.concatenate([rng.uniform(0.5, 1, 100), rng.uniform(3, 8, 100)])
+    df = pd.DataFrame({
+        "open": close,
+        "high": high,
+        "low": low,
+        "close": close,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+    from modules.feature_builder import add_precomputed_features
+    df = add_precomputed_features(df, avg_range_lookbacks=[10, 20, 50])
+
+    f_exp = ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=1.10, mode="expanding")
+    m = f_exp.mask(df)
+    # After the vol jump, short ATR should exceed long ATR → expanding
+    assert m.iloc[150:].any(), "Should detect expanding vol after regime change"
+
+    f_con = ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=0.85, mode="contracting")
+    m_con = f_con.mask(df)
+    # In the low-vol regime (bars 60-99), short ATR ≈ long ATR (both low), not clearly contracting
+    # But at least the filter shouldn't pass in the high-vol tail
+    assert not m_con.iloc[160:].all(), "Should not be contracting when vol is expanding"

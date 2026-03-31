@@ -11,6 +11,7 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.filter_combinator import build_filter_combo_name, generate_filter_combinations
 from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
+    ATRExpansionRatioFilter,
     ATRPercentileFilter,
     AboveLongTermSMAFilter,
     BaseFilter,
@@ -203,7 +204,7 @@ class MeanReversionStrategyType(BaseStrategyType):
 
     def get_required_avg_range_lookbacks(self, timeframe: str = "60m") -> list[int]:
         mult = get_timeframe_multiplier(timeframe)
-        return scale_lookbacks([20], mult, min_val=5)
+        return scale_lookbacks([10, 20, 50], mult, min_val=5)
 
     def get_required_momentum_lookbacks(self, timeframe: str = "60m") -> list[int]:
         return []
@@ -244,6 +245,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             ATRPercentileFilter,
             GapDownFilter,
             EfficiencyRatioFilter,
+            ATRExpansionRatioFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -257,6 +259,8 @@ class MeanReversionStrategyType(BaseStrategyType):
         for cls in combo_classes:
             if cls is EfficiencyRatioFilter:
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
+            elif cls is ATRExpansionRatioFilter:
+                filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=0.85, mode="contracting"))
             elif cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
@@ -347,6 +351,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
             elif cls is EfficiencyRatioFilter:
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
+            elif cls is ATRExpansionRatioFilter:
+                filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=0.85, mode="contracting"))
             else:
                 filters.append(cls())
 

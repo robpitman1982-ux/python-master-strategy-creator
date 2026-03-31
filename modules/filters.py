@@ -1337,6 +1337,52 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class ATRExpansionRatioFilter(BaseFilter):
+    """ATR(short) / ATR(long) measures volatility transition.
+    mode='expanding': passes when ratio >= threshold (vol expanding — breakout/trend).
+    mode='contracting': passes when ratio <= threshold (vol contracting — MR).
+    """
+    name = "ATRExpansionRatioFilter"
+
+    def __init__(self, short_period: int = 10, long_period: int = 50,
+                 threshold: float = 1.10, mode: str = "expanding"):
+        self.short_period = short_period
+        self.long_period = long_period
+        self.threshold = threshold
+        self.mode = mode
+
+    def _get_atr(self, data: pd.DataFrame, period: int) -> pd.Series:
+        col = f"atr_{period}"
+        if col in data.columns:
+            return data[col]
+        tr = data["true_range"] if "true_range" in data.columns else (data["high"] - data["low"])
+        return tr.rolling(period).mean()
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.long_period:
+            return False
+        short_atr = self._get_atr(data, self.short_period).iloc[i]
+        long_atr = self._get_atr(data, self.long_period).iloc[i]
+        if pd.isna(short_atr) or pd.isna(long_atr) or long_atr == 0:
+            return False
+        ratio = short_atr / long_atr
+        if self.mode == "expanding":
+            return bool(ratio >= self.threshold)
+        return bool(ratio <= self.threshold)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        short_atr = self._get_atr(data, self.short_period)
+        long_atr = self._get_atr(data, self.long_period)
+        ratio = short_atr / long_atr.replace(0, np.nan)
+        if self.mode == "expanding":
+            result = (ratio >= self.threshold).copy()
+        else:
+            result = (ratio <= self.threshold).copy()
+        warmup = self.long_period
+        result.iloc[:warmup] = False
+        return result.fillna(False)
+
+
 class EfficiencyRatioFilter(BaseFilter):
     """Kaufman Efficiency Ratio: abs(Close-Close[N]) / Sum(abs(Close[i]-Close[i-1]), i=1..N).
     mode='above': passes when ratio >= min_ratio (trend/breakout — clean directional move).
