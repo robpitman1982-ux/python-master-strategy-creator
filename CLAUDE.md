@@ -28,6 +28,7 @@ python-master-strategy-creator/
 ├── config.yaml                         # All pipeline configuration (datasets, engine, gates)
 ├── dashboard.py                        # Streamlit 3-tab dashboard: Control Panel, Results Explorer, System
 ├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, result loading
+├── generate_returns.py                 # Rebuild accepted strategies → strategy_returns.csv + strategy_trades.csv (parallel)
 ├── run_cloud_sweep.py                  # One-click wrapper around cloud.launch_gcp_run (auto-detects storage path)
 ├── paths.py                            # Shared path constants: REPO_ROOT, UPLOADS_DIR, RUNS_DIR, CONSOLE_STORAGE_ROOT (auto-detected)
 ├── scripts/
@@ -36,7 +37,8 @@ python-master-strategy-creator/
 ├── tests/
 │   ├── __init__.py
 │   ├── test_smoke.py                  # 30 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe, daily DD, program selector)
-│   └── test_subtypes.py               # 4 smoke tests covering strategy subtype registration and validity
+│   ├── test_subtypes.py               # 4 smoke tests covering strategy subtype registration and validity
+│   └── test_generate_returns.py       # 7 tests for parallel rebuild, data cache, folder naming
 ├── modules/
 │   ├── __init__.py
 │   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
@@ -257,6 +259,7 @@ Key sections:
 - [x] Verified rebuild works for ALL 20/20 market/timeframe combos (Session 49)
 - [x] Dashboard: short family support in live monitor (short_mean_reversion, short_trend, short_breakout) (Session 49)
 - [x] Dashboard inline pills: flex layout, skip empty groups, 0.95rem font, mini progress bars with color coding (Session 49)
+- [x] generate_returns.py parallelised — ThreadPoolExecutor for per-strategy rebuilds, _load_cached for data dedup (Session 53)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -329,4 +332,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-31 — Session 52: Prop firm program configs (High Stakes per-step targets, Pro Growth, daily DD, program selector)
+2026-03-31 — Session 53: Parallelise generate_returns.py (ThreadPoolExecutor, data cache, 7 new tests)

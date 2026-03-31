@@ -3,6 +3,28 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-03-31 — Session 53: Parallelise generate_returns.py
+
+**What was done**:
+Speed up returns generation by parallelising the per-strategy rebuild loop:
+
+- **ThreadPoolExecutor for strategy rebuilds**: Within each dataset group, strategies
+  are now rebuilt in parallel using `ThreadPoolExecutor(max_workers=os.cpu_count())`.
+  The loaded `data` DataFrame is shared read-only across threads. Expected ~4-5x
+  speedup locally (~20 min vs ~90 min), ~15-20x on 96-vCPU cloud.
+- **Data file caching**: Added `_load_cached()` with module-level `_data_cache` dict.
+  Groups sharing the same CSV file skip redundant `load_tradestation_csv` calls.
+- **7 new tests**: `tests/test_generate_returns.py` — covers `_dataset_to_folder`,
+  `_load_cached` dedup, and ThreadPoolExecutor result collection (None handling,
+  exception isolation).
+
+**Tests**: 41 pass (34 existing + 7 new generate_returns tests).
+
+**What's next**:
+- Run `python generate_returns.py` to verify parallel speedup locally
+- Run portfolio selector with `prop_firm_program: high_stakes` to compare vs Bootcamp
+- Re-run ES all timeframes with fixed portfolio evaluator
+
 ## 2026-03-31 — Session 52: Prop firm program configs + daily DD + program selector
 
 **What was done**:
