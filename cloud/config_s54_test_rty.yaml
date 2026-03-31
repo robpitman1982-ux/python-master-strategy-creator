@@ -18,9 +18,9 @@ engine:
 pipeline:
   skip_portfolio_evaluation: false
   skip_portfolio_selector: true
-  max_workers_sweep: 6
-  max_workers_refinement: 6
-  max_candidates_to_refine: 3
+  max_workers_sweep: 94
+  max_workers_refinement: 94
+  max_candidates_to_refine: 5
   oos_split_date: "2019-01-01"
 promotion_gate:
   min_profit_factor: 1.00
