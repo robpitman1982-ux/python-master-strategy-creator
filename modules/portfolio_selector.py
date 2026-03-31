@@ -1082,7 +1082,7 @@ def run_portfolio_selection(
     )
 
     # Write report (pass candidates for trade frequency estimation)
-    _write_report(optimised, output_dir, candidates)
+    _write_report(optimised, output_dir, candidates, prop_config=prop_config)
 
     # Print summary
     _print_summary(candidates, return_matrix, combinations, optimised)
@@ -1100,6 +1100,7 @@ def _write_report(
     portfolios: list[dict],
     output_dir: str,
     candidates: list[dict] | None = None,
+    prop_config: PropFirmConfig | None = None,
 ) -> None:
     """Write portfolio_selector_report.csv with time-to-fund estimates."""
     os.makedirs(output_dir, exist_ok=True)
@@ -1117,20 +1118,24 @@ def _write_report(
 
     rows: list[dict] = []
     for rank, p in enumerate(portfolios, 1):
-        step1 = p.get("opt_step1_pass_rate", p.get("step1_pass_rate", 0.0))
-        step2 = p.get("opt_step2_pass_rate", p.get("step2_pass_rate", 0.0))
-        step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
-        final = p.get("opt_final_pass_rate", p.get("final_pass_rate", step3))
+        cfg = prop_config or The5ersBootcampConfig()
+        n_steps = cfg.n_steps
+        # Get final step pass rate dynamically
+        final_rate = p.get(f"opt_step{n_steps}_pass_rate",
+                          p.get(f"step{n_steps}_pass_rate",
+                                p.get("opt_final_pass_rate",
+                                      p.get("final_pass_rate", 0.0))))
         p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
+        dd_limit = cfg.max_drawdown_pct
 
         # Count unique markets in portfolio
         strat_names = p.get("strategy_names", [])
         markets = set(n.split("_")[0] for n in strat_names if "_" in n)
         n_markets = len(markets)
 
-        if step3 > 0.6 and p95_dd < 0.045 and n_markets >= 3:
+        if final_rate > 0.6 and p95_dd < dd_limit * 0.9 and n_markets >= 3:
             verdict = "RECOMMENDED"
-        elif step3 > 0.3 and n_markets >= 2:
+        elif final_rate > 0.3 and n_markets >= 2:
             verdict = "VIABLE"
         else:
             verdict = "MARGINAL"
