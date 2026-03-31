@@ -1221,3 +1221,22 @@ def test_break_even_stop_modifier():
     ec2 = ExitConfig()
     assert ec2.break_even_atr is None
     assert ec2.break_even_lock_atr == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Test: Time-conditional early exit
+# ---------------------------------------------------------------------------
+
+def test_early_exit_config():
+    from modules.strategies import ExitConfig, ExitType
+
+    ec = ExitConfig(
+        exit_type=ExitType.TIME_STOP,
+        hold_bars=10,
+        stop_distance_points=1.0,
+        early_exit_bars=3,
+    )
+    assert ec.early_exit_bars == 3
+
+    ec2 = ExitConfig()
+    assert ec2.early_exit_bars is None

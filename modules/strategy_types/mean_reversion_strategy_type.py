@@ -204,6 +204,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             "profit_target_atr": [0.5, 1.0, 1.5, 2.0, 3.0],
             "signal_exit_reference": ["fast_sma"],
             "break_even_atr": [None, 0.75],
+            "early_exit_bars": [None, 3],
         }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:

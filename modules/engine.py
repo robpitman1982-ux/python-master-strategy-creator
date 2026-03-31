@@ -396,6 +396,21 @@ class MasterStrategyEngine:
                             i += 1
                             continue
 
+                # Early exit: cut losers after N bars if still losing
+                if exit_config.early_exit_bars is not None and bars_held >= exit_config.early_exit_bars:
+                    if is_long_pos:
+                        unrealized = close_p - entry_p
+                    else:
+                        unrealized = entry_p - close_p
+                    if unrealized < 0:
+                        if is_long_pos:
+                            early_price = close_p - (slippage_points / 2.0)
+                        else:
+                            early_price = close_p + (slippage_points / 2.0)
+                        self._close_position(exit_time=ts_val, exit_price=early_price, bars_held=bars_held, exit_reason="EARLY_EXIT")
+                        i += 1
+                        continue
+
                 # Time exit (same for both long and short)
                 if bars_held >= hb:
                     if is_long_pos:

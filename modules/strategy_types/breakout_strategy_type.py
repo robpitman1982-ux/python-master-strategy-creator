@@ -202,6 +202,7 @@ class BreakoutStrategyType(BaseStrategyType):
             "exit_type": [ExitType.TIME_STOP, ExitType.TRAILING_STOP],
             "trailing_stop_atr": [1.5, 2.5, 3.5, 5.0],
             "break_even_atr": [None, 0.75],
+            "early_exit_bars": [None, 3],
         }
 
     def get_required_sma_lengths(self, timeframe: str = "60m") -> list[int]:
