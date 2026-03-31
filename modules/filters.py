@@ -1337,6 +1337,62 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class WickRejectionFilter(BaseFilter):
+    """Pin bar / wick rejection filter.
+    Long: large lower wick + close near high → buying rejection of lows.
+    Short: large upper wick + close near low → selling rejection of highs.
+    """
+    name = "WickRejectionFilter"
+
+    def __init__(self, wick_ratio: float = 0.5, close_position: float = 0.70,
+                 min_range_mult: float = 1.0, direction: str = "long"):
+        self.wick_ratio = wick_ratio
+        self.close_position = close_position
+        self.min_range_mult = min_range_mult
+        self.direction = direction
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < 20:
+            return False
+        bar = data.iloc[i]
+        full_range = bar["high"] - bar["low"]
+        if full_range <= 0:
+            return False
+        atr_col = "atr_20"
+        atr = data[atr_col].iloc[i] if atr_col in data.columns else full_range
+        if pd.isna(atr) or atr <= 0:
+            return False
+        if full_range < atr * self.min_range_mult:
+            return False
+        if self.direction == "long":
+            lower_wick = min(bar["open"], bar["close"]) - bar["low"]
+            wick_ok = (lower_wick / full_range) >= self.wick_ratio
+            close_ok = (bar["close"] - bar["low"]) / full_range >= self.close_position
+        else:
+            upper_wick = bar["high"] - max(bar["open"], bar["close"])
+            wick_ok = (upper_wick / full_range) >= self.wick_ratio
+            close_ok = (bar["high"] - bar["close"]) / full_range >= self.close_position
+        return bool(wick_ok and close_ok)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        full_range = data["high"] - data["low"]
+        atr_col = "atr_20"
+        atr = data[atr_col] if atr_col in data.columns else full_range
+        range_ok = full_range >= atr * self.min_range_mult
+        safe_range = full_range.replace(0, np.nan)
+        if self.direction == "long":
+            lower_wick = np.minimum(data["open"], data["close"]) - data["low"]
+            wick_ok = (lower_wick / safe_range) >= self.wick_ratio
+            close_ok = (data["close"] - data["low"]) / safe_range >= self.close_position
+        else:
+            upper_wick = data["high"] - np.maximum(data["open"], data["close"])
+            wick_ok = (upper_wick / safe_range) >= self.wick_ratio
+            close_ok = (data["high"] - data["close"]) / safe_range >= self.close_position
+        result = (wick_ok & close_ok & range_ok).copy()
+        result.iloc[:20] = False
+        return result.fillna(False)
+
+
 class ATRExpansionRatioFilter(BaseFilter):
     """ATR(short) / ATR(long) measures volatility transition.
     mode='expanding': passes when ratio >= threshold (vol expanding — breakout/trend).

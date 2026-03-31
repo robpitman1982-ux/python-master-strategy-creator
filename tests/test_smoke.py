@@ -1032,3 +1032,39 @@ def test_atr_expansion_ratio_filter():
     # In the low-vol regime (bars 60-99), short ATR ≈ long ATR (both low), not clearly contracting
     # But at least the filter shouldn't pass in the high-vol tail
     assert not m_con.iloc[160:].all(), "Should not be contracting when vol is expanding"
+
+
+# ---------------------------------------------------------------------------
+# Test: WickRejectionFilter
+# ---------------------------------------------------------------------------
+
+def test_wick_rejection_filter():
+    from modules.filters import WickRejectionFilter
+
+    # Classic hammer candle: close near high, long lower wick
+    hammer = pd.DataFrame({
+        "open": [100.0] * 50,
+        "high": [105.0] * 50,
+        "low": [90.0] * 50,
+        "close": [104.0] * 50,
+    }, index=pd.date_range("2020-01-01", periods=50, freq="h"))
+    from modules.feature_builder import add_precomputed_features
+    hammer = add_precomputed_features(hammer, avg_range_lookbacks=[20])
+
+    f = WickRejectionFilter(wick_ratio=0.5, close_position=0.70, min_range_mult=0.5, direction="long")
+    m = f.mask(hammer)
+    # lower_wick = 100-90=10, range=15, wick_ratio=10/15=0.67 >= 0.5 ✓
+    # close_pos = (104-90)/15 = 0.93 >= 0.70 ✓
+    assert m.iloc[20:].all()
+
+    # Doji: close ≈ open near middle → fails
+    doji = pd.DataFrame({
+        "open": [100.0] * 50,
+        "high": [105.0] * 50,
+        "low": [95.0] * 50,
+        "close": [100.0] * 50,
+    }, index=pd.date_range("2020-01-01", periods=50, freq="h"))
+    doji = add_precomputed_features(doji, avg_range_lookbacks=[20])
+    m_doji = f.mask(doji)
+    # close_pos = (100-95)/10 = 0.5 < 0.70 → fails
+    assert not m_doji.iloc[20:].any()

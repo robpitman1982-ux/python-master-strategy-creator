@@ -27,6 +27,7 @@ from modules.filters import (
     StretchFromLongTermSMAFilter,
     ThreeBarDownFilter,
     TwoBarDownFilter,
+    WickRejectionFilter,
 )
 from modules.refiner import StrategyParameterRefiner
 from modules.strategies import ExitType, build_exit_config
@@ -246,6 +247,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             GapDownFilter,
             EfficiencyRatioFilter,
             ATRExpansionRatioFilter,
+            WickRejectionFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -261,6 +263,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=0.85, mode="contracting"))
+            elif cls is WickRejectionFilter:
+                filters.append(WickRejectionFilter(wick_ratio=0.5, close_position=0.70, min_range_mult=1.0, direction="long"))
             elif cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
@@ -353,6 +357,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=0.85, mode="contracting"))
+            elif cls is WickRejectionFilter:
+                filters.append(WickRejectionFilter(wick_ratio=0.5, close_position=0.70, min_range_mult=1.0, direction="long"))
             else:
                 filters.append(cls())
 
