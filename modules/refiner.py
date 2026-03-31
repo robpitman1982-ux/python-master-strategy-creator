@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 import time
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -57,18 +58,30 @@ def _init_refinement_worker(
 
 
 def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
-    strategy = _WORKER_STRATEGY_FACTORY(
-        hold_bars=task["hold_bars"],
-        stop_distance_points=task["stop_distance_points"],
-        min_avg_range=task["min_avg_range"],
-        momentum_lookback=task["momentum_lookback"],
-        exit_type=task.get("exit_type"),
-        profit_target_atr=task.get("profit_target_atr"),
-        trailing_stop_atr=task.get("trailing_stop_atr"),
-        signal_exit_reference=task.get("signal_exit_reference"),
-        break_even_atr=task.get("break_even_atr"),
-        early_exit_bars=task.get("early_exit_bars"),
+    strategy_kwargs = {
+        "hold_bars": task["hold_bars"],
+        "stop_distance_points": task["stop_distance_points"],
+        "min_avg_range": task["min_avg_range"],
+        "momentum_lookback": task["momentum_lookback"],
+        "exit_type": task.get("exit_type"),
+        "profit_target_atr": task.get("profit_target_atr"),
+        "trailing_stop_atr": task.get("trailing_stop_atr"),
+        "signal_exit_reference": task.get("signal_exit_reference"),
+        "break_even_atr": task.get("break_even_atr"),
+        "early_exit_bars": task.get("early_exit_bars"),
+    }
+    signature = inspect.signature(_WORKER_STRATEGY_FACTORY)
+    accepts_var_kwargs = any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in signature.parameters.values()
     )
+    if not accepts_var_kwargs:
+        strategy_kwargs = {
+            key: value
+            for key, value in strategy_kwargs.items()
+            if key in signature.parameters
+        }
+    strategy = _WORKER_STRATEGY_FACTORY(**strategy_kwargs)
 
     engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
     engine.run(strategy=strategy, precomputed_signals=_WORKER_PRECOMPUTED_SIGNALS)

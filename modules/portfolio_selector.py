@@ -555,24 +555,28 @@ def _compute_dd_overlap(return_matrix: pd.DataFrame, col_a: str, col_b: str, dd_
     """
     if col_a not in return_matrix.columns or col_b not in return_matrix.columns:
         return None
-    a = return_matrix[col_a].fillna(0)
-    b = return_matrix[col_b].fillna(0)
-    # Only consider days where both have non-zero returns
-    active = (a != 0) | (b != 0)
+    a = return_matrix[col_a].fillna(0.0)
+    b = return_matrix[col_b].fillna(0.0)
+    # Only consider calendar days where BOTH strategies are active.
+    active = (a != 0.0) & (b != 0.0)
     if active.sum() < 252:
         return None
-    # Compute equity curves and drawdowns
-    eq_a = (1 + a).cumprod()
-    eq_b = (1 + b).cumprod()
+    # strategy_returns.csv stores daily PnL, not fractional returns, so
+    # build a cumulative equity curve off a fixed capital base rather
+    # than compounding raw dollar values.
+    base_equity = 100_000.0
+    a_active = a[active]
+    b_active = b[active]
+    eq_a = base_equity + a_active.cumsum()
+    eq_b = base_equity + b_active.cumsum()
     dd_a = eq_a / eq_a.cummax() - 1
     dd_b = eq_b / eq_b.cummax() - 1
     # Binary: 1 if drawdown exceeds threshold
     in_dd_a = (dd_a < -dd_threshold).astype(float)
     in_dd_b = (dd_b < -dd_threshold).astype(float)
-    # Only on active days
-    both_active = active.sum()
-    overlap = (in_dd_a * in_dd_b * active.astype(float)).sum()
-    return float(overlap / both_active) if both_active > 0 else 0.0
+    overlap = (in_dd_a * in_dd_b).sum()
+    n_active = len(a_active)
+    return float(overlap / n_active) if n_active > 0 else 0.0
 
 
 def sweep_combinations(
@@ -856,6 +860,7 @@ def optimise_sizing(
     top_portfolios: list[dict],
     return_matrix: pd.DataFrame,
     n_sims: int = 1_000,
+    final_n_sims: int = 10_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
     min_pass_rate: float = 0.40,
     prop_config: PropFirmConfig | None = None,
@@ -872,22 +877,15 @@ def optimise_sizing(
     weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
     n_weight_opts = len(weight_options)
     results: list[dict] = []
+    max_weight_samples = 250
 
     for i, portfolio in enumerate(top_portfolios[:10]):
         names = portfolio["strategy_names"]
         n_strats = len(names)
 
-        # Guard: n_weight_opts^n > 10,000 -> skip sizing
+        # Cap the brute-force sizing search so large portfolios don't stall
+        # the whole selector or test suite.
         total_weight_combos = n_weight_opts ** n_strats
-        if total_weight_combos > 10_000:
-            logger.warning(
-                f"Portfolio {i + 1}: {n_weight_opts}^{n_strats} = {total_weight_combos} weight combos — "
-                f"skipping sizing, using default weights"
-            )
-            portfolio["micro_multiplier"] = {s: 0.1 for s in names}
-            portfolio["sizing_optimised"] = False
-            results.append(portfolio)
-            continue
 
         # Use raw trade lists if available, else fall back to return matrix
         trade_lists: dict[str, list[float]] = {}
@@ -917,7 +915,25 @@ def optimise_sizing(
             f"{n_weight_opts**len(strat_names_in_matrix)} weight combos x {n_sims} sims"
         )
 
-        for weight_combo in itertools.product(weight_options, repeat=len(strat_names_in_matrix)):
+        combo_width = len(strat_names_in_matrix)
+        if total_weight_combos > max_weight_samples:
+            sampled_indices = sorted(random.Random(42 + i).sample(range(total_weight_combos), max_weight_samples))
+            logger.info(
+                f"Sizing optimisation {i + 1}: sampling {max_weight_samples}/{total_weight_combos} weight combos"
+            )
+
+            weight_combo_iter = []
+            for combo_index in sampled_indices:
+                idx = combo_index
+                combo: list[float] = []
+                for _ in range(combo_width):
+                    combo.append(weight_options[idx % n_weight_opts])
+                    idx //= n_weight_opts
+                weight_combo_iter.append(tuple(combo))
+        else:
+            weight_combo_iter = itertools.product(weight_options, repeat=combo_width)
+
+        for weight_combo in weight_combo_iter:
             weights = dict(zip(strat_names_in_matrix, weight_combo))
 
             mc = portfolio_monte_carlo(
@@ -952,11 +968,11 @@ def optimise_sizing(
         if best_weights is None:
             best_weights = {s: 0.1 for s in strat_names_in_matrix}
 
-        # Final MC at full sim count with optimised weights — all step rates
-        # from the SAME experiment so they're comparable
+        # Final MC at the requested final sim count — all step rates
+        # from the SAME experiment so they're comparable.
         final_mc = portfolio_monte_carlo(
             trade_lists, config,
-            n_sims=10_000,
+            n_sims=final_n_sims,
             contract_weights=best_weights,
             seed=99,
         )
@@ -989,8 +1005,9 @@ def run_portfolio_selection(
     leaderboard_path: str = "Outputs/ultimate_leaderboard_bootcamp.csv",
     runs_base_path: str = "Outputs/runs",
     output_dir: str = "Outputs",
-    n_sims_mc: int = 10_000,
-    n_sims_sizing: int = 1_000,
+    n_sims_mc: int | None = None,
+    n_sims_sizing: int | None = None,
+    n_sims_final: int | None = None,
     config: dict | None = None,
 ) -> dict:
     """Run the full 6-stage portfolio selection pipeline.
@@ -1009,8 +1026,12 @@ def run_portfolio_selection(
         except Exception:
             config = {}
     ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {}) if config else {}
-    n_sims_mc = int(ps_cfg.get("n_sims_mc", n_sims_mc))
-    n_sims_sizing = int(ps_cfg.get("n_sims_sizing", n_sims_sizing))
+    if n_sims_mc is None:
+        n_sims_mc = int(ps_cfg.get("n_sims_mc", 10_000))
+    if n_sims_sizing is None:
+        n_sims_sizing = int(ps_cfg.get("n_sims_sizing", 1_000))
+    if n_sims_final is None:
+        n_sims_final = int(ps_cfg.get("n_sims_final", n_sims_mc))
 
     # Resolve prop firm program
     program = str(ps_cfg.get("prop_firm_program", "bootcamp"))
@@ -1078,6 +1099,7 @@ def run_portfolio_selection(
 
     optimised = optimise_sizing(
         mc_results, return_matrix, n_sims=n_sims_sizing,
+        final_n_sims=n_sims_final,
         raw_trade_lists=raw_trades if raw_trades else None,
         min_pass_rate=min_pass_rate,
         prop_config=prop_config,
@@ -1172,7 +1194,7 @@ def _write_report(
             "strategy_names": "|".join(strat_names),
             "n_strategies": p.get("n_strategies", 0),
         }
-        for si in range(1, n_steps + 1):
+        for si in range(1, max(n_steps, 3) + 1):
             rate = p.get(f"opt_step{si}_pass_rate", p.get(f"step{si}_pass_rate", 0.0))
             row[f"step{si}_pass_rate"] = round(rate, 4)
         row.update({

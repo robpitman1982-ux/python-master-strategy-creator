@@ -631,7 +631,7 @@ def _compute_calmar_ratio(row: pd.Series) -> float:
     return round(abs(annual_return / max_dd), 4)
 
 
-def _compute_is_oos_pf_ratio(row: pd.Series) -> float:
+def _compute_oos_is_pf_ratio(row: pd.Series) -> float:
     """OOS PF / IS PF. Close to 1.0 = consistent. >1 = OOS-heavy. <1 = IS-heavy (overfit)."""
     is_pf = float(row.get("is_pf", 0.0) or 0.0)
     oos_pf = float(row.get("oos_pf", 0.0) or 0.0)
@@ -650,7 +650,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
 
     leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
     leaderboard["calmar_ratio"] = leaderboard.apply(_compute_calmar_ratio, axis=1)
-    leaderboard["is_oos_pf_ratio"] = leaderboard.apply(_compute_is_oos_pf_ratio, axis=1)
+    leaderboard["oos_is_pf_ratio"] = leaderboard.apply(_compute_oos_is_pf_ratio, axis=1)
     leaderboard = add_bootcamp_scores(leaderboard)
 
     leaderboard = leaderboard.sort_values(
@@ -681,7 +681,7 @@ def build_family_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
         "leader_max_drawdown",
         "leader_win_rate",
         "calmar_ratio",
-        "is_oos_pf_ratio",
+        "oos_is_pf_ratio",
         "leader_quality_score",
         "leader_pct_profitable_years",
         "leader_max_consecutive_losing_years",
