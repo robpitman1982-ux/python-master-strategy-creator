@@ -780,19 +780,21 @@ def portfolio_monte_carlo(
             vals = [st[i] for st in step_trades_list if i < len(st)]
             step_median_trades.append(float(np.median(vals)) if vals else 0.0)
 
-    return {
+    mc_result: dict = {
         "pass_rate": pass_count / n_sims,
-        "step1_pass_rate": step_pass_rates[0] if len(step_pass_rates) > 0 else 0.0,
-        "step2_pass_rate": step_pass_rates[1] if len(step_pass_rates) > 1 else 0.0,
-        "step3_pass_rate": step_pass_rates[2] if len(step_pass_rates) > 2 else 0.0,
         "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
+    }
+    for si, rate in enumerate(step_pass_rates):
+        mc_result[f"step{si + 1}_pass_rate"] = rate
+    mc_result.update({
         "median_worst_dd_pct": float(np.median(worst_dd_arr)),
         "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
         "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
         "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
         "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
         "step_median_trades": step_median_trades,
-    }
+    })
+    return mc_result
 
 
 def run_bootcamp_mc(
@@ -839,7 +841,7 @@ def run_bootcamp_mc(
         result = {**combo, **mc}
         results.append(result)
 
-    # Sort by final step pass rate (step3 for bootcamp, step2 for high stakes, etc.)
+    # Sort by final step pass rate (dynamic: stepN for N-step programs)
     final_step_key = f"step{config.n_steps}_pass_rate"
     results.sort(key=lambda r: r.get(final_step_key, r.get("pass_rate", 0.0)), reverse=True)
     logger.info(f"MC complete for {len(results)} portfolios ({config.program_name})")
@@ -1165,13 +1167,16 @@ def _write_report(
         est_months_median = median_trades / trades_per_month if trades_per_month > 0 else 0
         est_months_p75 = p75_trades / trades_per_month if trades_per_month > 0 else 0
 
-        rows.append({
+        row: dict = {
             "rank": rank,
             "strategy_names": "|".join(strat_names),
             "n_strategies": p.get("n_strategies", 0),
-            "step1_pass_rate": round(step1, 4),
-            "step2_pass_rate": round(step2, 4),
-            "step3_pass_rate": round(step3, 4),
+        }
+        for si in range(1, n_steps + 1):
+            rate = p.get(f"opt_step{si}_pass_rate", p.get(f"step{si}_pass_rate", 0.0))
+            row[f"step{si}_pass_rate"] = round(rate, 4)
+        row.update({
+            "final_pass_rate": round(final_rate, 4),
             "p95_worst_dd_pct": round(p95_dd, 4),
             "avg_oos_pf": round(p.get("avg_oos_pf", 0.0), 4),
             "avg_correlation": round(p.get("avg_corr", 0.0), 4),
@@ -1184,6 +1189,7 @@ def _write_report(
             "est_months_p75": round(est_months_p75, 1),
             "verdict": verdict,
         })
+        rows.append(row)
 
     df = pd.DataFrame(rows)
     df.to_csv(out_path, index=False)
@@ -1211,8 +1217,7 @@ def _print_summary(
         print("  Top 3 portfolios by pass rate:")
         for i, p in enumerate(top3, 1):
             names = p.get("strategy_names", [])
-            final_rate = p.get("opt_final_pass_rate", p.get("final_pass_rate", 
-                         p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))))
+            final_rate = p.get("opt_final_pass_rate", p.get("final_pass_rate", 0.0))
             p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
             # Names are "MARKET_TIMEFRAME_STRATEGYNAME" — show "MARKET TF TYPE" for readability
             short_names = []
