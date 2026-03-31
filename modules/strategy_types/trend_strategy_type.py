@@ -14,6 +14,7 @@ from modules.filters import (
     ATRExpansionRatioFilter,
     BaseFilter,
     CloseAboveFastSMAFilter,
+    DistanceFromExtremeFilter,
     EfficiencyRatioFilter,
     HigherHighFilter,
     HigherLowFilter,
@@ -244,6 +245,7 @@ class TrendStrategyType(BaseStrategyType):
             OutsideBarFilter,
             EfficiencyRatioFilter,
             ATRExpansionRatioFilter,
+            DistanceFromExtremeFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -277,6 +279,8 @@ class TrendStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=1.10, mode="expanding"))
+            elif cls is DistanceFromExtremeFilter:
+                filters.append(DistanceFromExtremeFilter(lookback=max(5, round(20 * mult)), atr_period=20, threshold=0.8, mode="near_high"))
             else:
                 filters.append(cls())
 
@@ -338,6 +342,8 @@ class TrendStrategyType(BaseStrategyType):
                 filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             elif cls is ATRExpansionRatioFilter:
                 filters.append(ATRExpansionRatioFilter(short_period=10, long_period=50, threshold=1.10, mode="expanding"))
+            elif cls is DistanceFromExtremeFilter:
+                filters.append(DistanceFromExtremeFilter(lookback=max(5, round(20 * mult)), atr_period=20, threshold=0.8, mode="near_high"))
             else:
                 filters.append(cls())
 

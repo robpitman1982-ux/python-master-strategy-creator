@@ -1337,6 +1337,55 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class DistanceFromExtremeFilter(BaseFilter):
+    """Distance from rolling high/low in ATR units.
+    far_from_high: (rolling_high - Close) / ATR >= threshold (MR — stretched down)
+    near_high: (rolling_high - Close) / ATR <= threshold (trend — near highs)
+    far_from_low: (Close - rolling_low) / ATR >= threshold (short MR — stretched up)
+    near_low: (Close - rolling_low) / ATR <= threshold (short trend — near lows)
+    """
+    name = "DistanceFromExtremeFilter"
+
+    def __init__(self, lookback: int = 20, atr_period: int = 20,
+                 threshold: float = 1.5, mode: str = "far_from_high"):
+        self.lookback = lookback
+        self.atr_period = atr_period
+        self.threshold = threshold
+        self.mode = mode
+
+    def _compute_distance(self, data: pd.DataFrame) -> pd.Series:
+        atr_col = f"atr_{self.atr_period}"
+        atr = data[atr_col] if atr_col in data.columns else data["bar_range"].rolling(self.atr_period).mean()
+        safe_atr = atr.replace(0, np.nan)
+        if self.mode in ("far_from_high", "near_high"):
+            extreme = data["high"].rolling(self.lookback).max()
+            return (extreme - data["close"]) / safe_atr
+        else:
+            extreme = data["low"].rolling(self.lookback).min()
+            return (data["close"] - extreme) / safe_atr
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        warmup = max(self.lookback, self.atr_period)
+        if i < warmup:
+            return False
+        dist = self._compute_distance(data).iloc[i]
+        if pd.isna(dist):
+            return False
+        if self.mode in ("far_from_high", "far_from_low"):
+            return bool(dist >= self.threshold)
+        return bool(dist <= self.threshold)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        dist = self._compute_distance(data)
+        if self.mode in ("far_from_high", "far_from_low"):
+            result = (dist >= self.threshold).copy()
+        else:
+            result = (dist <= self.threshold).copy()
+        warmup = max(self.lookback, self.atr_period)
+        result.iloc[:warmup] = False
+        return result.fillna(False)
+
+
 class ConsecutiveNarrowRangeFilter(BaseFilter):
     """Multi-bar contraction: counts bars in last N where range < avg_range * ratio.
     Passes when count >= min_narrow_count. Better than single-bar InsideBar for

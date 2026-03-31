@@ -19,6 +19,7 @@ from modules.filters import (
     CloseNearLowFilter,
     CumulativeDeclineFilter,
     DistanceBelowSMAFilter,
+    DistanceFromExtremeFilter,
     DownCloseFilter,
     EfficiencyRatioFilter,
     GapDownFilter,
@@ -250,6 +251,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             ATRExpansionRatioFilter,
             WickRejectionFilter,
             CumulativeDeclineFilter,
+            DistanceFromExtremeFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -269,6 +271,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(WickRejectionFilter(wick_ratio=0.5, close_position=0.70, min_range_mult=1.0, direction="long"))
             elif cls is CumulativeDeclineFilter:
                 filters.append(CumulativeDeclineFilter(lookback=4, atr_period=20, min_decline_atr=1.5, direction="long"))
+            elif cls is DistanceFromExtremeFilter:
+                filters.append(DistanceFromExtremeFilter(lookback=max(5, round(20 * mult)), atr_period=20, threshold=1.5, mode="far_from_high"))
             elif cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
@@ -365,6 +369,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(WickRejectionFilter(wick_ratio=0.5, close_position=0.70, min_range_mult=1.0, direction="long"))
             elif cls is CumulativeDeclineFilter:
                 filters.append(CumulativeDeclineFilter(lookback=4, atr_period=20, min_decline_atr=1.5, direction="long"))
+            elif cls is DistanceFromExtremeFilter:
+                filters.append(DistanceFromExtremeFilter(lookback=max(5, round(20 * mult)), atr_period=20, threshold=1.5, mode="far_from_high"))
             else:
                 filters.append(cls())
 

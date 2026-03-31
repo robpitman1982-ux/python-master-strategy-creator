@@ -1131,3 +1131,36 @@ def test_consecutive_narrow_range_filter():
     assert m.iloc[32:35].any(), "Should detect multi-bar compression"
     # Before the compression zone, should not fire
     assert not m.iloc[20:28].any(), "Should not fire before compression"
+
+
+# ---------------------------------------------------------------------------
+# Test: DistanceFromExtremeFilter
+# ---------------------------------------------------------------------------
+
+def test_distance_from_extreme_filter():
+    from modules.filters import DistanceFromExtremeFilter
+
+    n = 60
+    # Price starts at 100, then drops to 80 (20 pts below rolling high of 100)
+    close = np.full(n, 100.0)
+    close[30:] = 80.0  # dropped 20 pts
+
+    df = pd.DataFrame({
+        "open": close,
+        "high": close + 5,
+        "low": close - 5,
+        "close": close,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+    from modules.feature_builder import add_precomputed_features
+    df = add_precomputed_features(df, avg_range_lookbacks=[20])
+
+    f = DistanceFromExtremeFilter(lookback=20, atr_period=20, threshold=1.5, mode="far_from_high")
+    m = f.mask(df)
+    # At bar 30+: rolling_high(20)=105 (from high col), close=80, ATR≈10
+    # distance = (105-80)/10 = 2.5 >= 1.5 → should pass
+    assert m.iloc[35:].any(), "Should detect stretched-from-high condition"
+
+    f_near = DistanceFromExtremeFilter(lookback=20, atr_period=20, threshold=0.8, mode="near_high")
+    m_near = f_near.mask(df)
+    # In first 30 bars: close=100, high=105, distance=(105-100)/10=0.5 <= 0.8 → near
+    assert m_near.iloc[20:29].any(), "Should detect near-high condition"
