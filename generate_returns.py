@@ -23,6 +23,16 @@ LEADERBOARD_PATH = REPO_ROOT / "Outputs" / "ultimate_leaderboard_bootcamp.csv"
 DATA_DIR = REPO_ROOT / "Data"
 RUNS_DIR = REPO_ROOT / "Outputs" / "runs"
 
+_data_cache: dict[str, pd.DataFrame] = {}
+
+
+def _load_cached(data_csv: Path) -> pd.DataFrame:
+    """Load a CSV, returning cached copy if already loaded."""
+    key = str(data_csv)
+    if key not in _data_cache:
+        _data_cache[key] = load_tradestation_csv(data_csv)
+    return _data_cache[key]
+
 
 def _dataset_to_folder(dataset: str) -> str:
     """'NQ_daily_2008_2026_tradestation.csv' -> 'NQ_daily'."""
@@ -77,9 +87,9 @@ def main() -> None:
             print(f"  SKIP: Outputs dir not found: {outputs_dir}")
             continue
 
-        # Load data once for this dataset
+        # Load data once for this dataset (cached across groups sharing same CSV)
         t0 = time.time()
-        data = load_tradestation_csv(data_csv)
+        data = _load_cached(data_csv)
         print(f"  Data loaded: {len(data)} bars ({time.time() - t0:.1f}s)")
 
         # Build daily returns and per-trade PnL for each strategy
