@@ -548,6 +548,33 @@ _EQUITY_INDEX_MARKETS = {"ES", "NQ", "RTY", "YM"}
 _METALS_MARKETS = {"GC", "SI", "HG"}
 
 
+def _compute_dd_overlap(return_matrix: pd.DataFrame, col_a: str, col_b: str, dd_threshold: float = 0.02) -> float | None:
+    """Compute drawdown overlap ratio between two strategies.
+    Returns fraction of overlapping days both are in drawdown > threshold.
+    Returns None if overlap period is too short (< 252 days).
+    """
+    if col_a not in return_matrix.columns or col_b not in return_matrix.columns:
+        return None
+    a = return_matrix[col_a].fillna(0)
+    b = return_matrix[col_b].fillna(0)
+    # Only consider days where both have non-zero returns
+    active = (a != 0) | (b != 0)
+    if active.sum() < 252:
+        return None
+    # Compute equity curves and drawdowns
+    eq_a = (1 + a).cumprod()
+    eq_b = (1 + b).cumprod()
+    dd_a = eq_a / eq_a.cummax() - 1
+    dd_b = eq_b / eq_b.cummax() - 1
+    # Binary: 1 if drawdown exceeds threshold
+    in_dd_a = (dd_a < -dd_threshold).astype(float)
+    in_dd_b = (dd_b < -dd_threshold).astype(float)
+    # Only on active days
+    both_active = active.sum()
+    overlap = (in_dd_a * in_dd_b * active.astype(float)).sum()
+    return float(overlap / both_active) if both_active > 0 else 0.0
+
+
 def sweep_combinations(
     candidates: list[dict],
     corr_matrix: pd.DataFrame,
@@ -556,6 +583,7 @@ def sweep_combinations(
     n_max: int = 8,
     max_per_market: int = 2,
     max_equity_index: int = 3,
+    max_dd_overlap: float = 0.30,
 ) -> list[dict]:
     """Sweep all C(n,k) combinations, reject high-correlation pairs, score survivors."""
     # Only use candidates that are in the return matrix
@@ -632,6 +660,21 @@ def sweep_combinations(
             if equity_count > max_equity_index:
                 n_rejected += 1
                 continue
+
+            # Drawdown overlap check
+            if max_dd_overlap < 1.0:
+                dd_rejected = False
+                for ci in range(len(combo)):
+                    for cj in range(ci + 1, len(combo)):
+                        dd_ov = _compute_dd_overlap(return_matrix, combo[ci], combo[cj])
+                        if dd_ov is not None and dd_ov > max_dd_overlap:
+                            dd_rejected = True
+                            break
+                    if dd_rejected:
+                        break
+                if dd_rejected:
+                    n_rejected += 1
+                    continue
 
             # Compute scores
             avg_oos_pf = mean(
@@ -1003,6 +1046,7 @@ def run_portfolio_selection(
         candidates, corr_matrix, return_matrix,
         max_per_market=int(ps_cfg.get("max_strategies_per_market", 2)),
         max_equity_index=int(ps_cfg.get("max_equity_index_strategies", 3)),
+        max_dd_overlap=float(ps_cfg.get("max_dd_overlap", 0.30)),
     )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")
