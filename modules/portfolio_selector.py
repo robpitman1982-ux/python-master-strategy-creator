@@ -929,6 +929,10 @@ def optimise_sizing(
             dd = mc["p95_worst_dd_pct"]
             trades = mc["median_trades_to_pass"]
 
+            # Reject weight combos that exceed the program's max DD
+            if dd > config.max_drawdown_pct:
+                continue
+
             # Minimize trades-to-pass subject to pass_rate >= min_pass_rate
             if pass_rate >= min_pass_rate:
                 if trades > 0 and (best_trades is None or trades < best_trades):
