@@ -1337,6 +1337,46 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class EfficiencyRatioFilter(BaseFilter):
+    """Kaufman Efficiency Ratio: abs(Close-Close[N]) / Sum(abs(Close[i]-Close[i-1]), i=1..N).
+    mode='above': passes when ratio >= min_ratio (trend/breakout — clean directional move).
+    mode='below': passes when ratio <= min_ratio (MR — choppy/ranging).
+    """
+    name = "EfficiencyRatioFilter"
+
+    def __init__(self, lookback: int = 14, min_ratio: float = 0.45, mode: str = "above"):
+        self.lookback = lookback
+        self.min_ratio = min_ratio
+        self.mode = mode
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < self.lookback:
+            return False
+        closes = data["close"].iloc[i - self.lookback : i + 1].values
+        direction = abs(closes[-1] - closes[0])
+        volatility = np.sum(np.abs(np.diff(closes)))
+        ratio = direction / volatility if volatility > 0 else 0.0
+        if self.mode == "above":
+            return bool(ratio >= self.min_ratio)
+        return bool(ratio <= self.min_ratio)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        close = data["close"].values
+        n = len(close)
+        ratios = np.full(n, np.nan)
+        abs_diff = np.abs(np.diff(close))
+        for i in range(self.lookback, n):
+            direction = abs(close[i] - close[i - self.lookback])
+            volatility = abs_diff[i - self.lookback : i].sum()
+            ratios[i] = direction / volatility if volatility > 0 else 0.0
+        if self.mode == "above":
+            result = pd.Series(ratios >= self.min_ratio, index=data.index)
+        else:
+            result = pd.Series(ratios <= self.min_ratio, index=data.index)
+        result.iloc[: self.lookback] = False
+        return result.fillna(False)
+
+
 class LowerLowFilter(BaseFilter):
     """Current low < previous low (breakdown structure)."""
     name = "LowerLowFilter"

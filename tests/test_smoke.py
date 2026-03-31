@@ -955,3 +955,43 @@ def test_program_selector_resolver():
     # Unknown falls back to bootcamp
     fallback = _resolve_prop_config("unknown_program", 100_000)
     assert fallback.program_name == "Bootcamp"
+
+
+# ---------------------------------------------------------------------------
+# Test: EfficiencyRatioFilter
+# ---------------------------------------------------------------------------
+
+def test_efficiency_ratio_filter():
+    from modules.filters import EfficiencyRatioFilter
+
+    n = 100
+    # Perfectly trending data: close goes up by 1 each bar
+    trending = pd.DataFrame({
+        "open": np.arange(100, 100 + n, dtype=float),
+        "high": np.arange(101, 101 + n, dtype=float),
+        "low": np.arange(99, 99 + n, dtype=float),
+        "close": np.arange(100, 100 + n, dtype=float),
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+
+    f_above = EfficiencyRatioFilter(lookback=14, min_ratio=0.45, mode="above")
+    m = f_above.mask(trending)
+    # Perfect trend: ratio = (14)/(14*1) = 1.0 → should pass above threshold
+    assert m.iloc[14:].all()
+
+    # Oscillating data: +1, -1, +1, -1 → net zero, ratio ≈ 0
+    osc_prices = np.array([100 + (i % 2) for i in range(n)], dtype=float)
+    oscillating = pd.DataFrame({
+        "open": osc_prices,
+        "high": osc_prices + 0.5,
+        "low": osc_prices - 0.5,
+        "close": osc_prices,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+
+    m_above = f_above.mask(oscillating)
+    # Choppy: ratio ≈ 0 → should NOT pass above threshold
+    assert not m_above.iloc[14:].any()
+
+    f_below = EfficiencyRatioFilter(lookback=14, min_ratio=0.35, mode="below")
+    m_below = f_below.mask(oscillating)
+    # Choppy: ratio ≈ 0 → should pass below threshold
+    assert m_below.iloc[14:].all()

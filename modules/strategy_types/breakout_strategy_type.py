@@ -18,6 +18,7 @@ from modules.filters import (
     BreakoutRetestFilter,
     BreakoutTrendFilter,
     CompressionFilter,
+    EfficiencyRatioFilter,
     ExpansionBarFilter,
     GapUpFilter,
     HigherHighFilter,
@@ -243,6 +244,7 @@ class BreakoutStrategyType(BaseStrategyType):
             ATRPercentileFilter,
             HigherHighFilter,
             GapUpFilter,
+            EfficiencyRatioFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -254,7 +256,9 @@ class BreakoutStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in combo_classes:
-            if cls is CompressionFilter:
+            if cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
+            elif cls is CompressionFilter:
                 filters.append(CompressionFilter(lookback=lookback, max_atr_mult=0.90))
             elif cls is RangeBreakoutFilter:
                 filters.append(RangeBreakoutFilter(lookback=lookback))
@@ -316,7 +320,10 @@ class BreakoutStrategyType(BaseStrategyType):
 
         for cls in classes:
             if cls is CompressionFilter:
-                filters.append(CompressionFilter(lookback=lookback, max_atr_mult=min_avg_range if min_avg_range > 0 else 0.90))
+                # Always use the same default as build_filter_objects_from_classes.
+                # During refinement, precomputed_signals override strategy.generate_signal(),
+                # so min_avg_range never actually affected CompressionFilter entry decisions.
+                filters.append(CompressionFilter(lookback=lookback, max_atr_mult=0.90))
             elif cls is RangeBreakoutFilter:
                 filters.append(RangeBreakoutFilter(lookback=lookback))
             elif cls is ExpansionBarFilter:
@@ -337,6 +344,8 @@ class BreakoutStrategyType(BaseStrategyType):
                 filters.append(TightRangeFilter(lookback=lookback, max_bar_range_mult=0.90))
             elif cls is ATRPercentileFilter:
                 filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
+            elif cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             else:
                 filters.append(cls())
 

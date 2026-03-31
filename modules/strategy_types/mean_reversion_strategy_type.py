@@ -18,6 +18,7 @@ from modules.filters import (
     CloseNearLowFilter,
     DistanceBelowSMAFilter,
     DownCloseFilter,
+    EfficiencyRatioFilter,
     GapDownFilter,
     InsideBarFilter,
     LowVolatilityRegimeFilter,
@@ -242,6 +243,7 @@ class MeanReversionStrategyType(BaseStrategyType):
             InsideBarFilter,
             ATRPercentileFilter,
             GapDownFilter,
+            EfficiencyRatioFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -253,7 +255,9 @@ class MeanReversionStrategyType(BaseStrategyType):
         filters: list[BaseFilter] = []
 
         for cls in combo_classes:
-            if cls is BelowFastSMAFilter:
+            if cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
+            elif cls is BelowFastSMAFilter:
                 filters.append(BelowFastSMAFilter(fast_length=fast_sma))
             elif cls is DistanceBelowSMAFilter:
                 filters.append(DistanceBelowSMAFilter(fast_length=fast_sma, min_distance_atr=0.8))
@@ -327,7 +331,12 @@ class MeanReversionStrategyType(BaseStrategyType):
             elif cls is ReversalUpBarFilter:
                 filters.append(ReversalUpBarFilter())
             elif cls is LowVolatilityRegimeFilter:
-                filters.append(LowVolatilityRegimeFilter(lookback=vol_lookback, max_atr_mult=min_avg_range if min_avg_range > 0 else 1.10))
+                # Always use the same default as build_filter_objects_from_classes.
+                # During refinement, precomputed_signals from defaults override
+                # strategy.generate_signal(), so min_avg_range never actually
+                # affected LowVol entry decisions.  Using 1.10 here keeps rebuild
+                # consistent with the original run.
+                filters.append(LowVolatilityRegimeFilter(lookback=vol_lookback, max_atr_mult=1.10))
             elif cls is AboveLongTermSMAFilter:
                 filters.append(AboveLongTermSMAFilter(slow_length=slow_sma))
             elif cls is CloseNearLowFilter:
@@ -336,6 +345,8 @@ class MeanReversionStrategyType(BaseStrategyType):
                 filters.append(StretchFromLongTermSMAFilter(slow_length=slow_sma, min_distance_atr=min_avg_range if min_avg_range > 0 else 0.6))
             elif cls is ATRPercentileFilter:
                 filters.append(ATRPercentileFilter(lookback=100, min_percentile=0.0, max_percentile=0.3))
+            elif cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.35, mode="below"))
             else:
                 filters.append(cls())
 

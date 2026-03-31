@@ -13,6 +13,7 @@ from modules.vectorized_signals import compute_combined_signal_mask
 from modules.filters import (
     BaseFilter,
     CloseAboveFastSMAFilter,
+    EfficiencyRatioFilter,
     HigherHighFilter,
     HigherLowFilter,
     MomentumFilter,
@@ -240,6 +241,7 @@ class TrendStrategyType(BaseStrategyType):
             HigherLowFilter,
             HigherHighFilter,
             OutsideBarFilter,
+            EfficiencyRatioFilter,
         ]
 
     def build_filter_objects_from_classes(self, combo_classes: list[type], timeframe: str = "60m") -> list[BaseFilter]:
@@ -269,6 +271,8 @@ class TrendStrategyType(BaseStrategyType):
                 filters.append(CloseAboveFastSMAFilter(fast_length=fast_sma))
             elif cls is HigherLowFilter:
                 filters.append(HigherLowFilter())
+            elif cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             else:
                 filters.append(cls())
 
@@ -326,6 +330,8 @@ class TrendStrategyType(BaseStrategyType):
                 filters.append(CloseAboveFastSMAFilter(fast_length=fast_sma))
             elif cls is HigherLowFilter:
                 filters.append(HigherLowFilter())
+            elif cls is EfficiencyRatioFilter:
+                filters.append(EfficiencyRatioFilter(lookback=max(5, round(14 * mult)), min_ratio=0.45, mode="above"))
             else:
                 filters.append(cls())
 
