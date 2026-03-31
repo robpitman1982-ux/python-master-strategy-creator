@@ -544,12 +544,18 @@ def _diversity_score(combo_candidates: list[dict]) -> float:
     return market_diversity * 0.4 + direction_mix * 0.3 + logic_diversity * 0.3
 
 
+_EQUITY_INDEX_MARKETS = {"ES", "NQ", "RTY", "YM"}
+_METALS_MARKETS = {"GC", "SI", "HG"}
+
+
 def sweep_combinations(
     candidates: list[dict],
     corr_matrix: pd.DataFrame,
     return_matrix: pd.DataFrame,
     n_min: int = 4,
     n_max: int = 8,
+    max_per_market: int = 2,
+    max_equity_index: int = 3,
 ) -> list[dict]:
     """Sweep all C(n,k) combinations, reject high-correlation pairs, score survivors."""
     # Only use candidates that are in the return matrix
@@ -613,8 +619,21 @@ def sweep_combinations(
                 n_rejected += 1
                 continue
 
-            # Compute scores
+            # Market concentration check
             combo_cands = [cand_by_name[s] for s in combo]
+            market_counts: dict[str, int] = {}
+            for c in combo_cands:
+                m = str(c.get("market", "")).upper()
+                market_counts[m] = market_counts.get(m, 0) + 1
+            if any(v > max_per_market for v in market_counts.values()):
+                n_rejected += 1
+                continue
+            equity_count = sum(market_counts.get(m, 0) for m in _EQUITY_INDEX_MARKETS)
+            if equity_count > max_equity_index:
+                n_rejected += 1
+                continue
+
+            # Compute scores
             avg_oos_pf = mean(
                 float(c.get("oos_pf", 1.0)) for c in combo_cands
             )
@@ -723,6 +742,7 @@ def portfolio_monte_carlo(
         "step1_pass_rate": step_pass_rates[0] if len(step_pass_rates) > 0 else 0.0,
         "step2_pass_rate": step_pass_rates[1] if len(step_pass_rates) > 1 else 0.0,
         "step3_pass_rate": step_pass_rates[2] if len(step_pass_rates) > 2 else 0.0,
+        "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
         "median_worst_dd_pct": float(np.median(worst_dd_arr)),
         "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
         "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
@@ -896,6 +916,7 @@ def optimise_sizing(
         for step_i in range(1, config.n_steps + 1):
             key = f"step{step_i}_pass_rate"
             portfolio[f"opt_{key}"] = final_mc.get(key, 0.0)
+        portfolio["opt_final_pass_rate"] = final_mc.get("final_pass_rate", 0.0)
         portfolio["opt_p95_dd"] = final_mc["p95_worst_dd_pct"]
         portfolio["opt_avg_trades_to_pass"] = final_mc["avg_trades_to_pass"]
         portfolio["median_trades_to_pass"] = final_mc["median_trades_to_pass"]
@@ -932,6 +953,12 @@ def run_portfolio_selection(
     logger.info("=" * 60)
 
     # Read config overrides
+    if config is None:
+        try:
+            from modules.config_loader import load_config
+            config = load_config()
+        except Exception:
+            config = {}
     ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {}) if config else {}
     n_sims_mc = int(ps_cfg.get("n_sims_mc", n_sims_mc))
     n_sims_sizing = int(ps_cfg.get("n_sims_sizing", n_sims_sizing))
@@ -972,7 +999,11 @@ def run_portfolio_selection(
     candidates = correlation_dedup(candidates, corr_matrix, return_matrix)
 
     # Stage 4: Sweep combinations
-    combinations = sweep_combinations(candidates, corr_matrix, return_matrix)
+    combinations = sweep_combinations(
+        candidates, corr_matrix, return_matrix,
+        max_per_market=int(ps_cfg.get("max_strategies_per_market", 2)),
+        max_equity_index=int(ps_cfg.get("max_equity_index_strategies", 3)),
+    )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")
         return {"status": "no_combinations"}
@@ -1041,6 +1072,7 @@ def _write_report(
         step1 = p.get("opt_step1_pass_rate", p.get("step1_pass_rate", 0.0))
         step2 = p.get("opt_step2_pass_rate", p.get("step2_pass_rate", 0.0))
         step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
+        final = p.get("opt_final_pass_rate", p.get("final_pass_rate", step3))
         p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
 
         # Count unique markets in portfolio
@@ -1123,10 +1155,11 @@ def _print_summary(
 
     top3 = optimised[:3]
     if top3:
-        print("  Top 3 portfolios by Bootcamp pass rate:")
+        print("  Top 3 portfolios by pass rate:")
         for i, p in enumerate(top3, 1):
             names = p.get("strategy_names", [])
-            step3 = p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))
+            final_rate = p.get("opt_final_pass_rate", p.get("final_pass_rate", 
+                         p.get("opt_step3_pass_rate", p.get("step3_pass_rate", 0.0))))
             p95_dd = p.get("opt_p95_dd", p.get("p95_worst_dd_pct", 0.0))
             # Names are "MARKET_TIMEFRAME_STRATEGYNAME" — show "MARKET TF TYPE" for readability
             short_names = []
@@ -1153,6 +1186,6 @@ def _print_summary(
                     short_names.append(f"{market} {tf} {stype}")
                 else:
                     short_names.append(n[:25])
-            print(f"    {i}. {', '.join(short_names)} -- {step3:.1%} pass, DD {p95_dd:.1%}")
+            print(f"    {i}. {', '.join(short_names)} -- {final_rate:.1%} pass, DD {p95_dd:.1%}")
 
     print("=" * 59)

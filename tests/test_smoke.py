@@ -671,6 +671,8 @@ def test_refinement_results_expose_exit_metadata():
         profit_target_atr=None,
         trailing_stop_atr=None,
         signal_exit_reference=None,
+        break_even_atr=None,
+        early_exit_bars=None,
     ):
         return _SmokeExitStrategy(
             exit_config=build_exit_config(
