@@ -424,7 +424,7 @@ class BreakoutStrategyType(BaseStrategyType):
         grid = {
             "hold_bars": scaled,
             # stop_distance_points are ATR-based, unscaled
-            "stop_distance_points": [0.5, 0.75, 1.0, 1.25, 1.5, 2.0],
+            "stop_distance_points": [0.5, 0.75, 1.0, 1.25, 1.5],
         }
 
         grid["min_avg_range"] = [0.60, 0.70, 0.80, 0.90, 1.00] if any(cls is CompressionFilter for cls in classes) else [0.0]
