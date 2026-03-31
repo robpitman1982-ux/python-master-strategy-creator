@@ -6,8 +6,11 @@ the corresponding Outputs/runs/{run_id}/Outputs/{MARKET}_{TIMEFRAME}/ folders.
 """
 from __future__ import annotations
 
+import os
 import sys
 import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -84,23 +87,16 @@ def main() -> None:
         trade_rows: list[dict] = []  # per-trade PnL rows for strategy_trades.csv
         rebuilt = 0
 
-        for _, row in group.iterrows():
+        def _rebuild_one(row: pd.Series) -> tuple[str, pd.Series, list[dict]] | None:
+            """Rebuild a single strategy. Returns (col_key, daily_pnl, trade_dicts) or None."""
             strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
             strategy_type = str(row.get("strategy_type", "")).strip()
             if strategy_name in ["", "NONE"]:
-                continue
+                return None
 
-            # Use strategy_type prefix to disambiguate duplicate strategy names
             col_key = f"{strategy_type}_{strategy_name}" if strategy_type else strategy_name
 
             try:
-                print(f"    Attempting rebuild: {col_key}")
-                print(f"      strategy_type={strategy_type}, leader_source={row.get('leader_source','?')}")
-                print(f"      best_combo_strategy_name={row.get('best_combo_strategy_name','?')}")
-                print(f"      leader_hold_bars={row.get('leader_hold_bars','?')}, leader_exit_type={row.get('leader_exit_type','?')}")
-                print(f"      leader_stop_distance_atr={row.get('leader_stop_distance_atr','?')}")
-                print(f"      outputs_dir={outputs_dir}")
-
                 trades_df, filters_str, cfg = _rebuild_strategy_from_leaderboard_row(
                     row=row,
                     data=data,
@@ -111,29 +107,39 @@ def main() -> None:
 
                 if trades_df.empty:
                     print(f"    WARN: No trades rebuilt for {col_key} (empty DataFrame returned)")
-                    continue
+                    return None
 
                 trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
                 trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
 
-                # Daily resampled returns (for correlation matrix)
                 daily_pnl = trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0.0)
-                daily_returns[col_key] = daily_pnl
 
-                # Per-trade PnL rows (for MC simulation)
+                per_trade: list[dict] = []
                 for _, trade in trades_df.iterrows():
-                    trade_rows.append({
+                    per_trade.append({
                         "exit_time": trade["exit_time"],
                         "strategy": col_key,
                         "net_pnl": trade["net_pnl"],
                     })
 
-                rebuilt += 1
+                return (col_key, daily_pnl, per_trade)
 
             except Exception as e:
-                import traceback
                 print(f"    REBUILD FAILED for {col_key}: {e}")
                 traceback.print_exc()
+                return None
+
+        max_workers = min(os.cpu_count() or 4, len(group))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(_rebuild_one, row): row for _, row in group.iterrows()}
+            for future in as_completed(futures):
+                result = future.result()
+                if result:
+                    col_key, daily_pnl, trades_list = result
+                    daily_returns[col_key] = daily_pnl
+                    trade_rows.extend(trades_list)
+                    rebuilt += 1
+                    print(f"    Rebuilt: {col_key}")
 
         if not daily_returns:
             print(f"  No strategies rebuilt for {folder}. Skipping CSV write.")
