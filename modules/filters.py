@@ -1337,6 +1337,49 @@ class HigherHighFilter(BaseFilter):
         return result.fillna(False)
 
 
+class CumulativeDeclineFilter(BaseFilter):
+    """Measures total price decline over N bars in ATR units, regardless of
+    individual bar direction. Catches exhaustion moves that consecutive-bar
+    filters miss (e.g., down-up-down-down that drops 2 ATR total).
+    direction='long': decline = Close[lookback ago] - Close (positive = fell).
+    direction='short': advance = Close - Close[lookback ago] (positive = rose).
+    """
+    name = "CumulativeDeclineFilter"
+
+    def __init__(self, lookback: int = 4, atr_period: int = 20,
+                 min_decline_atr: float = 1.5, direction: str = "long"):
+        self.lookback = lookback
+        self.atr_period = atr_period
+        self.min_decline_atr = min_decline_atr
+        self.direction = direction
+
+    def passes(self, data: pd.DataFrame, i: int) -> bool:
+        if i < max(self.lookback, self.atr_period):
+            return False
+        atr_col = f"atr_{self.atr_period}"
+        atr = data[atr_col].iloc[i] if atr_col in data.columns else data["bar_range"].iloc[max(0, i - self.atr_period + 1):i + 1].mean()
+        if pd.isna(atr) or atr <= 0:
+            return False
+        if self.direction == "long":
+            move = data["close"].iloc[i - self.lookback] - data["close"].iloc[i]
+        else:
+            move = data["close"].iloc[i] - data["close"].iloc[i - self.lookback]
+        return bool(move / atr >= self.min_decline_atr)
+
+    def mask(self, data: pd.DataFrame) -> pd.Series:
+        atr_col = f"atr_{self.atr_period}"
+        atr = data[atr_col] if atr_col in data.columns else data["bar_range"].rolling(self.atr_period).mean()
+        if self.direction == "long":
+            move = data["close"].shift(self.lookback) - data["close"]
+        else:
+            move = data["close"] - data["close"].shift(self.lookback)
+        ratio = move / atr.replace(0, np.nan)
+        result = (ratio >= self.min_decline_atr).copy()
+        warmup = max(self.lookback, self.atr_period)
+        result.iloc[:warmup] = False
+        return result.fillna(False)
+
+
 class WickRejectionFilter(BaseFilter):
     """Pin bar / wick rejection filter.
     Long: large lower wick + close near high → buying rejection of lows.

@@ -1068,3 +1068,37 @@ def test_wick_rejection_filter():
     m_doji = f.mask(doji)
     # close_pos = (100-95)/10 = 0.5 < 0.70 → fails
     assert not m_doji.iloc[20:].any()
+
+
+# ---------------------------------------------------------------------------
+# Test: CumulativeDeclineFilter
+# ---------------------------------------------------------------------------
+
+def test_cumulative_decline_filter():
+    from modules.filters import CumulativeDeclineFilter
+
+    n = 60
+    # Create data where close drops 2 ATR over 4 bars with one up bar
+    close = np.full(n, 100.0)
+    # Bars 25-28: down, up, down, down → net drop of ~20 pts, ATR ≈ 10
+    close[25] = 100.0
+    close[26] = 92.0   # -8
+    close[27] = 94.0   # +2 (one up bar)
+    close[28] = 86.0   # -8
+    close[29] = 80.0   # -6 → total drop from bar 25: 20 pts
+    for i in range(30, n):
+        close[i] = 80.0
+
+    df = pd.DataFrame({
+        "open": close,
+        "high": close + 5,
+        "low": close - 5,
+        "close": close,
+    }, index=pd.date_range("2020-01-01", periods=n, freq="h"))
+    from modules.feature_builder import add_precomputed_features
+    df = add_precomputed_features(df, avg_range_lookbacks=[20])
+
+    f = CumulativeDeclineFilter(lookback=4, atr_period=20, min_decline_atr=1.5, direction="long")
+    m = f.mask(df)
+    # At bar 29: close[25]=100, close[29]=80, decline=20, ATR≈10, ratio=2.0 >= 1.5 ✓
+    assert m.iloc[29], "Should detect 2-ATR decline over 4 bars"
