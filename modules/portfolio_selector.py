@@ -1174,12 +1174,159 @@ def portfolio_monte_carlo(
     return mc_result
 
 
+def portfolio_monte_carlo_block_bootstrap(
+    return_matrix: pd.DataFrame,
+    strategy_names: list[str],
+    config: PropFirmConfig,
+    source_capital: float = 250_000.0,
+    n_sims: int = 5_000,
+    seed: int = 42,
+    contract_weights: dict[str, float] | None = None,
+    block_sizes: list[int] | None = None,
+) -> dict:
+    """Block bootstrap Monte Carlo for a PORTFOLIO of strategies.
+
+    Instead of shuffling individual trade lists (which destroys crisis clustering),
+    this samples blocks of consecutive days from the daily portfolio return series.
+
+    Steps per simulation:
+    1. Build daily portfolio return series (sum across strategies, weighted).
+    2. Sample blocks of consecutive days (with replacement) until >= original length.
+    3. Extract non-zero days as "trades" for simulate_challenge().
+
+    This preserves: crisis clustering, cross-strategy DD correlation,
+    volatility regime persistence, serial correlation in returns.
+    """
+    if block_sizes is None:
+        block_sizes = [5, 10, 20]
+    if contract_weights is None:
+        contract_weights = {s: 1.0 for s in strategy_names}
+
+    # Build daily portfolio return series
+    available = [s for s in strategy_names if s in return_matrix.columns]
+    if not available:
+        return {"pass_rate": 0.0, "final_pass_rate": 0.0}
+
+    weighted_returns = pd.Series(0.0, index=return_matrix.index)
+    for s in available:
+        w = contract_weights.get(s, 1.0)
+        weighted_returns += return_matrix[s] * w
+
+    daily_returns = weighted_returns.values.copy()
+    n_days = len(daily_returns)
+
+    if n_days < 30:
+        return {"pass_rate": 0.0, "final_pass_rate": 0.0}
+
+    rng = random.Random(seed)
+
+    pass_count = 0
+    step_pass_counts = [0] * config.n_steps
+    worst_dds: list[float] = []
+    trades_to_pass: list[int] = []
+    step_trades_list: list[list[int]] = []
+    rolling_20_dds: list[float] = []
+    max_losing_streaks: list[int] = []
+    max_recovery_trades_list: list[int] = []
+
+    for _ in range(n_sims):
+        # Sample blocks to build simulated return series
+        sim_returns: list[float] = []
+        while len(sim_returns) < n_days:
+            block_size = rng.choice(block_sizes)
+            start = rng.randint(0, n_days - 1)
+            end = min(start + block_size, n_days)
+            sim_returns.extend(daily_returns[start:end])
+
+        sim_returns = sim_returns[:n_days]
+
+        # Extract non-zero returns as "trades" for simulate_challenge
+        trades = [r for r in sim_returns if r != 0.0]
+        if not trades:
+            worst_dds.append(0.0)
+            continue
+
+        result = simulate_challenge(trades, config, source_capital)
+        worst_dds.append(result.worst_drawdown_pct)
+
+        # Risk metrics
+        if len(trades) >= 20:
+            arr = np.array(trades)
+            rolling_sum = np.convolve(arr, np.ones(20), mode='valid')
+            rolling_20_dds.append(float(np.min(rolling_sum)))
+        elif trades:
+            rolling_20_dds.append(float(sum(trades)))
+
+        streak = 0
+        max_streak = 0
+        for t in trades:
+            if t < 0:
+                streak += 1
+                max_streak = max(max_streak, streak)
+            else:
+                streak = 0
+        max_losing_streaks.append(max_streak)
+
+        equity = np.cumsum(trades)
+        running_max = np.maximum.accumulate(equity)
+        max_recovery = 0
+        current_recovery = 0
+        for ei in range(len(equity)):
+            if equity[ei] < running_max[ei]:
+                current_recovery += 1
+                max_recovery = max(max_recovery, current_recovery)
+            else:
+                current_recovery = 0
+        max_recovery_trades_list.append(max_recovery)
+
+        for step in result.steps:
+            if step.passed:
+                step_pass_counts[step.step_number - 1] += 1
+            else:
+                break
+
+        if result.passed_all_steps:
+            pass_count += 1
+            trades_to_pass.append(result.total_trades_used)
+            step_trades_list.append([s.trades_taken for s in result.steps])
+
+    worst_dd_arr = np.array(worst_dds) if worst_dds else np.array([0.0])
+    step_pass_rates = [c / n_sims for c in step_pass_counts]
+
+    step_median_trades: list[float] = []
+    if step_trades_list:
+        for i in range(config.n_steps):
+            vals = [st[i] for st in step_trades_list if i < len(st)]
+            step_median_trades.append(float(np.median(vals)) if vals else 0.0)
+
+    mc_result: dict = {
+        "pass_rate": pass_count / n_sims,
+        "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
+    }
+    for si, rate in enumerate(step_pass_rates):
+        mc_result[f"step{si + 1}_pass_rate"] = rate
+    mc_result.update({
+        "median_worst_dd_pct": float(np.median(worst_dd_arr)),
+        "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
+        "p99_worst_dd_pct": float(np.percentile(worst_dd_arr, 99)),
+        "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
+        "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
+        "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
+        "step_median_trades": step_median_trades,
+        "worst_rolling_20_p95": float(np.percentile(rolling_20_dds, 95)) if rolling_20_dds else 0.0,
+        "max_losing_streak_p95": float(np.percentile(max_losing_streaks, 95)) if max_losing_streaks else 0,
+        "max_recovery_trades_p95": float(np.percentile(max_recovery_trades_list, 95)) if max_recovery_trades_list else 0,
+    })
+    return mc_result
+
+
 def run_bootcamp_mc(
     combinations: list[dict],
     return_matrix: pd.DataFrame,
     n_sims: int = 10_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
     prop_config: PropFirmConfig | None = None,
+    mc_method: str = "block_bootstrap",
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
 
@@ -1188,6 +1335,7 @@ def run_bootcamp_mc(
             extracting from the daily return matrix. This preserves
             individual trades that would otherwise be summed on the same day.
         prop_config: Prop firm config to simulate against. Defaults to Bootcamp $250K.
+        mc_method: "block_bootstrap" (default) or "shuffle_interleave".
 
     Returns combinations enriched with MC results, sorted by final step pass rate.
     """
@@ -1196,24 +1344,29 @@ def run_bootcamp_mc(
 
     for i, combo in enumerate(combinations):
         names = combo["strategy_names"]
-        logger.info(f"Portfolio MC {i + 1}/{len(combinations)}: {len(names)} strategies, {n_sims} sims")
+        logger.info(f"Portfolio MC {i + 1}/{len(combinations)}: {len(names)} strategies, {n_sims} sims ({mc_method})")
 
-        # Use raw trade lists if available, else fall back to return matrix
-        trade_lists: dict[str, list[float]] = {}
-        for name in names:
-            if raw_trade_lists and name in raw_trade_lists:
-                trade_lists[name] = raw_trade_lists[name]
-            elif name in return_matrix.columns:
-                vals = return_matrix[name].values
-                trades = [float(v) for v in vals if v != 0.0]
-                if trades:
-                    trade_lists[name] = trades
+        if mc_method == "block_bootstrap":
+            mc = portfolio_monte_carlo_block_bootstrap(
+                return_matrix, names, config, n_sims=n_sims,
+            )
+        else:
+            # shuffle_interleave: use raw trade lists if available
+            trade_lists: dict[str, list[float]] = {}
+            for name in names:
+                if raw_trade_lists and name in raw_trade_lists:
+                    trade_lists[name] = raw_trade_lists[name]
+                elif name in return_matrix.columns:
+                    vals = return_matrix[name].values
+                    trades = [float(v) for v in vals if v != 0.0]
+                    if trades:
+                        trade_lists[name] = trades
 
-        if not trade_lists:
-            logger.warning(f"No trade data for combination {i + 1}, skipping")
-            continue
+            if not trade_lists:
+                logger.warning(f"No trade data for combination {i + 1}, skipping")
+                continue
 
-        mc = portfolio_monte_carlo(trade_lists, config, n_sims=n_sims)
+            mc = portfolio_monte_carlo(trade_lists, config, n_sims=n_sims)
 
         result = {**combo, **mc}
         results.append(result)
@@ -1661,10 +1814,12 @@ def run_portfolio_selection(
     n_tested = len(combinations)
 
     # Stage 5: Prop firm MC (uses raw trades if available)
+    mc_method = str(ps_cfg.get("mc_method", "block_bootstrap"))
     mc_results = run_bootcamp_mc(
         combinations, return_matrix, n_sims=n_sims_mc,
         raw_trade_lists=raw_trades if raw_trades else None,
         prop_config=prop_config,
+        mc_method=mc_method,
     )
     if not mc_results:
         logger.warning("No MC results. Aborting.")
