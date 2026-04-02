@@ -144,11 +144,17 @@ def hard_filter_candidates(
 # ============================================================================
 
 def _find_returns_file(candidate: dict, runs_base: str) -> str | None:
-    """Find strategy_returns.csv for a candidate."""
+    """Find strategy_returns.csv for a candidate.
+
+    First checks the candidate's own run_id directory. If not found, scans
+    ALL other runs for the same market/timeframe — this handles S54 re-sweep
+    runs that don't generate strategy_returns.csv but whose strategies can
+    be matched against returns from earlier runs of the same dataset.
+    """
     run_id = str(candidate.get("run_id", ""))
     dataset = str(candidate.get("dataset", ""))
 
-    if not run_id or not dataset:
+    if not dataset:
         return None
 
     # Derive dataset folder: "ES_30m_2008_2026_tradestation.csv" -> "ES_30m"
@@ -158,14 +164,27 @@ def _find_returns_file(candidate: dict, runs_base: str) -> str | None:
     else:
         dataset_folder = dataset.replace(".csv", "")
 
-    path = os.path.join(runs_base, run_id, "Outputs", dataset_folder, "strategy_returns.csv")
-    if os.path.exists(path):
-        return path
+    if run_id:
+        path = os.path.join(runs_base, run_id, "Outputs", dataset_folder, "strategy_returns.csv")
+        if os.path.exists(path):
+            return path
 
-    # Try with artifacts/ prefix (cloud download layout)
-    path2 = os.path.join(runs_base, run_id, "artifacts", "Outputs", dataset_folder, "strategy_returns.csv")
-    if os.path.exists(path2):
-        return path2
+        # Try with artifacts/ prefix (cloud download layout)
+        path2 = os.path.join(runs_base, run_id, "artifacts", "Outputs", dataset_folder, "strategy_returns.csv")
+        if os.path.exists(path2):
+            return path2
+
+    # Fallback: scan ALL runs for the same market/timeframe
+    try:
+        for other_run in sorted(os.listdir(runs_base), reverse=True):
+            if other_run == run_id:
+                continue
+            for sub in ("Outputs", os.path.join("artifacts", "Outputs")):
+                fallback = os.path.join(runs_base, other_run, sub, dataset_folder, "strategy_returns.csv")
+                if os.path.exists(fallback):
+                    return fallback
+    except OSError:
+        pass
 
     return None
 
@@ -242,6 +261,16 @@ def build_return_matrix(
             refined_name = str(cand.get("best_refined_strategy_name", "")).strip()
             if refined_name:
                 matched_col = _match_column(cols, refined_name, strategy_type=strat_type)
+
+        if matched_col is None:
+            # Fallback: match by strategy_type prefix only (ignoring specific refined params).
+            # This handles S54 re-sweep strategies that found different refined params
+            # but trade the same market/timeframe/family — returns will be correlated.
+            for col in cols:
+                if col.startswith(strat_type + "_Refined") or col.startswith(strat_type + "_Combo"):
+                    matched_col = col
+                    logger.info(f"Approx match for {leader_name}: using column {col}")
+                    break
 
         if matched_col is None:
             logger.warning(f"No matching column for {leader_name} in {returns_path}")
@@ -793,6 +822,7 @@ def portfolio_monte_carlo(
     mc_result.update({
         "median_worst_dd_pct": float(np.median(worst_dd_arr)),
         "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
+        "p99_worst_dd_pct": float(np.percentile(worst_dd_arr, 99)),
         "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
         "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
         "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
@@ -864,14 +894,20 @@ def optimise_sizing(
     raw_trade_lists: dict[str, list[float]] | None = None,
     min_pass_rate: float = 0.40,
     prop_config: PropFirmConfig | None = None,
+    dd_p95_limit_pct: float = 0.70,
+    dd_p99_limit_pct: float = 0.90,
 ) -> list[dict]:
     """Grid-search contract weights for top portfolios.
 
     Uses n_sims=1000 for speed during grid search. After finding best weights,
     runs a final 10k-sim MC for accurate step rates.
 
-    Objective: minimize median_trades_to_pass subject to pass_rate >= min_pass_rate.
-    This finds the fastest path to funding rather than the safest.
+    Objective: minimize median_trades_to_pass subject to:
+      - pass_rate >= min_pass_rate (default 0.40)
+      - p95_dd <= dd_p95_limit_pct * program_dd_limit (hard constraint)
+      - p99_dd <= dd_p99_limit_pct * program_dd_limit (hard constraint)
+
+    If no weight combo passes DD constraints, falls back to lowest p95_dd combo.
     """
     config = prop_config or The5ersBootcampConfig()
     weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
@@ -910,6 +946,15 @@ def optimise_sizing(
         best_pass_rate = -1.0
         best_dd = 1.0
 
+        # DD constraint thresholds
+        dd_limit = config.max_drawdown_pct
+        p95_ceiling = dd_p95_limit_pct * dd_limit
+        p99_ceiling = dd_p99_limit_pct * dd_limit
+
+        # Fallback tracking: lowest p95_dd combo if nothing passes DD constraints
+        fallback_weights: dict[str, float] | None = None
+        fallback_dd = 1.0
+
         logger.info(
             f"Sizing optimisation {i + 1}: {n_strats} strategies, "
             f"{n_weight_opts**len(strat_names_in_matrix)} weight combos x {n_sims} sims"
@@ -944,11 +989,19 @@ def optimise_sizing(
 
             final_step_key = f"step{config.n_steps}_pass_rate"
             pass_rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
-            dd = mc["p95_worst_dd_pct"]
+            p95_dd = mc["p95_worst_dd_pct"]
+            p99_dd = mc.get("p99_worst_dd_pct", p95_dd)
             trades = mc["median_trades_to_pass"]
 
-            # Reject weight combos that exceed the program's max DD
-            if dd > config.max_drawdown_pct:
+            # Track fallback: lowest p95_dd regardless of constraints
+            if p95_dd < fallback_dd:
+                fallback_dd = p95_dd
+                fallback_weights = weights.copy()
+
+            # Hard DD constraints
+            if p95_dd > p95_ceiling:
+                continue
+            if p99_dd > p99_ceiling:
                 continue
 
             # Minimize trades-to-pass subject to pass_rate >= min_pass_rate
@@ -956,17 +1009,24 @@ def optimise_sizing(
                 if trades > 0 and (best_trades is None or trades < best_trades):
                     best_trades = trades
                     best_pass_rate = pass_rate
-                    best_dd = dd
+                    best_dd = p95_dd
                     best_weights = weights.copy()
             elif best_weights is None:
                 # No combo meets minimum yet; track best pass rate as fallback
                 if pass_rate > best_pass_rate:
                     best_pass_rate = pass_rate
                     best_weights = weights.copy()
-                    best_dd = dd
+                    best_dd = p95_dd
 
         if best_weights is None:
-            best_weights = {s: 0.1 for s in strat_names_in_matrix}
+            if fallback_weights is not None:
+                best_weights = fallback_weights
+                logger.warning(
+                    f"  No weight combo passed DD constraints (p95 ceiling={p95_ceiling:.1%}). "
+                    f"Using lowest-DD fallback (p95_dd={fallback_dd:.1%})"
+                )
+            else:
+                best_weights = {s: 0.1 for s in strat_names_in_matrix}
 
         # Final MC at the requested final sim count — all step rates
         # from the SAME experiment so they're comparable.
@@ -1097,12 +1157,17 @@ def run_portfolio_selection(
         ps_cfg = config.get("pipeline", {}).get("portfolio_selector", {})
         min_pass_rate = float(ps_cfg.get("min_pass_rate", min_pass_rate))
 
+    dd_p95_limit = float(ps_cfg.get("dd_p95_limit_pct", 0.70))
+    dd_p99_limit = float(ps_cfg.get("dd_p99_limit_pct", 0.90))
+
     optimised = optimise_sizing(
         mc_results, return_matrix, n_sims=n_sims_sizing,
         final_n_sims=n_sims_final,
         raw_trade_lists=raw_trades if raw_trades else None,
         min_pass_rate=min_pass_rate,
         prop_config=prop_config,
+        dd_p95_limit_pct=dd_p95_limit,
+        dd_p99_limit_pct=dd_p99_limit,
     )
 
     # Write report (pass candidates for trade frequency estimation)
