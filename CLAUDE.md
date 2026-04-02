@@ -321,15 +321,21 @@ Key sections:
 
 ## Deployment
 
-**Strategy Console**: GCP e2-micro, us-central1-c — always-on VM serving the Streamlit dashboard on port 8501 via systemd `strategy-dashboard` service. No static IP yet — update `STRATEGY_CONSOLE_HOST` secret if IP changes after restart.
+> Infrastructure migrated to new GCP account (Nikola) in Session 56. Old account (Rob, project-813d2513) exhausted $424 free credit. Old console (35.232.131.181) is no longer active.
 
-**Compute VMs**: n2-highcpu-96 SPOT, us-central1-a (configurable via `cloud:` section in each sweep YAML). Created on demand, destroyed after results download.
+**GCP Project**: `project-c6c16a27-e123-459c-b7a` (Nikola Pitman account, $435 free credit)
+
+**GCS Bucket**: `gs://strategy-artifacts-nikolapitman/`
+
+**Strategy Console** (strategy-console-2): GCP e2-micro, us-central1-c, IP `35.223.104.173` — always-on VM serving the Streamlit dashboard on port 8501 via systemd `streamlit-dashboard` service.
+
+**Compute VMs**: n2-highcpu-96 SPOT, us-central1-a (configurable via `cloud:` section in each sweep YAML). Created on demand, destroyed after results download. CPU quota increase to 100+ N2 CPUs required before launching 96-vCPU VMs.
 
 **GitHub Actions**: auto-deploy on push to main via `.github/workflows/deploy_strategy_console.yml`. Requires secrets: `STRATEGY_CONSOLE_SSH_KEY`, `STRATEGY_CONSOLE_HOST`, `STRATEGY_CONSOLE_USER`.
 
-**Dashboard**: `streamlit run dashboard.py` or `sudo systemctl restart strategy-dashboard` on the console VM.
+**Dashboard**: `streamlit run dashboard.py` or `sudo systemctl restart streamlit-dashboard` on the console VM.
 
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-03-31 — Session 53: Parallelise generate_returns.py (ThreadPoolExecutor, data cache, 7 new tests)
+2026-04-02 — Session 56: Cloud infrastructure migration to new GCP account
