@@ -3,6 +3,41 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-04-02 — Session 56: Cloud infrastructure migration
+
+**What was done**:
+- Migrated cloud infrastructure from old GCP account (project-813d2513, exhausted credit)
+  to new GCP account (project-c6c16a27-e123-459c-b7a, $435 free credit)
+- Updated launcher defaults: bucket name → strategy-artifacts-nikolapitman
+- Updated test assertions to match new bucket name
+- Set up strategy-console-2 VM (35.223.104.173, e2-micro, us-central1-c)
+- Generated SSH deploy key, configured git user, added GitHub known_hosts on new console
+- Installed Streamlit + deps, created systemd service (pending repo clone)
+- Created gcloud CLI auth setup script for Windows (cloud/setup_new_gcp_auth.ps1)
+- Updated all 8 s54 cloud configs from 12 → 94 workers
+- Verified GitHub Actions workflow uses secrets (no hardcoded old values)
+- Dry-run launcher test confirmed correct project and bucket
+
+**New infrastructure**:
+- Project: project-c6c16a27-e123-459c-b7a
+- Bucket: gs://strategy-artifacts-nikolapitman/
+- Console IP: 35.223.104.173
+- Console user: robpitman1982
+
+**Pending manual steps**:
+- Add deploy key to GitHub repo settings (public key printed during session)
+- Clone repo on console VM after deploy key is added
+- Start streamlit-dashboard service after clone
+- Update GitHub Actions secrets (STRATEGY_CONSOLE_HOST → 35.223.104.173, new SSH key)
+- Request N2 CPU quota increase to 100+ before launching 96-vCPU compute VMs
+
+**What's next**:
+- Complete manual steps above
+- First cloud sweep on new account to validate end-to-end
+- Run portfolio selector with latest results
+
+---
+
 ## 2026-03-31 — Session 53: Parallelise generate_returns.py
 
 **What was done**:
