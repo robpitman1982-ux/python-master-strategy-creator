@@ -14,7 +14,7 @@ def _ensure_console_storage_env() -> None:
 
     candidates = [
         Path.home() / "strategy_console_storage",
-        Path("/home/robpitman1982/strategy_console_storage"),
+        Path("/home/pitman_nikola/strategy_console_storage"),
     ]
     for candidate in candidates:
         if candidate.exists() and (candidate / "uploads").exists():
