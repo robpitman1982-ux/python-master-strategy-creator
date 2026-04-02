@@ -1214,6 +1214,108 @@ def optimise_sizing(
 
 
 # ============================================================================
+# STAGE 6b: Portfolio robustness test
+# ============================================================================
+
+def portfolio_robustness_test(
+    portfolios: list[dict],
+    return_matrix: pd.DataFrame,
+    raw_trade_lists: dict[str, list[float]] | None = None,
+    prop_config: PropFirmConfig | None = None,
+    n_sims: int = 1_000,
+) -> list[dict]:
+    """Test portfolio stability via weight perturbation and remove-one analysis.
+
+    For each portfolio:
+    1. Perturb each strategy weight by ±0.1, run quick MC, measure pass_rate change
+    2. Remove each strategy one at a time, run quick MC, measure pass_rate change
+    3. Compute robustness_score from stability metrics
+    """
+    config = prop_config or The5ersBootcampConfig()
+    final_step_key = f"step{config.n_steps}_pass_rate"
+    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+
+    for portfolio in portfolios[:10]:
+        names = portfolio["strategy_names"]
+        weights = portfolio.get("micro_multiplier", {s: 0.3 for s in names})
+
+        # Build trade lists
+        trade_lists: dict[str, list[float]] = {}
+        for name in names:
+            if raw_trade_lists and name in raw_trade_lists:
+                trade_lists[name] = raw_trade_lists[name]
+            elif name in return_matrix.columns:
+                vals = return_matrix[name].values
+                trades = [float(v) for v in vals if v != 0.0]
+                if trades:
+                    trade_lists[name] = trades
+
+        if not trade_lists:
+            portfolio["robustness_score"] = 0.0
+            continue
+
+        # Baseline pass rate
+        baseline_mc = portfolio_monte_carlo(
+            trade_lists, config, n_sims=n_sims,
+            contract_weights=weights,
+        )
+        baseline_rate = baseline_mc.get(final_step_key, baseline_mc.get("pass_rate", 0.0))
+
+        # 1. Weight perturbation: ±0.1 for each strategy
+        weight_changes: list[float] = []
+        for strat in list(trade_lists.keys()):
+            orig_w = weights.get(strat, 0.3)
+            for delta in [-0.1, 0.1]:
+                new_w = orig_w + delta
+                # Snap to nearest valid weight
+                new_w = min(weight_options, key=lambda opt: abs(opt - new_w))
+                if new_w == orig_w:
+                    continue
+                perturbed = {**weights, strat: new_w}
+                mc = portfolio_monte_carlo(
+                    trade_lists, config, n_sims=n_sims,
+                    contract_weights=perturbed,
+                )
+                rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
+                weight_changes.append(abs(rate - baseline_rate))
+
+        # 2. Remove-one test
+        remove_changes: list[float] = []
+        if len(trade_lists) > 1:
+            for strat in list(trade_lists.keys()):
+                reduced_lists = {s: t for s, t in trade_lists.items() if s != strat}
+                reduced_weights = {s: w for s, w in weights.items() if s != strat}
+                if not reduced_lists:
+                    continue
+                mc = portfolio_monte_carlo(
+                    reduced_lists, config, n_sims=n_sims,
+                    contract_weights=reduced_weights,
+                )
+                rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
+                remove_changes.append(abs(rate - baseline_rate))
+
+        # 3. Compute robustness score
+        weight_stability = 1.0 - max(weight_changes) if weight_changes else 1.0
+        remove_stability = 1.0 - max(remove_changes) if remove_changes else 1.0
+        robustness_score = weight_stability * 0.5 + remove_stability * 0.5
+        robustness_score = max(0.0, min(1.0, robustness_score))
+
+        portfolio["robustness_score"] = round(robustness_score, 4)
+        portfolio["weight_stability"] = round(weight_stability, 4)
+        portfolio["remove_stability"] = round(remove_stability, 4)
+
+        if robustness_score < 0.5:
+            logger.warning(
+                f"Fragile portfolio (robustness={robustness_score:.2f}): "
+                f"{', '.join(names[:3])}..."
+            )
+        else:
+            logger.info(f"Robust portfolio (robustness={robustness_score:.2f}): {len(names)} strategies")
+
+    return portfolios
+
+
+# ============================================================================
 # MAIN ORCHESTRATOR
 # ============================================================================
 
@@ -1337,6 +1439,14 @@ def run_portfolio_selection(
     )
 
     # Write report (pass candidates for trade frequency estimation)
+    # Stage 6b: Robustness test
+    optimised = portfolio_robustness_test(
+        optimised, return_matrix,
+        raw_trade_lists=raw_trades if raw_trades else None,
+        prop_config=prop_config,
+        n_sims=n_sims_sizing,
+    )
+
     _write_report(optimised, output_dir, candidates, prop_config=prop_config)
 
     # Print summary
@@ -1440,6 +1550,7 @@ def _write_report(
             "p75_trades_to_fund": round(p75_trades, 0),
             "est_months_median": round(est_months_median, 1),
             "est_months_p75": round(est_months_p75, 1),
+            "robustness_score": round(p.get("robustness_score", 0.0), 4),
             "verdict": verdict,
         })
         rows.append(row)
