@@ -573,6 +573,89 @@ def _diversity_score(combo_candidates: list[dict]) -> float:
     return market_diversity * 0.4 + direction_mix * 0.3 + logic_diversity * 0.3
 
 
+def _pre_mc_score(
+    combo_candidates: list[dict],
+    combo_names: list[str],
+    return_matrix: pd.DataFrame,
+    pair_corrs: list[float],
+    max_dd_overlap: float = 0.0,
+) -> float:
+    """Calmar-based pre-MC score for ranking portfolio combinations.
+
+    Components:
+    - avg_oos_pf (25%)
+    - calmar_proxy: avg annual return / worst individual max DD (20%)
+    - recent_pf: mean of recent_12m_pf (15%)
+    - market diversity (10%)
+    - direction diversity (10%)
+    - logic diversity (10%)
+    - tail overlap penalty (-25% of max DD overlap)
+    """
+    n = len(combo_candidates)
+
+    # OOS PF
+    avg_oos_pf = mean(float(c.get("oos_pf", 1.0)) for c in combo_candidates)
+
+    # Calmar proxy
+    total_annual_return = 0.0
+    worst_dd = 0.0
+    for c in combo_candidates:
+        net_pnl = float(c.get("leader_net_pnl", 0))
+        trades = float(c.get("leader_trades", 0))
+        tpy = float(c.get("leader_trades_per_year", 0))
+        if tpy > 0 and trades > 0:
+            years = trades / tpy
+        else:
+            years = 18.0  # approximate data span
+        annual_ret = net_pnl / years if years > 0 else 0
+        total_annual_return += annual_ret
+
+        dd = float(c.get("max_drawdown", 0)) or float(c.get("mc_max_dd_99", 0))
+        if dd <= 0:
+            # Estimate from return matrix
+            label = None
+            for name in combo_names:
+                lname = str(c.get("leader_strategy_name", ""))
+                if lname and lname in name and name in return_matrix.columns:
+                    label = name
+                    break
+            if label and label in return_matrix.columns:
+                equity = return_matrix[label].cumsum()
+                dd = float((equity.cummax() - equity).max())
+        worst_dd = max(worst_dd, dd)
+
+    calmar_proxy = total_annual_return / worst_dd if worst_dd > 0 else 0
+    # Normalize calmar to 0-10 range (typical good calmar is 1-5)
+    calmar_norm = min(calmar_proxy / 5.0, 1.0) * 10.0
+
+    # Recent performance
+    recent_pf = mean(float(c.get("recent_12m_pf", 1.0)) for c in combo_candidates)
+
+    # Diversity components
+    markets = set(c.get("market", "") for c in combo_candidates)
+    logic_types = set(c.get("strategy_type", "") for c in combo_candidates)
+    has_long = any(not str(c.get("strategy_type", "")).startswith("short_") for c in combo_candidates)
+    has_short = any(str(c.get("strategy_type", "")).startswith("short_") for c in combo_candidates)
+
+    market_div = len(markets) / max(n, 1) * 10
+    direction_div = 10.0 if (has_long and has_short) else 0.0
+    logic_div = len(logic_types) / max(n, 1) * 10
+
+    # Tail overlap penalty
+    dd_overlap_penalty = max_dd_overlap * 10
+
+    score = (
+        0.25 * avg_oos_pf
+        + 0.20 * calmar_norm
+        + 0.15 * recent_pf
+        + 0.10 * market_div
+        + 0.10 * direction_div
+        + 0.10 * logic_div
+        - 0.25 * dd_overlap_penalty
+    )
+    return score
+
+
 _EQUITY_INDEX_MARKETS = {"ES", "NQ", "RTY", "YM"}
 _METALS_MARKETS = {"GC", "SI", "HG"}
 
@@ -715,7 +798,20 @@ def sweep_combinations(
             )
             avg_corr = mean(pair_corrs) if pair_corrs else 0.0
             diversity = _diversity_score(combo_cands)
-            score = avg_oos_pf * 20 + diversity * 30 + (1 - avg_corr) * 20
+
+            # Compute max DD overlap for this combo
+            combo_max_dd_overlap = 0.0
+            if max_dd_overlap < 1.0:
+                for ci in range(len(combo)):
+                    for cj in range(ci + 1, len(combo)):
+                        dd_ov = _compute_dd_overlap(return_matrix, combo[ci], combo[cj])
+                        if dd_ov is not None:
+                            combo_max_dd_overlap = max(combo_max_dd_overlap, dd_ov)
+
+            score = _pre_mc_score(
+                combo_cands, list(combo), return_matrix,
+                pair_corrs, max_dd_overlap=combo_max_dd_overlap,
+            )
 
             results.append({
                 "strategy_names": list(combo),
