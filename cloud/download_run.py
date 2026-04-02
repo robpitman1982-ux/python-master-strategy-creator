@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 # Matches cloud/launch_gcp_run.py
-BUCKET_NAME = "strategy-artifacts-robpitman"
+BUCKET_NAME = "strategy-artifacts-nikolapitman"
 BUCKET_URI = f"gs://{BUCKET_NAME}"
 RUNS_DIR = Path("Outputs/runs")
 MASTER_LEADERBOARD_NAME = "master_leaderboard.csv"

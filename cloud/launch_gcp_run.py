@@ -37,7 +37,7 @@ DEFAULT_STRATEGY_CONSOLE_INSTANCE = "strategy-console"
 DEFAULT_STRATEGY_CONSOLE_ZONE = "us-central1-c"
 DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT = "/home/robpitman1982/strategy_console_storage"
 DEFAULT_STRATEGY_CONSOLE_REMOTE_USER = "robpitman1982"
-DEFAULT_BUCKET_NAME = "strategy-artifacts-robpitman"
+DEFAULT_BUCKET_NAME = "strategy-artifacts-nikolapitman"
 DEFAULT_BUCKET_URI = f"gs://{DEFAULT_BUCKET_NAME}"
 
 
@@ -544,6 +544,13 @@ if ! tar -xzf "$BUNDLE_PATH" -C "$RUN_ROOT"; then
     write_status "failed" "extract" "Failed extracting input bundle" 1
     preserve_outputs
     exit 1
+fi
+
+# Failsafe: copy cloud config into repo dir so the engine always uses it,
+# even if the --config absolute path somehow fails to resolve.
+if [ -f "$RUN_ROOT/config.yaml" ] && [ -d "$REPO_DIR" ]; then
+    cp "$RUN_ROOT/config.yaml" "$REPO_DIR/config.yaml"
+    echo "[bootstrap] Cloud config copied into repo dir as failsafe."
 fi
 
 if ! python3 - "$RUN_ROOT/manifest.json" "$RUN_ROOT/config.yaml" "$REPO_DIR" <<'PY'
@@ -1066,7 +1073,12 @@ def delete_instance(gcloud_base: list[str], instance_name: str, zone: str) -> No
     )
 
 
-def create_instance(gcloud_base: list[str], args: argparse.Namespace, startup_message: str) -> None:
+def create_instance(
+    gcloud_base: list[str],
+    args: argparse.Namespace,
+    startup_message: str,
+    startup_script_path: Path | None = None,
+) -> None:
     command = gcloud_base + [
         "compute",
         "instances",
@@ -1083,6 +1095,11 @@ def create_instance(gcloud_base: list[str], args: argparse.Namespace, startup_me
         "--metadata",
         f"strategy-engine-note={startup_message}",
     ]
+    if startup_script_path:
+        command.extend([
+            "--metadata-from-file",
+            f"startup-script={startup_script_path}",
+        ])
     if args.provisioning_model == "SPOT":
         command.append("--instance-termination-action=STOP")
     run_command(command)
@@ -1990,6 +2007,44 @@ def create_remote_runner_file(
     return runner_path
 
 
+def create_startup_bootstrap_script(
+    run_dir: Path,
+    *,
+    run_root: str,
+    bundle_staging_uri: str,
+    runner_staging_uri: str,
+) -> Path:
+    """Create a small VM startup script that downloads and launches the runner.
+
+    This makes the VM self-sufficient in fire-and-forget mode — no SSH needed.
+    The VM boots, downloads the bundle + runner from GCS, and starts the engine.
+    """
+    script = f"""#!/bin/bash
+set -euo pipefail
+
+RUN_ROOT="{run_root}"
+BUNDLE_URI="{bundle_staging_uri}"
+RUNNER_URI="{runner_staging_uri}"
+
+mkdir -p "$RUN_ROOT/logs"
+
+echo "[startup] Downloading input bundle from GCS..."
+gcloud storage cp "$BUNDLE_URI" "$RUN_ROOT/input_bundle.tar.gz"
+
+echo "[startup] Downloading remote runner from GCS..."
+gcloud storage cp "$RUNNER_URI" "$RUN_ROOT/remote_runner.sh"
+chmod +x "$RUN_ROOT/remote_runner.sh"
+
+echo "[startup] Launching remote runner..."
+nohup bash "$RUN_ROOT/remote_runner.sh" "$RUN_ROOT" > "$RUN_ROOT/logs/runner_stdout.log" 2>&1 &
+echo "[startup] Runner launched (PID=$!)."
+"""
+    script_path = run_dir / "startup_bootstrap.sh"
+    with script_path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(script)
+    return script_path
+
+
 def launch_remote_runner(
     gcloud_base: list[str],
     instance_name: str,
@@ -2319,12 +2374,27 @@ def main(argv: list[str] | None = None) -> int:
         print_final_run_summary(status_store.latest_path, local_run_dir)
         return 0
 
+    startup_script_path: Path | None = None
+    runner_staging_uri = ""
     if fire_and_forget:
         ensure_bucket_exists(gcloud_base, bucket_uri)
         if bundle_staging_uri:
             status_store.update("running", "bundle_stage_upload", "Uploading input bundle to GCS staging (avoids SCP timeout for large bundles).")
             run_command(gcloud_base + ["storage", "cp", str(bundle_path), bundle_staging_uri])
             print(f"[bundle] Input bundle staged to GCS: {bundle_staging_uri}")
+
+        # Also upload the runner script to GCS so the VM can self-bootstrap
+        runner_staging_uri = f"{bucket_uri}/staging/{run_id}/remote_runner.sh"
+        run_command(gcloud_base + ["storage", "cp", str(runner_path), runner_staging_uri])
+        print(f"[bundle] Runner staged to GCS: {runner_staging_uri}")
+
+        # Create a startup script that makes the VM self-sufficient
+        startup_script_path = create_startup_bootstrap_script(
+            local_run_dir,
+            run_root=manifest.remote_run_root,
+            bundle_staging_uri=bundle_staging_uri,
+            runner_staging_uri=runner_staging_uri,
+        )
 
     exit_code = 0
     run_outcome: str | None = None
@@ -2343,7 +2413,28 @@ def main(argv: list[str] | None = None) -> int:
             delete_instance(gcloud_base, args.instance_name, args.zone)
 
         status_store.update("running", "instance_create", "Creating VM.")
-        create_instance(gcloud_base, args, startup_message=f"session11:{run_id}")
+        create_instance(
+            gcloud_base, args,
+            startup_message=f"session11:{run_id}",
+            startup_script_path=startup_script_path,
+        )
+
+        if fire_and_forget and startup_script_path:
+            # VM will self-bootstrap via startup script — no SSH orchestration needed.
+            run_outcome = RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED
+            status_store.update(
+                RUN_OUTCOME_FIRE_AND_FORGET_LAUNCHED,
+                "fire_and_forget_launched",
+                "VM created with startup script. Engine will self-bootstrap, run, upload results, and self-delete.",
+                run_outcome=run_outcome,
+            )
+            print("RUN STATUS: LAUNCHED (fire-and-forget)")
+            print(f"VM will self-bootstrap and upload results to {bucket_uri}/runs/{run_id}/")
+            print(f"Monitor: gcloud compute ssh {args.instance_name} --zone={args.zone} --command=\"cat {manifest.remote_run_root}/run_status.json\"")
+            print(f"Download when done: python cloud/download_run.py --latest")
+            print(f"Latest run pointer: {latest_run_path}")
+            print_final_run_summary(status_store.latest_path, local_run_dir)
+            return 0
 
         status_store.update("running", "ssh_wait", "Waiting for SSH readiness.")
         wait_for_ssh(gcloud_base, args.instance_name, args.zone)

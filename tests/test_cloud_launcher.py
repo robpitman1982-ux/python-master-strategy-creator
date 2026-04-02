@@ -1194,11 +1194,11 @@ def test_remote_runner_script_downloads_bundle_from_gcs_staging(tmp_path: Path):
     runner_path = create_remote_runner_file(
         tmp_path,
         fire_and_forget=True,
-        bundle_staging_uri="gs://strategy-artifacts-robpitman/staging/strategy-sweep-123/input_bundle.tar.gz",
+        bundle_staging_uri="gs://strategy-artifacts-nikolapitman/staging/strategy-sweep-123/input_bundle.tar.gz",
     )
     text = runner_path.read_text(encoding="utf-8")
 
-    assert 'BUNDLE_STAGING_URI="gs://strategy-artifacts-robpitman/staging/strategy-sweep-123/input_bundle.tar.gz"' in text
+    assert 'BUNDLE_STAGING_URI="gs://strategy-artifacts-nikolapitman/staging/strategy-sweep-123/input_bundle.tar.gz"' in text
     assert 'gcloud storage cp "$BUNDLE_STAGING_URI" "$BUNDLE_PATH"' in text
     assert "Downloading input bundle from GCS staging" in text
     assert "Failed to download input bundle from GCS staging" in text
