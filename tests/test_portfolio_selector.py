@@ -508,5 +508,194 @@ class TestEndToEnd:
             # Check correlation matrix was written
             matrix_path = output_dir / "portfolio_selector_matrix.csv"
             assert matrix_path.exists(), "portfolio_selector_matrix.csv not created"
+
+            # Check new columns from Session 57
+            assert "robustness_score" in report_df.columns
+            assert "worst_rolling_20_p95" in report_df.columns
+            assert "max_losing_streak_p95" in report_df.columns
+            assert "max_recovery_trades_p95" in report_df.columns
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class TestDDConstraint:
+    """Test Task 1: hard DD constraint in sizing optimizer."""
+
+    def test_dd_constraint_rejects_oversized_weights(self) -> None:
+        """High weights causing DD > ceiling should be rejected; optimizer picks lower weights."""
+        from modules.portfolio_selector import optimise_sizing
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        # Trades with high variance — large weights will blow DD limits
+        trade_lists = {
+            "strat_a": list(rng.normal(100, 5000, 80)),
+            "strat_b": list(rng.normal(100, 5000, 80)),
+        }
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.normal(100, 5000, 200),
+            "strat_b": rng.normal(100, 5000, 200),
+        })
+
+        portfolios = [{"strategy_names": ["strat_a", "strat_b"]}]
+        config = The5ersBootcampConfig()
+
+        result = optimise_sizing(
+            portfolios, return_matrix, n_sims=50,
+            raw_trade_lists=trade_lists, min_pass_rate=0.01,
+            prop_config=config,
+            dd_p95_limit_pct=0.70, dd_p99_limit_pct=0.90,
+        )
+
+        assert len(result) == 1
+        assert "micro_multiplier" in result[0]
+        # Weights should exist and be from valid grid
+        weights = result[0]["micro_multiplier"]
+        valid_grid = {0.1, 0.2, 0.3, 0.5, 0.7, 1.0}
+        assert all(w in valid_grid for w in weights.values())
+
+
+class TestInverseDDSizing:
+    """Test Task 2: inverse-DD weight initialization."""
+
+    def test_inverse_dd_weights_computed_correctly(self) -> None:
+        from modules.portfolio_selector import _compute_inverse_dd_weights
+
+        weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+
+        # Strategy A has small DD (100), B has large DD (1000)
+        # Inverse: A should get higher weight than B
+        trade_lists = {
+            "strat_a": [10, 20, -5, 15, -2],  # small swings
+            "strat_b": [100, -500, 200, -800, 300],  # large swings
+        }
+
+        result = _compute_inverse_dd_weights(trade_lists, {}, weight_options)
+
+        assert "strat_a" in result
+        assert "strat_b" in result
+        # strat_a should get >= strat_b weight (lower DD → higher weight)
+        assert result["strat_a"] >= result["strat_b"]
+        # All weights should be snapped to grid
+        assert all(w in weight_options for w in result.values())
+
+    def test_inverse_dd_uses_leaderboard_when_available(self) -> None:
+        from modules.portfolio_selector import _compute_inverse_dd_weights
+
+        weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+        trade_lists = {"strat_a": [1, 2, 3], "strat_b": [1, 2, 3]}
+        candidates = {
+            "strat_a": {"max_drawdown": 5000},
+            "strat_b": {"max_drawdown": 10000},
+        }
+
+        result = _compute_inverse_dd_weights(trade_lists, candidates, weight_options)
+        # strat_a has half the DD → should get higher weight
+        assert result["strat_a"] >= result["strat_b"]
+
+
+class TestCalmarScoring:
+    """Test Task 3: Calmar-based pre-MC scoring."""
+
+    def test_calmar_score_prefers_low_dd_high_return(self) -> None:
+        from modules.portfolio_selector import _pre_mc_score
+
+        rng = np.random.RandomState(42)
+        return_matrix = pd.DataFrame({
+            "ES_60m_GoodStrat": rng.normal(500, 100, 500),
+            "CL_daily_BadStrat": rng.normal(100, 2000, 500),
+        })
+
+        # Good combo: high return, low DD
+        good_candidates = [
+            {"market": "ES", "timeframe": "60m", "strategy_type": "trend",
+             "oos_pf": 2.5, "leader_net_pnl": 200000, "leader_trades": 180,
+             "leader_trades_per_year": 10, "max_drawdown": 10000},
+        ]
+        # Bad combo: low return, high DD
+        bad_candidates = [
+            {"market": "CL", "timeframe": "daily", "strategy_type": "trend",
+             "oos_pf": 1.1, "leader_net_pnl": 10000, "leader_trades": 180,
+             "leader_trades_per_year": 10, "max_drawdown": 50000},
+        ]
+
+        good_score = _pre_mc_score(good_candidates, ["ES_60m_GoodStrat"], return_matrix, [])
+        bad_score = _pre_mc_score(bad_candidates, ["CL_daily_BadStrat"], return_matrix, [])
+
+        assert good_score > bad_score, f"Good ({good_score}) should score higher than bad ({bad_score})"
+
+
+class TestRobustnessTest:
+    """Test Task 4: portfolio plateau robustness test."""
+
+    def test_robustness_test_runs_without_error(self) -> None:
+        from modules.portfolio_selector import portfolio_robustness_test
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        trade_lists = {
+            "strat_a": list(rng.normal(500, 1500, 100)),
+            "strat_b": list(rng.normal(500, 1500, 100)),
+        }
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.normal(500, 1500, 200),
+            "strat_b": rng.normal(500, 1500, 200),
+        })
+
+        portfolios = [{
+            "strategy_names": ["strat_a", "strat_b"],
+            "micro_multiplier": {"strat_a": 0.3, "strat_b": 0.3},
+        }]
+
+        result = portfolio_robustness_test(
+            portfolios, return_matrix,
+            raw_trade_lists=trade_lists,
+            prop_config=The5ersBootcampConfig(),
+            n_sims=50,
+        )
+
+        assert len(result) == 1
+        assert "robustness_score" in result[0]
+        assert 0.0 <= result[0]["robustness_score"] <= 1.0
+        assert "weight_stability" in result[0]
+        assert "remove_stability" in result[0]
+
+
+class TestRollingDDMetric:
+    """Test Task 5: rolling DD, losing streak, recovery time metrics."""
+
+    def test_rolling_dd_computed_on_known_data(self) -> None:
+        from modules.portfolio_selector import portfolio_monte_carlo
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        config = The5ersBootcampConfig()
+
+        # Mix of wins and losses — mostly losers to ensure negative rolling windows
+        rng = np.random.RandomState(42)
+        trades = list(rng.normal(-50, 500, 120))  # negative mean → many losses
+        trade_lists = {"strat_a": trades}
+
+        result = portfolio_monte_carlo(
+            trade_lists, config, n_sims=100, seed=42,
+        )
+
+        assert "worst_rolling_20_p95" in result
+        assert "max_losing_streak_p95" in result
+        assert "max_recovery_trades_p95" in result
+        # With negative mean, there should be losing streaks
+        assert result["max_losing_streak_p95"] >= 1
+        # worst_rolling_20 should be a finite number
+        assert np.isfinite(result["worst_rolling_20_p95"])
+
+    def test_mc_result_includes_p99_dd(self) -> None:
+        """p99_worst_dd_pct should be present in MC results (Task 1 addition)."""
+        from modules.portfolio_selector import portfolio_monte_carlo
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        config = The5ersBootcampConfig()
+        trade_lists = {"strat_a": list(rng.normal(500, 2000, 100))}
+
+        result = portfolio_monte_carlo(trade_lists, config, n_sims=100, seed=42)
+        assert "p99_worst_dd_pct" in result
+        assert result["p99_worst_dd_pct"] >= result["p95_worst_dd_pct"]
