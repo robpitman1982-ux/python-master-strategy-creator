@@ -886,6 +886,53 @@ def run_bootcamp_mc(
 # STAGE 6: Optimise sizing
 # ============================================================================
 
+def _compute_inverse_dd_weights(
+    trade_lists: dict[str, list[float]],
+    candidates_by_label: dict[str, dict],
+    weight_options: list[float],
+) -> dict[str, float]:
+    """Compute inverse-DD weights and snap to nearest grid value.
+
+    For each strategy, weight is inversely proportional to its max drawdown,
+    so each contributes roughly equal risk to the portfolio.
+    """
+    raw_weights: dict[str, float] = {}
+
+    for label in trade_lists:
+        # Try to get max_drawdown from leaderboard data
+        cand = candidates_by_label.get(label, {})
+        max_dd = float(cand.get("max_drawdown", 0)) or float(cand.get("mc_max_dd_99", 0))
+
+        if max_dd <= 0:
+            # Estimate from trade list: simulate equity curve, compute max DD
+            trades = trade_lists[label]
+            if trades:
+                equity = np.cumsum(trades)
+                running_max = np.maximum.accumulate(equity)
+                drawdowns = running_max - equity
+                max_dd = float(np.max(drawdowns)) if len(drawdowns) > 0 else 0
+
+        raw_weights[label] = 1.0 / max_dd if max_dd > 0 else 1.0
+
+    # Normalize
+    total = sum(raw_weights.values())
+    if total <= 0:
+        return {s: weight_options[0] for s in trade_lists}
+
+    normalized = {s: w / total for s, w in raw_weights.items()}
+
+    # Snap to nearest grid value (scale so max normalized weight maps to max grid)
+    max_norm = max(normalized.values()) if normalized else 1.0
+    scale = max(weight_options) / max_norm if max_norm > 0 else 1.0
+
+    snapped: dict[str, float] = {}
+    for s, w in normalized.items():
+        scaled = w * scale
+        snapped[s] = min(weight_options, key=lambda opt: abs(opt - scaled))
+
+    return snapped
+
+
 def optimise_sizing(
     top_portfolios: list[dict],
     return_matrix: pd.DataFrame,
@@ -896,6 +943,7 @@ def optimise_sizing(
     prop_config: PropFirmConfig | None = None,
     dd_p95_limit_pct: float = 0.70,
     dd_p99_limit_pct: float = 0.90,
+    candidates_by_label: dict[str, dict] | None = None,
 ) -> list[dict]:
     """Grid-search contract weights for top portfolios.
 
@@ -976,7 +1024,19 @@ def optimise_sizing(
                     idx //= n_weight_opts
                 weight_combo_iter.append(tuple(combo))
         else:
-            weight_combo_iter = itertools.product(weight_options, repeat=combo_width)
+            weight_combo_iter = list(itertools.product(weight_options, repeat=combo_width))
+
+        # Prepend inverse-DD weights as a guaranteed candidate
+        inv_dd_weights = _compute_inverse_dd_weights(
+            trade_lists, candidates_by_label or {}, weight_options,
+        )
+        inv_dd_combo = tuple(inv_dd_weights.get(s, weight_options[0]) for s in strat_names_in_matrix)
+        if isinstance(weight_combo_iter, list):
+            if inv_dd_combo not in weight_combo_iter:
+                weight_combo_iter.insert(0, inv_dd_combo)
+        else:
+            weight_combo_iter = itertools.chain([inv_dd_combo], weight_combo_iter)
+        logger.info(f"  Inverse-DD seed weights: {dict(zip(strat_names_in_matrix, inv_dd_combo))}")
 
         for weight_combo in weight_combo_iter:
             weights = dict(zip(strat_names_in_matrix, weight_combo))
@@ -1160,6 +1220,15 @@ def run_portfolio_selection(
     dd_p95_limit = float(ps_cfg.get("dd_p95_limit_pct", 0.70))
     dd_p99_limit = float(ps_cfg.get("dd_p99_limit_pct", 0.90))
 
+    # Build candidates_by_label for inverse-DD sizing initialization
+    cand_by_label: dict[str, dict] = {}
+    for cand in candidates:
+        leader_name = str(cand.get("leader_strategy_name", "")).strip()
+        market = str(cand.get("market", ""))
+        timeframe = str(cand.get("timeframe", ""))
+        label = f"{market}_{timeframe}_{leader_name}"
+        cand_by_label[label] = cand
+
     optimised = optimise_sizing(
         mc_results, return_matrix, n_sims=n_sims_sizing,
         final_n_sims=n_sims_final,
@@ -1168,6 +1237,7 @@ def run_portfolio_selection(
         prop_config=prop_config,
         dd_p95_limit_pct=dd_p95_limit,
         dd_p99_limit_pct=dd_p99_limit,
+        candidates_by_label=cand_by_label,
     )
 
     # Write report (pass candidates for trade frequency estimation)
