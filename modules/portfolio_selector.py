@@ -803,6 +803,60 @@ def _compute_dd_overlap(return_matrix: pd.DataFrame, col_a: str, col_b: str, dd_
     return float(overlap / n_active) if n_active > 0 else 0.0
 
 
+def _compute_ecd(
+    return_matrix: pd.DataFrame,
+    col_a: str,
+    col_b: str,
+    stress_percentile: float = 0.10,
+) -> float | None:
+    """Compute Expected Conditional Drawdown between two strategies.
+
+    Measures: "How much does B hurt when A is already stressed?"
+
+    1. Build equity curves and DD series for both A and B.
+    2. Find worst stress_percentile of A's drawdown days.
+    3. On those calendar days, measure B's average drawdown.
+    4. Return max of both directions (A stressed→B DD, B stressed→A DD).
+
+    Returns None if insufficient data (< 252 days with both active).
+    """
+    if col_a not in return_matrix.columns or col_b not in return_matrix.columns:
+        return None
+
+    a = return_matrix[col_a].fillna(0.0)
+    b = return_matrix[col_b].fillna(0.0)
+
+    # Build equity curves
+    base_equity = 100_000.0
+    eq_a = base_equity + a.cumsum()
+    eq_b = base_equity + b.cumsum()
+
+    # DD series (fractional, negative = drawdown)
+    dd_a = eq_a / eq_a.cummax() - 1.0
+    dd_b = eq_b / eq_b.cummax() - 1.0
+
+    if len(dd_a) < 252:
+        return None
+
+    # A stressed → B's average DD
+    threshold_a = dd_a.quantile(stress_percentile)
+    stressed_a = dd_a <= threshold_a
+    if stressed_a.sum() > 0:
+        ecd_b_given_a = abs(float(dd_b[stressed_a].mean()))
+    else:
+        ecd_b_given_a = 0.0
+
+    # B stressed → A's average DD
+    threshold_b = dd_b.quantile(stress_percentile)
+    stressed_b = dd_b <= threshold_b
+    if stressed_b.sum() > 0:
+        ecd_a_given_b = abs(float(dd_a[stressed_b].mean()))
+    else:
+        ecd_a_given_b = 0.0
+
+    return max(ecd_b_given_a, ecd_a_given_b)
+
+
 def sweep_combinations(
     candidates: list[dict],
     corr_matrix: pd.DataFrame,
@@ -816,6 +870,8 @@ def sweep_combinations(
     active_corr_threshold: float = 0.50,
     dd_corr_threshold: float = 0.40,
     tail_coloss_threshold: float = 0.30,
+    use_ecd: bool = True,
+    max_ecd: float = 0.03,
 ) -> list[dict]:
     """Sweep all C(n,k) combinations, reject high-correlation pairs, score survivors."""
     # Only use candidates that are in the return matrix
@@ -909,8 +965,21 @@ def sweep_combinations(
                 n_rejected += 1
                 continue
 
-            # Drawdown overlap check
-            if max_dd_overlap < 1.0:
+            # Drawdown overlap / ECD check
+            if use_ecd:
+                ecd_rejected = False
+                for ci in range(len(combo)):
+                    for cj in range(ci + 1, len(combo)):
+                        ecd_val = _compute_ecd(return_matrix, combo[ci], combo[cj])
+                        if ecd_val is not None and ecd_val > max_ecd:
+                            ecd_rejected = True
+                            break
+                    if ecd_rejected:
+                        break
+                if ecd_rejected:
+                    n_rejected += 1
+                    continue
+            elif max_dd_overlap < 1.0:
                 dd_rejected = False
                 for ci in range(len(combo)):
                     for cj in range(ci + 1, len(combo)):
@@ -931,9 +1000,15 @@ def sweep_combinations(
             avg_corr = mean(pair_corrs) if pair_corrs else 0.0
             diversity = _diversity_score(combo_cands)
 
-            # Compute max DD overlap for this combo
+            # Compute max DD overlap / ECD for this combo
             combo_max_dd_overlap = 0.0
-            if max_dd_overlap < 1.0:
+            if use_ecd:
+                for ci in range(len(combo)):
+                    for cj in range(ci + 1, len(combo)):
+                        ecd_val = _compute_ecd(return_matrix, combo[ci], combo[cj])
+                        if ecd_val is not None:
+                            combo_max_dd_overlap = max(combo_max_dd_overlap, ecd_val)
+            elif max_dd_overlap < 1.0:
                 for ci in range(len(combo)):
                     for cj in range(ci + 1, len(combo)):
                         dd_ov = _compute_dd_overlap(return_matrix, combo[ci], combo[cj])
@@ -1576,6 +1651,8 @@ def run_portfolio_selection(
         active_corr_threshold=float(ps_cfg.get("active_corr_threshold", 0.50)),
         dd_corr_threshold=float(ps_cfg.get("dd_corr_threshold", 0.40)),
         tail_coloss_threshold=float(ps_cfg.get("tail_coloss_threshold", 0.30)),
+        use_ecd=bool(ps_cfg.get("use_ecd", True)),
+        max_ecd=float(ps_cfg.get("max_ecd", 0.03)),
     )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")
