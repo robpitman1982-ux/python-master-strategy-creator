@@ -3,6 +3,40 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-04-03 — Session 59: Bulletproof SPOT runner + 9 new market configs
+
+**What was done**:
+Session 59 prepared the infrastructure for sweeping 9 new futures markets on
+SPOT VMs with automatic preemption recovery.
+
+- **Launcher defaults updated** (Task 1): `DEFAULT_STRATEGY_CONSOLE_REMOTE_ROOT`
+  and `DEFAULT_STRATEGY_CONSOLE_REMOTE_USER` changed from `robpitman1982` to
+  `pitman_nikola` to match Nikola's GCP account. Also fixed `run_cloud_sweep.py`
+  fallback path.
+
+- **9 new market configs** (Task 2): Created `cloud/config_<market>_3tf_spot.yaml`
+  for EC, JY, BP, AD, NG, US, TY, W, BTC. Each has 3 timeframes (daily, 60m, 30m)
+  with correct contract specs (dollars_per_point, tick_value, slippage_ticks).
+  All use SPOT provisioning on n2-highcpu-96 with 94 workers.
+  BTC uses `oos_split_date: 2021-01-01` (shorter CME history).
+
+- **Bulletproof SPOT runner** (Task 3): Built `run_spot_resilient.py` — a queue-based
+  runner that manages 27 single-timeframe sweep jobs (9 markets × 3 TF).
+  Features: YAML queue persistence (resume after Ctrl-C/reboot), single-TF config
+  generation from multi-TF base configs, zone rotation across 7 US zones, automatic
+  artifact detection via GCS bucket polling, result download after each completed job.
+  CLI: `--generate-queue`, `--status`, `--retry-failed`, `--markets`, `--timeframes`.
+
+- **Task 4 (test run) deferred**: Needs to run on strategy-console VM, not local.
+
+**What's next**:
+1. SSH to strategy-console, pull latest, run `python3 run_spot_resilient.py --generate-queue --markets AD --timeframes daily` for a single cheap test
+2. If test passes, run `python3 run_spot_resilient.py --generate-queue` for all 27 jobs
+3. Start grinding: `python3 run_spot_resilient.py`
+4. After all complete, regenerate ultimate leaderboard with all 17 markets
+
+---
+
 ## 2026-04-02 — Session 58: Portfolio selector correlation + MC realism upgrades
 
 **What was done**:

@@ -15,10 +15,10 @@
 
 **Expansion roadmap**:
 1. ✅ ES 60m (current — getting pipeline solid)
-2. ES across timeframes: 1m, 5m, 15m, 30m, daily
-3. CL (crude oil) all timeframes
-4. NQ (Nasdaq) all timeframes
-5. Additional instruments as needed
+2. ✅ ES across timeframes: 1m, 5m, 15m, 30m, daily
+3. ✅ CL (crude oil), NQ, SI, HG, RTY, YM, GC — 8 markets swept (315 strategies)
+4. ✅ 9 new markets added: EC, JY, BP, AD, NG, US, TY, W, BTC — configs ready, SPOT runner built
+5. Next: launch 27-job SPOT sweep (9 markets × 3 TF) via run_spot_resilient.py
 
 ## Repository structure
 
@@ -30,6 +30,7 @@ python-master-strategy-creator/
 ├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, result loading
 ├── generate_returns.py                 # Rebuild accepted strategies → strategy_returns.csv + strategy_trades.csv (parallel)
 ├── run_cloud_sweep.py                  # One-click wrapper around cloud.launch_gcp_run (auto-detects storage path)
+├── run_spot_resilient.py               # Queue-based SPOT runner: zone rotation, preemption retry, 1-TF-per-VM
 ├── paths.py                            # Shared path constants: REPO_ROOT, UPLOADS_DIR, RUNS_DIR, CONSOLE_STORAGE_ROOT (auto-detected)
 ├── scripts/
 │   ├── setup_dashboard_venv.sh        # One-time venv setup for strategy-console (picks python3.12/3.11)
@@ -169,6 +170,53 @@ Key sections:
 **Short Breakout filters**: DownsideBreakoutFilter, WeakCloseFilter, InsideBarFilter, GapDownFilter, LowerLowFilter
 
 **Universal filters** (shared across families): InsideBarFilter, OutsideBarFilter, GapUpFilter, GapDownFilter, ATRPercentileFilter, HigherHighFilter, LowerLowFilter
+
+## Contract specifications (all swept markets)
+
+| Market | Full Name           | $/Point     | Tick Size | $/Tick  | Slippage | Config |
+|--------|---------------------|-------------|-----------|---------|----------|--------|
+| ES     | E-mini S&P 500      | $50         | 0.25      | $12.50  | 4 ticks  | config_es_*.yaml |
+| CL     | Crude Oil           | $1,000      | 0.01      | $10.00  | 4 ticks  | config_cl_*.yaml |
+| NQ     | E-mini Nasdaq       | $20         | 0.25      | $5.00   | 4 ticks  | config_nq_*.yaml |
+| SI     | Silver              | $5,000      | 0.005     | $25.00  | 4 ticks  | config_si_*.yaml |
+| HG     | Copper              | $25,000     | 0.0005    | $12.50  | 4 ticks  | config_hg_*.yaml |
+| RTY    | Russell 2000        | $50         | 0.10      | $5.00   | 4 ticks  | config_rty_*.yaml |
+| YM     | Dow Jones           | $5          | 1.0       | $5.00   | 4 ticks  | config_ym_*.yaml |
+| GC     | Gold                | $100        | 0.10      | $10.00  | 4 ticks  | config_gc_*.yaml |
+| EC     | Euro FX             | $125,000    | 0.00005   | $6.25   | 2 ticks  | config_ec_3tf_spot.yaml |
+| JY     | Japanese Yen        | $125,000    | 0.0000005 | $6.25   | 2 ticks  | config_jy_3tf_spot.yaml |
+| BP     | British Pound       | $62,500     | 0.0001    | $6.25   | 2 ticks  | config_bp_3tf_spot.yaml |
+| AD     | Australian Dollar   | $100,000    | 0.0001    | $10.00  | 2 ticks  | config_ad_3tf_spot.yaml |
+| NG     | Natural Gas         | $10,000     | 0.001     | $10.00  | 2 ticks  | config_ng_3tf_spot.yaml |
+| US     | 30-Year T-Bond      | $1,000      | 0.03125   | $31.25  | 2 ticks  | config_us_3tf_spot.yaml |
+| TY     | 10-Year T-Note      | $1,000      | 0.015625  | $15.625 | 2 ticks  | config_ty_3tf_spot.yaml |
+| W      | Wheat (CBOT)        | $50         | 0.25      | $12.50  | 2 ticks  | config_w_3tf_spot.yaml |
+| BTC    | Bitcoin (CME)       | $5          | 5.0       | $25.00  | 2 ticks  | config_btc_3tf_spot.yaml |
+
+**Notes**: BTC uses `oos_split_date: 2021-01-01` (shorter history). All others use `2019-01-01`.
+
+## SPOT runner (run_spot_resilient.py)
+
+Queue-based runner for SPOT VMs. Each job = one market/timeframe on its own VM.
+
+```bash
+# Generate the queue for all 9 new markets (27 jobs)
+python3 run_spot_resilient.py --generate-queue
+
+# Start grinding (runs for 1-2 days unattended on console)
+python3 run_spot_resilient.py
+
+# Check status
+python3 run_spot_resilient.py --status
+
+# Run only specific markets/timeframes
+python3 run_spot_resilient.py --markets EC,JY,BP --timeframes daily,60m
+
+# Retry failed jobs
+python3 run_spot_resilient.py --retry-failed
+```
+
+Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (max 5 retries per job).
 
 ## Known issues and improvement priorities
 
@@ -343,4 +391,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-04-02 — Session 58: Portfolio selector correlation + MC realism upgrades to new GCP account
+2026-04-03 — Session 59: 9 new market configs + bulletproof SPOT runner + launcher defaults for Nikola's console
