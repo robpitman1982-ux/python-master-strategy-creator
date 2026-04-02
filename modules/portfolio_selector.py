@@ -1379,6 +1379,95 @@ def run_bootcamp_mc(
 
 
 # ============================================================================
+# STAGE 4b: Regime survival gate
+# ============================================================================
+
+_DEFAULT_REGIME_WINDOWS = [
+    ("2022", "2022-01-01", "2022-12-31"),  # inflation/rate hike
+    ("2023", "2023-01-01", "2023-12-31"),  # recovery
+    ("2024-2025", "2024-01-01", "2025-12-31"),  # AI/metals trend
+]
+
+
+def regime_survival_gate(
+    combinations: list[dict],
+    return_matrix: pd.DataFrame,
+    min_regime_pf: float = 0.8,
+    regime_windows: list[tuple[str, str, str]] | None = None,
+) -> list[dict]:
+    """Filter portfolio combinations that fail in specific market regimes.
+
+    For each surviving combo, compute portfolio PnL in regime windows.
+    Reject combo if any regime window has PF < min_regime_pf.
+
+    Args:
+        combinations: Output from sweep_combinations.
+        return_matrix: Daily return matrix (index must be DatetimeIndex).
+        min_regime_pf: Minimum PF per regime window (default 0.8).
+        regime_windows: List of (name, start_date, end_date) tuples.
+
+    Returns filtered list of combinations.
+    """
+    if regime_windows is None:
+        regime_windows = _DEFAULT_REGIME_WINDOWS
+
+    # Ensure datetime index
+    if not isinstance(return_matrix.index, pd.DatetimeIndex):
+        try:
+            return_matrix = return_matrix.copy()
+            return_matrix.index = pd.to_datetime(return_matrix.index)
+        except Exception:
+            logger.warning("Cannot convert return matrix index to datetime; skipping regime gate")
+            return combinations
+
+    survivors: list[dict] = []
+    n_rejected = 0
+
+    for combo in combinations:
+        names = combo["strategy_names"]
+        available = [n for n in names if n in return_matrix.columns]
+        if not available:
+            survivors.append(combo)
+            continue
+
+        rejected = False
+        for regime_name, start, end in regime_windows:
+            mask = (return_matrix.index >= start) & (return_matrix.index <= end)
+            window = return_matrix.loc[mask, available]
+
+            if window.empty or len(window) < 20:
+                continue
+
+            # Sum daily PnL across all strategies in the combo
+            portfolio_pnl = window.sum(axis=1)
+            gross_profit = float(portfolio_pnl[portfolio_pnl > 0].sum())
+            gross_loss = abs(float(portfolio_pnl[portfolio_pnl < 0].sum()))
+
+            if gross_loss > 0:
+                pf = gross_profit / gross_loss
+            elif gross_profit > 0:
+                pf = 10.0  # no losses
+            else:
+                pf = 0.0  # no trades
+
+            if pf < min_regime_pf:
+                logger.info(
+                    f"Regime gate REJECT: {len(names)} strats, "
+                    f"regime={regime_name}, PF={pf:.2f} < {min_regime_pf}"
+                )
+                rejected = True
+                break
+
+        if rejected:
+            n_rejected += 1
+        else:
+            survivors.append(combo)
+
+    logger.info(f"Regime gate: {len(combinations)} -> {len(survivors)} combos ({n_rejected} rejected)")
+    return survivors
+
+
+# ============================================================================
 # STAGE 6: Optimise sizing
 # ============================================================================
 
@@ -1810,6 +1899,17 @@ def run_portfolio_selection(
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")
         return {"status": "no_combinations"}
+
+    # Stage 4b: Regime survival gate
+    use_regime_gate = bool(ps_cfg.get("use_regime_gate", True))
+    if use_regime_gate:
+        combinations = regime_survival_gate(
+            combinations, return_matrix,
+            min_regime_pf=float(ps_cfg.get("min_regime_pf", 0.8)),
+        )
+        if not combinations:
+            logger.warning("No combinations survived regime gate. Aborting.")
+            return {"status": "no_combinations_after_regime_gate"}
 
     n_tested = len(combinations)
 
