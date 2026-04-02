@@ -3,6 +3,62 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-04-02 — Session 58: Portfolio selector correlation + MC realism upgrades
+
+**What was done**:
+Session 58 focused on making the portfolio selector more realistic and robust,
+based on combined feedback from ChatGPT and Gemini consultations.
+
+- **3-layer correlation architecture** (Task 1): Replaced single Pearson correlation
+  with three layers: active-day correlation (only days both traded), drawdown-state
+  correlation (correlate DD series), and tail co-loss probability (P(B losing | A
+  stressed)). Multi-layer gate rejects pairs exceeding any threshold. Old Pearson
+  preserved as fallback. Config: `use_multi_layer_correlation` (default true).
+
+- **Expected Conditional Drawdown** (Task 2): Replaced binary DD overlap counting
+  with ECD — measures average drawdown of B when A is in its worst 10% DD state.
+  Max of both directions used as conservative estimate. Config: `use_ecd` (default
+  true), `max_ecd` (default 0.03).
+
+- **Block bootstrap Monte Carlo** (Task 3): Added `portfolio_monte_carlo_block_bootstrap()`
+  that samples blocks of consecutive days (5/10/20) from the daily portfolio return
+  series. Preserves crisis clustering, cross-strategy DD correlation, volatility
+  regime persistence. Old shuffle-interleave preserved. Config: `mc_method`
+  (default "block_bootstrap").
+
+- **Daily DD tracking in results** (Task 4): Added `daily_dd_breach` field to
+  StepResult and `daily_dd_breaches` count to ChallengeResult. Daily DD enforcement
+  was already implemented in Session 52 — this adds explicit breach tracking.
+
+- **Regime survival gate** (Task 5): Added `regime_survival_gate()` that filters
+  portfolio combinations by requiring PF >= 0.8 across three market regimes:
+  2022 (inflation/rate hike), 2023 (recovery), 2024-2025 (AI/metals trend).
+  Catches meta-overfit. Config: `use_regime_gate` (default true), `min_regime_pf`.
+
+- **12 new tests** (Task 6): Multi-layer correlation (3), ECD (3), block bootstrap
+  MC (2), daily DD simulation (2), regime survival gate (2).
+
+**Tests**: 261 pass (249 existing + 12 new).
+
+**New config flags** (all in `pipeline.portfolio_selector`):
+- `use_multi_layer_correlation: true` — enable 3-layer correlation
+- `active_corr_threshold: 0.50` — Layer A rejection threshold
+- `dd_corr_threshold: 0.40` — Layer B rejection threshold
+- `tail_coloss_threshold: 0.30` — Layer C rejection threshold
+- `use_ecd: true` — use ECD instead of binary DD overlap
+- `max_ecd: 0.03` — max ECD threshold (3% average conditional DD)
+- `mc_method: "block_bootstrap"` — MC method
+- `use_regime_gate: true` — enable regime survival gate
+- `min_regime_pf: 0.8` — minimum PF per regime window
+
+**What's next**:
+- Run portfolio selector with latest results to validate new gates
+- Compare block bootstrap vs shuffle-interleave pass rates
+- Tune correlation thresholds based on real data
+- Run cloud sweep on new GCP account
+
+---
+
 ## 2026-04-02 — Session 56: Cloud infrastructure migration
 
 **What was done**:

@@ -283,6 +283,11 @@ Key sections:
 - [x] The5ers Pro Growth config added ($74 entry, same rules as Hyper Growth) (Session 52)
 - [x] Daily drawdown enforcement in simulate_single_step — trades_per_day grouping, daily PnL accumulator (Session 52)
 - [x] Portfolio selector: configurable prop_firm_program + prop_firm_target in config.yaml (Session 52)
+- [x] Portfolio selector: 3-layer correlation architecture (active-day, DD-state, tail co-loss) replacing Pearson (Session 58)
+- [x] Portfolio selector: Expected Conditional Drawdown replacing binary DD overlap (Session 58)
+- [x] Portfolio selector: block bootstrap MC preserving crisis clustering (Session 58)
+- [x] Portfolio selector: regime survival gate (2022/2023/2024-2025 PF check) (Session 58)
+- [x] Daily DD breach tracking in StepResult/ChallengeResult (Session 58)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
@@ -338,4 +343,4 @@ Key sections:
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-04-02 — Session 56: Cloud infrastructure migration to new GCP account
+2026-04-02 — Session 58: Portfolio selector correlation + MC realism upgrades to new GCP account
