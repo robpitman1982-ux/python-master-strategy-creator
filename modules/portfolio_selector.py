@@ -449,6 +449,118 @@ def compute_correlation_matrix(
     return corr
 
 
+def compute_multi_layer_correlation(
+    return_matrix: pd.DataFrame,
+    min_overlap_days: int = 30,
+    stress_percentile: float = 0.10,
+    output_dir: str | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Compute 3-layer correlation architecture for portfolio selection.
+
+    Layer A: Active-day correlation — only days where BOTH strategies traded.
+    Layer B: Drawdown-state correlation — correlate DD series, not raw PnL.
+    Layer C: Tail co-loss probability — P(B losing | A in worst 10% DD).
+
+    Returns dict with keys 'active_corr', 'dd_corr', 'tail_coloss', each a DataFrame.
+    """
+    cols = list(return_matrix.columns)
+    n = len(cols)
+
+    active_corr = pd.DataFrame(0.0, index=cols, columns=cols)
+    dd_corr = pd.DataFrame(0.0, index=cols, columns=cols)
+    tail_coloss = pd.DataFrame(0.0, index=cols, columns=cols)
+
+    # Set diagonals to 1.0 for active_corr and dd_corr
+    for c in cols:
+        active_corr.loc[c, c] = 1.0
+        dd_corr.loc[c, c] = 1.0
+        tail_coloss.loc[c, c] = 1.0
+
+    # Precompute equity curves and DD series for Layer B and C
+    base_equity = 100_000.0
+    equity_curves: dict[str, pd.Series] = {}
+    dd_series: dict[str, pd.Series] = {}
+    for c in cols:
+        eq = base_equity + return_matrix[c].cumsum()
+        equity_curves[c] = eq
+        peak = eq.cummax()
+        dd = eq / peak - 1.0  # negative values = drawdown
+        dd_series[c] = dd
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            ci, cj = cols[i], cols[j]
+            a = return_matrix[ci]
+            b = return_matrix[cj]
+
+            # Layer A: Active-day correlation
+            both_active = (a != 0.0) & (b != 0.0)
+            overlap = int(both_active.sum())
+            if overlap >= min_overlap_days:
+                corr_val = float(a[both_active].corr(b[both_active]))
+                if np.isnan(corr_val):
+                    corr_val = 0.0
+            else:
+                corr_val = 0.0
+            active_corr.loc[ci, cj] = corr_val
+            active_corr.loc[cj, ci] = corr_val
+
+            # Layer B: Drawdown-state correlation
+            dd_corr_val = float(dd_series[ci].corr(dd_series[cj]))
+            if np.isnan(dd_corr_val):
+                dd_corr_val = 0.0
+            dd_corr.loc[ci, cj] = dd_corr_val
+            dd_corr.loc[cj, ci] = dd_corr_val
+
+            # Layer C: Tail co-loss probability
+            dd_i = dd_series[ci]
+            dd_j = dd_series[cj]
+
+            # Find worst stress_percentile of A's drawdown days
+            threshold_i = dd_i.quantile(stress_percentile)
+            stressed_i = dd_i <= threshold_i  # worst DD days for A
+
+            if stressed_i.sum() > 0:
+                # P(B also losing | A in worst DD)
+                b_losing_given_a_stressed = (dd_j[stressed_i] < 0).mean()
+            else:
+                b_losing_given_a_stressed = 0.0
+
+            # Symmetric: also check B stressed → A losing
+            threshold_j = dd_j.quantile(stress_percentile)
+            stressed_j = dd_j <= threshold_j
+
+            if stressed_j.sum() > 0:
+                a_losing_given_b_stressed = (dd_i[stressed_j] < 0).mean()
+            else:
+                a_losing_given_b_stressed = 0.0
+
+            # Take the max of both directions (conservative)
+            tail_val = max(float(b_losing_given_a_stressed), float(a_losing_given_b_stressed))
+            tail_coloss.loc[ci, cj] = tail_val
+            tail_coloss.loc[cj, ci] = tail_val
+
+    if output_dir:
+        active_corr.to_csv(os.path.join(output_dir, "portfolio_selector_active_corr.csv"))
+        dd_corr.to_csv(os.path.join(output_dir, "portfolio_selector_dd_corr.csv"))
+        tail_coloss.to_csv(os.path.join(output_dir, "portfolio_selector_tail_coloss.csv"))
+
+    # Log high values
+    for i in range(n):
+        for j in range(i + 1, n):
+            ci, cj = cols[i], cols[j]
+            ac = abs(active_corr.loc[ci, cj])
+            dc = abs(dd_corr.loc[ci, cj])
+            tc = tail_coloss.loc[ci, cj]
+            if ac > 0.3 or dc > 0.3 or tc > 0.3:
+                logger.info(
+                    f"Multi-layer corr {ci} vs {cj}: active={ac:.3f}, dd={dc:.3f}, tail={tc:.3f}"
+                )
+
+    logger.info(f"Multi-layer correlation: {n}x{n}, 3 layers computed")
+    return {"active_corr": active_corr, "dd_corr": dd_corr, "tail_coloss": tail_coloss}
+
+
 # ============================================================================
 # STAGE 3b: Pre-sweep correlation dedup
 # ============================================================================
@@ -700,6 +812,10 @@ def sweep_combinations(
     max_per_market: int = 2,
     max_equity_index: int = 3,
     max_dd_overlap: float = 0.30,
+    multi_layer_corr: dict[str, pd.DataFrame] | None = None,
+    active_corr_threshold: float = 0.50,
+    dd_corr_threshold: float = 0.40,
+    tail_coloss_threshold: float = 0.30,
 ) -> list[dict]:
     """Sweep all C(n,k) combinations, reject high-correlation pairs, score survivors."""
     # Only use candidates that are in the return matrix
@@ -740,22 +856,38 @@ def sweep_combinations(
     results: list[dict] = []
     n_rejected = 0
 
+    # Precompute multi-layer matrices if provided
+    ml_active = multi_layer_corr["active_corr"].abs() if multi_layer_corr else None
+    ml_dd = multi_layer_corr["dd_corr"].abs() if multi_layer_corr else None
+    ml_tail = multi_layer_corr["tail_coloss"] if multi_layer_corr else None
+
     for k in range(n_min, n_max + 1):
         for combo in itertools.combinations(strategy_names, k):
-            # Reject if any pair > 0.4
             rejected = False
             pair_corrs: list[float] = []
             for i in range(len(combo)):
                 for j in range(i + 1, len(combo)):
                     c_i, c_j = combo[i], combo[j]
-                    if c_i in abs_corr.columns and c_j in abs_corr.columns:
-                        val = float(abs_corr.loc[c_i, c_j])
+
+                    if ml_active is not None:
+                        # Multi-layer correlation gate
+                        ac = float(ml_active.loc[c_i, c_j]) if (c_i in ml_active.columns and c_j in ml_active.columns) else 0.0
+                        dc = float(ml_dd.loc[c_i, c_j]) if (c_i in ml_dd.columns and c_j in ml_dd.columns) else 0.0
+                        tc = float(ml_tail.loc[c_i, c_j]) if (c_i in ml_tail.columns and c_j in ml_tail.columns) else 0.0
+                        pair_corrs.append(ac)
+                        if ac > active_corr_threshold or dc > dd_corr_threshold or tc > tail_coloss_threshold:
+                            rejected = True
+                            break
                     else:
-                        val = 0.0
-                    pair_corrs.append(val)
-                    if val > 0.4:
-                        rejected = True
-                        break
+                        # Fallback: Pearson correlation gate
+                        if c_i in abs_corr.columns and c_j in abs_corr.columns:
+                            val = float(abs_corr.loc[c_i, c_j])
+                        else:
+                            val = 0.0
+                        pair_corrs.append(val)
+                        if val > 0.4:
+                            rejected = True
+                            break
                 if rejected:
                     break
 
@@ -1423,6 +1555,14 @@ def run_portfolio_selection(
     # Stage 3: Correlation matrix (uses daily return matrix — correct for corr)
     corr_matrix = compute_correlation_matrix(return_matrix, output_dir=output_dir)
 
+    # Stage 3a: Multi-layer correlation (if enabled)
+    use_multi_layer = bool(ps_cfg.get("use_multi_layer_correlation", True))
+    multi_layer_corr: dict[str, pd.DataFrame] | None = None
+    if use_multi_layer:
+        multi_layer_corr = compute_multi_layer_correlation(
+            return_matrix, output_dir=output_dir,
+        )
+
     # Stage 3b: Pre-sweep correlation dedup
     candidates = correlation_dedup(candidates, corr_matrix, return_matrix)
 
@@ -1432,6 +1572,10 @@ def run_portfolio_selection(
         max_per_market=int(ps_cfg.get("max_strategies_per_market", 2)),
         max_equity_index=int(ps_cfg.get("max_equity_index_strategies", 3)),
         max_dd_overlap=float(ps_cfg.get("max_dd_overlap", 0.30)),
+        multi_layer_corr=multi_layer_corr,
+        active_corr_threshold=float(ps_cfg.get("active_corr_threshold", 0.50)),
+        dd_corr_threshold=float(ps_cfg.get("dd_corr_threshold", 0.40)),
+        tail_coloss_threshold=float(ps_cfg.get("tail_coloss_threshold", 0.30)),
     )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")

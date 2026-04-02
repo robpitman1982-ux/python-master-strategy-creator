@@ -493,6 +493,7 @@ class TestEndToEnd:
                 output_dir=str(output_dir),
                 n_sims_mc=100,       # Small for speed
                 n_sims_sizing=50,    # Small for speed
+                config={"pipeline": {"portfolio_selector": {"use_multi_layer_correlation": False}}},
             )
 
             # Check report was written
