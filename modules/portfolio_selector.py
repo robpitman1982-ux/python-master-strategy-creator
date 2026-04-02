@@ -865,6 +865,9 @@ def portfolio_monte_carlo(
     worst_dds: list[float] = []
     trades_to_pass: list[int] = []
     step_trades_list: list[list[int]] = []  # per-sim [step1_trades, step2_trades, ...]
+    rolling_20_dds: list[float] = []
+    max_losing_streaks: list[int] = []
+    max_recovery_trades_list: list[int] = []
 
     for _ in range(n_sims):
         # 1. Independently shuffle each strategy's trades
@@ -887,6 +890,40 @@ def portfolio_monte_carlo(
         # 3. Run through simulate_challenge
         result = simulate_challenge(combined, config, source_capital)
         worst_dds.append(result.worst_drawdown_pct)
+
+        # 4. Risk metrics on the combined trade sequence
+        if combined:
+            # Worst rolling 20-trade DD
+            if len(combined) >= 20:
+                arr = np.array(combined)
+                rolling_sum = np.convolve(arr, np.ones(20), mode='valid')
+                rolling_20_dds.append(float(np.min(rolling_sum)))
+            else:
+                rolling_20_dds.append(float(sum(combined)))
+
+            # Max losing streak
+            streak = 0
+            max_streak = 0
+            for t in combined:
+                if t < 0:
+                    streak += 1
+                    max_streak = max(max_streak, streak)
+                else:
+                    streak = 0
+            max_losing_streaks.append(max_streak)
+
+            # Max recovery time (trades from DD trough back to new equity high)
+            equity = np.cumsum(combined)
+            running_max = np.maximum.accumulate(equity)
+            max_recovery = 0
+            current_recovery = 0
+            for ei in range(len(equity)):
+                if equity[ei] < running_max[ei]:
+                    current_recovery += 1
+                    max_recovery = max(max_recovery, current_recovery)
+                else:
+                    current_recovery = 0
+            max_recovery_trades_list.append(max_recovery)
 
         for step in result.steps:
             if step.passed:
@@ -923,6 +960,9 @@ def portfolio_monte_carlo(
         "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
         "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
         "step_median_trades": step_median_trades,
+        "worst_rolling_20_p95": float(np.percentile(rolling_20_dds, 95)) if rolling_20_dds else 0.0,
+        "max_losing_streak_p95": float(np.percentile(max_losing_streaks, 95)) if max_losing_streaks else 0,
+        "max_recovery_trades_p95": float(np.percentile(max_recovery_trades_list, 95)) if max_recovery_trades_list else 0,
     })
     return mc_result
 
@@ -1551,6 +1591,9 @@ def _write_report(
             "est_months_median": round(est_months_median, 1),
             "est_months_p75": round(est_months_p75, 1),
             "robustness_score": round(p.get("robustness_score", 0.0), 4),
+            "worst_rolling_20_p95": round(p.get("worst_rolling_20_p95", 0.0), 2),
+            "max_losing_streak_p95": int(p.get("max_losing_streak_p95", 0)),
+            "max_recovery_trades_p95": int(p.get("max_recovery_trades_p95", 0)),
             "verdict": verdict,
         })
         rows.append(row)
