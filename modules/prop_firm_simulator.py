@@ -275,6 +275,7 @@ class StepResult:
     failure_reason: str | None = None
     equity_curve: list[float] = field(default_factory=list)
     target_hit_trade_idx: int | None = None
+    daily_dd_breach: bool = False
 
 
 @dataclass
@@ -288,6 +289,7 @@ class ChallengeResult:
     avg_trades_per_step: float
     trades_consumed: int
     trades_available: int
+    daily_dd_breaches: int = 0
 
 
 # =============================================================================
@@ -390,6 +392,7 @@ def simulate_single_step(
                     failure_reason=f"Daily DD breach: ${daily_pnl_accumulator:,.0f} exceeds -{config.max_daily_drawdown_pct*100:.0f}% (${daily_dd_limit:,.0f})",
                     equity_curve=equity_curve,
                     target_hit_trade_idx=None,
+                    daily_dd_breach=True,
                 )
             # Reset accumulator at day boundary
             if (i + 1) % trades_per_day_group == 0:
@@ -541,6 +544,7 @@ def simulate_challenge(
     total_trades = sum(s.trades_taken for s in steps)
     worst_dd = max(s.max_drawdown_pct for s in steps) if steps else 0.0
     avg_trades = total_trades / len(steps) if steps else 0.0
+    dd_breaches = sum(1 for s in steps if s.daily_dd_breach)
 
     return ChallengeResult(
         config=config,
@@ -551,6 +555,7 @@ def simulate_challenge(
         avg_trades_per_step=avg_trades,
         trades_consumed=trade_cursor,
         trades_available=len(trade_pnls),
+        daily_dd_breaches=dd_breaches,
     )
 
 
