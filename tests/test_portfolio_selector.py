@@ -700,3 +700,291 @@ class TestRollingDDMetric:
         result = portfolio_monte_carlo(trade_lists, config, n_sims=100, seed=42)
         assert "p99_worst_dd_pct" in result
         assert result["p99_worst_dd_pct"] >= result["p95_worst_dd_pct"]
+
+
+# ===========================================================================
+# Session 58 Tests
+# ===========================================================================
+
+class TestMultiLayerCorrelation:
+    """Test Task 1: 3-layer correlation architecture."""
+
+    def test_active_day_corr_differs_from_full_pearson(self) -> None:
+        """Active-day correlation should differ from full Pearson on sparse data."""
+        from modules.portfolio_selector import compute_correlation_matrix, compute_multi_layer_correlation
+
+        rng = np.random.RandomState(42)
+        n_days = 500
+
+        # Strategy A trades on odd days, B trades on even days, C trades every day
+        col_a = np.zeros(n_days)
+        col_b = np.zeros(n_days)
+        col_c = rng.randn(n_days) * 200
+
+        # A and C are correlated on the days A trades
+        for i in range(0, n_days, 2):
+            col_a[i] = col_c[i] + rng.randn() * 50
+        for i in range(1, n_days, 2):
+            col_b[i] = col_c[i] + rng.randn() * 50
+
+        return_matrix = pd.DataFrame({
+            "ES_60m_A": col_a,
+            "CL_daily_B": col_b,
+            "NQ_30m_C": col_c,
+        })
+
+        pearson = compute_correlation_matrix(return_matrix)
+        multi = compute_multi_layer_correlation(return_matrix)
+
+        # Active-day correlation should be different from full Pearson
+        # because Pearson includes thousands of zero-days
+        active_corr = multi["active_corr"]
+        assert active_corr.shape == pearson.shape
+
+        # A vs B: very few overlapping active days → should be 0.0
+        assert abs(active_corr.loc["ES_60m_A", "CL_daily_B"]) < 0.01
+
+    def test_dd_state_corr_catches_co_drawdown(self) -> None:
+        """DD-state correlation should be high for strategies that draw down together."""
+        from modules.portfolio_selector import compute_multi_layer_correlation
+
+        n_days = 500
+        # Both strategies have drawdowns at the same time
+        base = np.zeros(n_days)
+        # Create a shared drawdown period (days 100-150)
+        base[100:150] = -100  # both losing
+        base[200:250] = 100   # both winning
+
+        col_a = base + np.random.RandomState(42).randn(n_days) * 20
+        col_b = base + np.random.RandomState(43).randn(n_days) * 20
+
+        return_matrix = pd.DataFrame({
+            "ES_60m_A": col_a,
+            "CL_daily_B": col_b,
+        })
+
+        multi = compute_multi_layer_correlation(return_matrix)
+        dd_corr = multi["dd_corr"]
+
+        # Should show positive DD correlation
+        assert dd_corr.loc["ES_60m_A", "CL_daily_B"] > 0.3
+
+    def test_tail_coloss_catches_crisis_correlation(self) -> None:
+        """Tail co-loss should be high when B loses when A is stressed."""
+        from modules.portfolio_selector import compute_multi_layer_correlation
+
+        rng = np.random.RandomState(42)
+        n_days = 1000
+
+        col_a = rng.randn(n_days) * 100
+        col_b = rng.randn(n_days) * 100
+
+        # When A has large losses, make B also lose
+        for i in range(n_days):
+            if col_a[i] < -200:  # A in crisis
+                col_b[i] = -abs(col_b[i]) - 100  # force B to also lose
+
+        return_matrix = pd.DataFrame({
+            "ES_60m_A": col_a,
+            "CL_daily_B": col_b,
+        })
+
+        multi = compute_multi_layer_correlation(return_matrix)
+        tail = multi["tail_coloss"]
+
+        # Should show high tail co-loss
+        assert tail.loc["ES_60m_A", "CL_daily_B"] > 0.5
+
+
+class TestExpectedConditionalDrawdown:
+    """Test Task 2: ECD."""
+
+    def test_ecd_high_for_correlated_pair(self) -> None:
+        """ECD should be high when strategies draw down together."""
+        from modules.portfolio_selector import _compute_ecd
+
+        n_days = 500
+        # Both strategies have correlated drawdowns
+        base = np.zeros(n_days)
+        base[50:100] = -200   # shared drawdown period
+        base[200:250] = -300  # another shared drawdown
+
+        rng = np.random.RandomState(42)
+        col_a = base + rng.randn(n_days) * 20
+        col_b = base + rng.randn(n_days) * 20
+
+        return_matrix = pd.DataFrame({
+            "strat_a": col_a,
+            "strat_b": col_b,
+        })
+
+        ecd = _compute_ecd(return_matrix, "strat_a", "strat_b")
+        assert ecd is not None
+        assert ecd > 0.01  # significant conditional drawdown
+
+    def test_ecd_low_for_uncorrelated_pair(self) -> None:
+        """ECD should be low for independent strategies."""
+        from modules.portfolio_selector import _compute_ecd
+
+        rng = np.random.RandomState(42)
+        n_days = 500
+
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.randn(n_days) * 100,
+            "strat_b": rng.randn(n_days) * 100,
+        })
+
+        ecd = _compute_ecd(return_matrix, "strat_a", "strat_b")
+        assert ecd is not None
+        # For independent strategies, ECD should be relatively low
+        # (not zero because random chance, but much lower than correlated)
+        assert ecd < 0.05
+
+    def test_ecd_returns_none_for_short_data(self) -> None:
+        """ECD should return None for < 252 days."""
+        from modules.portfolio_selector import _compute_ecd
+
+        return_matrix = pd.DataFrame({
+            "strat_a": np.random.randn(100),
+            "strat_b": np.random.randn(100),
+        })
+
+        ecd = _compute_ecd(return_matrix, "strat_a", "strat_b")
+        assert ecd is None
+
+
+class TestBlockBootstrapMC:
+    """Test Task 3: block bootstrap Monte Carlo."""
+
+    def test_block_bootstrap_returns_valid_results(self) -> None:
+        """Block bootstrap MC should return valid pass rate and DD stats."""
+        from modules.portfolio_selector import portfolio_monte_carlo_block_bootstrap
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        rng = np.random.RandomState(42)
+        config = The5ersBootcampConfig()
+
+        dates = pd.date_range("2010-01-01", periods=500, freq="D")
+        return_matrix = pd.DataFrame({
+            "strat_a": rng.normal(300, 1500, 500),
+            "strat_b": rng.normal(300, 1500, 500),
+        }, index=dates)
+
+        result = portfolio_monte_carlo_block_bootstrap(
+            return_matrix, ["strat_a", "strat_b"], config, n_sims=100, seed=42,
+        )
+
+        assert 0.0 <= result["pass_rate"] <= 1.0
+        assert "step1_pass_rate" in result
+        assert "p95_worst_dd_pct" in result
+        assert "p99_worst_dd_pct" in result
+        assert "worst_rolling_20_p95" in result
+        assert "max_losing_streak_p95" in result
+
+    def test_block_bootstrap_preserves_clustering(self) -> None:
+        """Block bootstrap should preserve consecutive-day patterns."""
+        from modules.portfolio_selector import portfolio_monte_carlo_block_bootstrap
+        from modules.prop_firm_simulator import The5ersBootcampConfig
+
+        config = The5ersBootcampConfig()
+
+        # Create data with a clear crisis cluster (days 100-120 all negative)
+        n_days = 300
+        rng = np.random.RandomState(42)
+        returns = rng.normal(200, 500, n_days)
+        returns[100:120] = -2000  # crisis cluster
+
+        dates = pd.date_range("2010-01-01", periods=n_days, freq="D")
+        return_matrix = pd.DataFrame({"strat_a": returns}, index=dates)
+
+        result = portfolio_monte_carlo_block_bootstrap(
+            return_matrix, ["strat_a"], config, n_sims=200, seed=42,
+        )
+
+        # With preserved crisis clustering, worst DD should be significant
+        assert result["p95_worst_dd_pct"] > 0.0
+        # Max losing streak should reflect the 20-day crisis
+        assert result["max_losing_streak_p95"] >= 3
+
+
+class TestDailyDDSimulation:
+    """Test Task 4: daily DD tracking in simulate_challenge."""
+
+    def test_daily_dd_breach_detected(self) -> None:
+        """Trade sequence breaching 5% daily DD should fail High Stakes."""
+        from modules.prop_firm_simulator import simulate_challenge, The5ersHighStakesConfig
+
+        config = The5ersHighStakesConfig()
+        # Source capital = 100K, step balance = 100K, daily DD = 5% = $5000
+        # Create trades that lose > $5000 in one "day"
+        trades = [-6000.0]  # Single trade loses 6% → daily DD breach
+
+        result = simulate_challenge(trades, config, source_capital=100_000.0)
+        assert not result.passed_all_steps
+        assert result.daily_dd_breaches > 0
+        assert result.steps[0].daily_dd_breach
+
+    def test_bootcamp_no_daily_dd(self) -> None:
+        """Bootcamp (no daily DD) should not breach on same trades."""
+        from modules.prop_firm_simulator import simulate_challenge, The5ersBootcampConfig
+
+        config = The5ersBootcampConfig()
+        # Same large loss — Bootcamp has no daily DD limit
+        # Source capital = 250K, step balance = 100K
+        # -6000 * (100K/250K) = -2400, which is 2.4% of 100K — within 5% max DD
+        trades = [-6000.0]
+
+        result = simulate_challenge(trades, config, source_capital=250_000.0)
+        assert result.daily_dd_breaches == 0
+        # Should not breach (only 2.4% DD, under 5% max)
+        last_step = result.steps[-1]
+        assert not last_step.daily_dd_breach
+
+
+class TestRegimeSurvivalGate:
+    """Test Task 5: regime survival gate."""
+
+    def test_regime_gate_rejects_failing_combo(self) -> None:
+        """Combo that loses money in one regime should be rejected."""
+        from modules.portfolio_selector import regime_survival_gate
+
+        dates = pd.date_range("2020-01-01", "2025-12-31", freq="D")
+        n = len(dates)
+        rng = np.random.RandomState(42)
+
+        # Strategy that works in 2022-2023 but fails badly in 2024
+        returns = rng.normal(100, 200, n)
+        mask_2024 = (dates >= "2024-01-01") & (dates <= "2025-12-31")
+        returns[mask_2024] = rng.normal(-500, 100, mask_2024.sum())
+
+        return_matrix = pd.DataFrame(
+            {"ES_60m_StratA": returns},
+            index=dates,
+        )
+
+        combos = [{"strategy_names": ["ES_60m_StratA"], "score": 1.0}]
+        result = regime_survival_gate(combos, return_matrix, min_regime_pf=0.8)
+
+        # Should be rejected because 2024-2025 regime has negative PF
+        assert len(result) == 0
+
+    def test_regime_gate_passes_healthy_combo(self) -> None:
+        """Combo that's profitable in all regimes should pass."""
+        from modules.portfolio_selector import regime_survival_gate
+
+        dates = pd.date_range("2020-01-01", "2025-12-31", freq="D")
+        n = len(dates)
+        rng = np.random.RandomState(42)
+
+        # Strategy that's consistently profitable
+        returns = rng.normal(100, 200, n)
+
+        return_matrix = pd.DataFrame(
+            {"ES_60m_StratA": returns},
+            index=dates,
+        )
+
+        combos = [{"strategy_names": ["ES_60m_StratA"], "score": 1.0}]
+        result = regime_survival_gate(combos, return_matrix, min_regime_pf=0.8)
+
+        assert len(result) == 1
