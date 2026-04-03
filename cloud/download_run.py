@@ -403,6 +403,17 @@ def aggregate_ultimate_leaderboard(runs_root: Path | None = None) -> None:
         print(f"[ultimate_leaderboard] No accepted strategies found (scanned {files_found} run dirs under {runs_root})")
         return
 
+    # --- Backfill market and timeframe from dataset column when missing ---
+    for r in all_rows:
+        dataset_val = r.get("dataset", "")
+        if dataset_val:
+            parts = str(dataset_val).split("_")
+            if len(parts) >= 2:
+                if not r.get("market"):
+                    r["market"] = parts[0]
+                if not r.get("timeframe"):
+                    r["timeframe"] = parts[1]
+
     # Deduplicate by (strategy_type, dataset, leader_strategy_name, best_combo_filter_class_names)
     def _sig(r: dict[str, str]) -> tuple[str, ...]:
         return (
@@ -432,6 +443,10 @@ def aggregate_ultimate_leaderboard(runs_root: Path | None = None) -> None:
         all_fields.append("run_id")
     if "rank" not in all_fields:
         all_fields.insert(0, "rank")
+    # Ensure market and timeframe columns appear early in the output
+    for col in ("timeframe", "market"):
+        if col not in all_fields:
+            all_fields.insert(1, col)
 
     _write_csv(output_path, all_fields, deduped)
     print(f"[ultimate_leaderboard] {len(deduped)} strategies ({len(all_rows) - len(deduped)} duplicates removed) -> {output_path}")
