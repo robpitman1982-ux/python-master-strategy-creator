@@ -1,26 +1,27 @@
-# Session 59 Tasks — Vectorized Cloud Portfolio Selector (Multi-Program)
+# Session 59 Tasks — Vectorized Local Portfolio Selector (Multi-Program)
 
 ## Context
 Portfolio selector currently runs single-threaded with Python loops.
 With 649 strategies (526 accepted) across 16 markets, and needing to evaluate
 multiple prop firm programs (Bootcamp $250K, High Stakes $100K, Hyper Growth $5K,
-Pro Growth, home futures $25K), this needs to run on the 96-vCPU GCP VM with
-vectorized numpy MC + ProcessPoolExecutor parallelism.
+Pro Growth), this needs vectorized numpy MC + ProcessPoolExecutor parallelism
+to run locally on Rob's 8-core/16-thread Windows machine.
 
-**Estimated speedup**: 5,000-10,000x (vectorization ~200x × parallelism ~50x)
-**Target runtime**: All 5 programs in under 10 minutes on n2-highcpu-96
+**Target**: k=3..8 portfolio sizes, candidate_cap=60, all programs
+**Target runtime**: Under 6 minutes per program locally (8 cores)
+**Estimated total**: ~25 minutes for all 4 programs
 
 ## Architecture Overview
 
 The key insight: vectorize the CORE MC simulation so it processes all N sims
 as a single numpy 2D array operation, then parallelize ACROSS combinations
-with ProcessPoolExecutor. This makes every program run fast, not just one.
+with ProcessPoolExecutor(max_workers=8). This makes every program run fast.
 
 ### Layers (they stack):
 1. **Vectorize simulate_challenge** → numpy batch of N sims simultaneously
 2. **Vectorize block bootstrap** → pre-generate all N return series as 2D array  
 3. **Vectorize risk metrics** → rolling DD, streaks, recovery as array ops
-4. **ProcessPoolExecutor** → spread 50 combinations across 96 cores
+4. **ProcessPoolExecutor** → spread 50 combinations across 8 cores
 5. **Multi-program loop** → run all prop firm programs sequentially (each is fast now)
 
 
@@ -310,7 +311,7 @@ def _sizing_initializer(return_matrix_bytes, columns, index):
 **File**: `run_portfolio_all_programs.py` (NEW)
 
 Script that runs the portfolio selector for ALL prop firm programs and
-generates a combined report. This is the main entry point for cloud runs.
+generates a combined report. This is the main entry point for local runs.
 
 ```python
 #!/usr/bin/env python3
@@ -331,7 +332,6 @@ PROGRAMS = {
     "high_stakes_100k": {"prop_firm_program": "high_stakes", "prop_firm_target": 100_000},
     "hyper_growth_5k": {"prop_firm_program": "hyper_growth", "prop_firm_target": 5_000},
     "pro_growth_5k": {"prop_firm_program": "pro_growth", "prop_firm_target": 5_000},
-    # "home_futures_25k": {"prop_firm_program": "home_futures", "prop_firm_target": 25_000},
 }
 
 def main():
@@ -393,74 +393,10 @@ Outputs/
 ```
 
 
-## Task 5: Cloud Infrastructure
-**Files**: `cloud/config_portfolio.yaml` (NEW), `cloud/startup_portfolio.sh` (NEW)
-
-### config_portfolio.yaml:
-```yaml
-cloud:
-  instance_name: portfolio-selector
-  machine_type: n2-highcpu-96
-  zone: us-central1-c
-  provisioning_model: STANDARD  # Never SPOT for portfolio — too short to preempt
-  boot_disk_size_gb: 50
-  project: project-c6c16a27-e123-459c-b7a
-  bucket: strategy-artifacts-nikolapitman
-  
-run:
-  type: portfolio_selector
-  script: cloud/startup_portfolio.sh
-  
-  # Bundle these directories to the VM
-  bundle_dirs:
-    - Outputs/runs          # strategy_returns.csv files needed for MC
-    - Outputs/ultimate_leaderboard_bootcamp.csv
-    - modules/
-    - cloud/
-    - generate_returns.py
-    - run_portfolio_all_programs.py
-    - config.yaml
-```
-
-### startup_portfolio.sh:
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-cd ~/python-master-strategy-creator
-
-# Install deps
-pip install numpy pandas --break-system-packages
-
-# Step 1: Generate returns (parallel rebuild)
-echo "=== STEP 1: Generating strategy returns ==="
-python3 generate_returns.py
-
-# Step 2: Run portfolio selector across all programs
-echo "=== STEP 2: Running portfolio selector (all programs) ==="
-python3 run_portfolio_all_programs.py --programs all
-
-# Step 3: Package results
-echo "=== STEP 3: Packaging results ==="
-tar czf /tmp/portfolio_results.tar.gz \
-    Outputs/portfolio_*/portfolio_selector_report.csv \
-    Outputs/portfolio_combined_summary.csv
-
-# Step 4: Upload to GCS
-gsutil cp /tmp/portfolio_results.tar.gz \
-    gs://strategy-artifacts-nikolapitman/runs/portfolio-$(date -u +%Y%m%dT%H%M%SZ)/
-
-echo "=== DONE ==="
-```
-
-### Launch mechanism:
-Option A: Adapt `launch_gcp_run.py` to support `run.type: portfolio_selector`
-Option B: Simpler — create `run_cloud_portfolio.py` that does SSH to console,
-          launches VM, runs script, downloads results. Similar pattern to 
-          `run_cloud_sweep.py` but with portfolio-specific bundling.
-
-PREFER Option A — less code duplication, reuses existing VM lifecycle management.
-Add a check in `launch_gcp_run.py` for `run.type` and branch the startup command.
+## Task 5: SKIP — Cloud infrastructure deferred
+Cloud config (n2-highcpu-96 VM) is not needed for this session.
+The vectorized + parallel code runs locally on 8 cores in under 6 minutes per program.
+Cloud config can be added later if needed for larger sweeps (k=10, n=80+).
 
 
 ## Task 6: Tests
@@ -536,19 +472,20 @@ def _process_strategy(args):
     return result
 ```
 
-With 96 cores, rebuilding 526 strategies should take ~30 seconds vs ~15 minutes locally.
+With 8 cores, rebuilding 526 strategies should take ~2 minutes vs ~15 minutes single-threaded.
 
 ## Execution Order
 
-1. Task 8 — Smart combo search + config wiring (FIRST — unlocks 6-10 strategy portfolios)
+1. Task 8 — Config wiring + parallel sweep (FIRST — unlocks 3-8 strategy portfolios)
 2. Task 1 — `simulate_challenge_batch()` in prop_firm_simulator.py
 3. Task 6 — Tests (verify parity before changing anything else)
 4. Task 2 — Vectorized block bootstrap MC  
-5. Task 3 — ProcessPoolExecutor wrappers
-6. Task 7 — Fix generate_returns.py
-7. Task 4 — Multi-program runner
-8. Task 5 — Cloud config + startup script
-9. Commit all, push, pull on console, test launch
+5. Task 3 — ProcessPoolExecutor wrappers for MC + sizing
+6. Task 7 — Fix generate_returns.py (ThreadPool → ProcessPool)
+7. Task 4 — Multi-program runner (`run_portfolio_all_programs.py`)
+8. Task 5 — SKIP (cloud deferred)
+9. Run locally: `python run_portfolio_all_programs.py --programs all`
+10. Commit all, push to GitHub
 
 ## Key Constraints
 
@@ -569,10 +506,10 @@ With 96 cores, rebuilding 526 strategies should take ~30 seconds vs ~15 minutes 
 ## Success Criteria
 
 - [ ] `python -m pytest tests/ -v` all pass (including new vectorized tests)
-- [ ] Portfolio selector runs locally in < 5 minutes (down from hours)
-- [ ] `run_portfolio_all_programs.py` produces reports for all 4+ programs
-- [ ] Cloud config launches and runs successfully on n2-highcpu-96
-- [ ] Results uploaded to GCS bucket automatically
+- [ ] Portfolio selector runs locally in < 6 minutes per program (8 cores, k=3..8, n=60)
+- [ ] `run_portfolio_all_programs.py` produces reports for all 4 programs
+- [ ] Selector can pick 3-strategy portfolio if it beats larger ones (n_min=3)
+- [ ] Selector exhaustively tests k=3 through k=8 (no artificial cap)
 
 
 ## Task 8: Brute-Force All Portfolio Sizes (CRITICAL — unlocks 4-10 strategy portfolios)
@@ -583,20 +520,20 @@ with a 500K guard that auto-reduces `n_max`. Result: portfolio selector has
 NEVER actually tested portfolios > 4-5 strategies.
 
 ### Why brute force NOW works
-With vectorized MC + 96 cores, the bottleneck is the SWEEP (correlation checking),
-NOT the MC (which only runs on ~50 survivors). The sweep is ~1μs per combo.
+With vectorized MC + parallel sweep, the bottleneck is the SWEEP (correlation checking),
+NOT the MC (which only runs on ~50 survivors). The sweep is ~1us per combo.
 
-**Sweep timing on 96 cores (parallel):**
-| Candidates | k=6 | k=8 | k=10 |
-|-----------|------|------|------|
-| n=30 | 0.01s | 0.06s | 0.31s |
-| n=40 | 0.04s | 0.80s | 8.8s |
-| n=50 | 0.17s | 5.6s | 107s |
+**Sweep timing on 8 cores (local):**
+| Candidates | k=6 | k=8 |
+|-----------|------|------|
+| n=30 | 0.1s | 1.1s |
+| n=40 | 0.6s | 12.5s |
+| n=50 | 2.3s | 81.9s |
+| n=60 | 5.8s | 375s (6.3min) |
 
-**n=50 candidates, k=4..8 full brute force = 5.6 seconds on 96 cores.**
-**n=40 candidates, k=4..10 full brute force = 8.8 seconds on 96 cores.**
+**n=60 candidates, k=3..8 on 8 cores = ~6 minutes total. Fully exhaustive.**
 
-No greedy heuristics needed. Pure exhaustive search.
+No greedy heuristics needed. Pure exhaustive search on local machine.
 
 ### What to do:
 
@@ -605,18 +542,18 @@ No greedy heuristics needed. Pure exhaustive search.
 ```yaml
 pipeline:
   portfolio_selector:
-    # Portfolio size range — UNCAPPED, let data decide
+    # Portfolio size range — let data decide best size
     n_min: 3              # allow lean 3-strategy portfolios if they're best
-    n_max: 10
+    n_max: 8              # up to 8 strategies
     
-    # Candidate pool — raise for 16 markets
-    candidate_cap: 80
+    # Candidate pool — 60 for 16 markets
+    candidate_cap: 60
     
     # Quality filter — include borderline
     quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]
     
-    # Combinatorial guard — raise massively for cloud
-    max_combinations: 1_000_000_000  # 1 billion — let brute force rip
+    # Combinatorial guard — raised for vectorized+parallel
+    max_combinations: 10_000_000_000  # 10 billion — brute force everything
 ```
 
 Wire ALL of these into `run_portfolio_selection()`:
@@ -638,13 +575,13 @@ valid_flags = set(f.upper().strip() for f in valid_flags_str)
 **Step 2: Parallelize the sweep loop with ProcessPoolExecutor**
 
 The sweep is embarrassingly parallel — each C(n,k) combo's pairwise checks
-are independent. Split the iteration across 96 cores:
+are independent. Split the iteration across 8 cores:
 
 ```python
 def sweep_combinations_parallel(candidates, corr_matrix, return_matrix, 
-                                n_min=4, n_max=10, n_workers=None, **kwargs):
+                                n_min=3, n_max=8, n_workers=None, **kwargs):
     """Parallel brute-force sweep across all C(n,k) combinations."""
-    n_workers = n_workers or os.cpu_count() or 4
+    n_workers = n_workers or min(os.cpu_count() or 4, 8)
     
     # Pre-compute correlation matrices as numpy arrays for fast worker access
     abs_corr_arr = corr_matrix.abs().values
@@ -677,9 +614,9 @@ instead of DataFrames (much faster — no label lookup overhead).
 Rather than a fixed guard, auto-calculate the feasible n_max:
 ```python
 # Target: sweep should complete in < 60 seconds on available cores
-target_sweep_seconds = 60
+target_sweep_seconds = 300
 us_per_combo = 1.0  # microseconds
-n_cores = os.cpu_count() or 4
+n_cores = min(os.cpu_count() or 4, 8)  # local machine
 
 for test_max in range(n_max, n_min - 1, -1):
     total = sum(comb(n, k) for k in range(n_min, test_max + 1))
@@ -690,12 +627,11 @@ for test_max in range(n_max, n_min - 1, -1):
     logger.info(f"n_max={test_max} would take {wall_secs:.0f}s, reducing...")
 ```
 
-This auto-adapts: on a 96-core cloud VM it'll happily do k=10, on a local
-4-core machine it'll sensibly cap at k=6 or k=7.
+With 60 candidates on 8 cores, k=3..8 is ~6 min — within budget.
 
 ### Summary of changes:
 1. Add `n_min`, `n_max`, `quality_flags`, `max_combinations` to config.yaml
-2. Wire all into `run_portfolio_selection()` 
+2. Wire all into `run_portfolio_selection()`
 3. Parallelize `sweep_combinations()` with ProcessPoolExecutor + numpy arrays
 4. Auto-adapt n_max based on available cores and candidate count
 5. Remove the old 500K hardcoded guard
