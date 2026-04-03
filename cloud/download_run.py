@@ -243,10 +243,39 @@ def find_leaderboard_in_dir(run_dir: Path) -> Path | None:
     candidate = run_dir / "artifacts" / "Outputs" / MASTER_LEADERBOARD_NAME
     if candidate.exists():
         return candidate
-    # Direct fallback
+    # Direct fallback — master_leaderboard.csv anywhere
     for p in run_dir.rglob(MASTER_LEADERBOARD_NAME):
         return p
+    # Fallback: build a virtual master leaderboard from per-dataset family_leaderboard_results.csv
+    # These always exist in run outputs even when master_leaderboard.csv is missing
+    family_files = list(run_dir.rglob("family_leaderboard_results.csv"))
+    if family_files:
+        merged = _merge_family_leaderboards(family_files, run_dir)
+        if merged:
+            return merged
     return None
+
+
+FAMILY_LEADERBOARD_NAME = "family_leaderboard_results.csv"
+
+
+def _merge_family_leaderboards(family_files: list[Path], run_dir: Path) -> Path | None:
+    """Merge per-dataset family_leaderboard_results.csv files into a single master_leaderboard.csv."""
+    all_fields: list[str] = []
+    all_rows: list[dict[str, str]] = []
+    for fp in family_files:
+        fields, rows = _read_csv(fp)
+        if not rows:
+            continue
+        all_fields = _merge_fieldnames(all_fields, fields)
+        all_rows.extend(rows)
+    if not all_rows:
+        return None
+    # Write merged file into run directory
+    out = run_dir / MASTER_LEADERBOARD_NAME
+    _write_csv(out, all_fields, all_rows)
+    print(f"  [auto-merge] Built {MASTER_LEADERBOARD_NAME} from {len(family_files)} dataset files ({len(all_rows)} strategies) -> {out}")
+    return out
 
 
 def find_strategy_returns_in_dir(run_dir: Path) -> list[Path]:
