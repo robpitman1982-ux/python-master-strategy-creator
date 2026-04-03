@@ -575,53 +575,51 @@ With 96 cores, rebuilding 526 strategies should take ~30 seconds vs ~15 minutes 
 - [ ] Results uploaded to GCS bucket automatically
 
 
-## Task 8: Smart Combination Search (CRITICAL — unlocks 6-10 strategy portfolios)
+## Task 8: Brute-Force All Portfolio Sizes (CRITICAL — unlocks 4-10 strategy portfolios)
 
 ### The problem
-Current `sweep_combinations()` uses `itertools.combinations(n, k)` brute force:
-- n=50 candidates, k=4: 230K combos ✓ (under 500K guard)
-- n=50 candidates, k=6: 15.9M combos ✗ (auto-reduced by guard)
-- n=50 candidates, k=8: 537M combos ✗✗✗
-- n=30 (after dedup), k=6: 594K combos ✗ (just over guard)
+Current `sweep_combinations()` uses `itertools.combinations(n, k)` brute force
+with a 500K guard that auto-reduces `n_max`. Result: portfolio selector has 
+NEVER actually tested portfolios > 4-5 strategies.
 
-Result: **portfolio selector has NEVER actually tested portfolios > 4-5 strategies**
-because the combinatorial guard auto-reduces n_max.
+### Why brute force NOW works
+With vectorized MC + 96 cores, the bottleneck is the SWEEP (correlation checking),
+NOT the MC (which only runs on ~50 survivors). The sweep is ~1μs per combo.
 
-### Current constraints in code:
-```python
-# sweep_combinations() defaults:
-n_min: int = 4        # hardcoded default
-n_max: int = 8        # hardcoded default, but auto-reduced
-candidate_cap: int = 50   # hard_filter_candidates default
+**Sweep timing on 96 cores (parallel):**
+| Candidates | k=6 | k=8 | k=10 |
+|-----------|------|------|------|
+| n=30 | 0.01s | 0.06s | 0.31s |
+| n=40 | 0.04s | 0.80s | 8.8s |
+| n=50 | 0.17s | 5.6s | 107s |
 
-# Combinatorial guard:
-while total > 500_000 and n_max > n_min:
-    n_max -= 1
+**n=50 candidates, k=4..8 full brute force = 5.6 seconds on 96 cores.**
+**n=40 candidates, k=4..10 full brute force = 8.8 seconds on 96 cores.**
 
-# run_portfolio_selection() does NOT pass n_min/n_max from config
-```
+No greedy heuristics needed. Pure exhaustive search.
 
-### What's also NOT configurable from config.yaml:
-- n_min (portfolio minimum size)
-- n_max (portfolio maximum size)
-- candidate_cap needs raising for 16 markets
-- quality filter only allows ROBUST/STABLE — misses ROBUST_BORDERLINE
+### What to do:
 
-### The fix — multi-layer approach:
+**Step 1: Make everything configurable from config.yaml**
 
-**Step 1: Make n_min, n_max, candidate_cap all configurable from config.yaml**
-
-Add to config.yaml under pipeline.portfolio_selector:
 ```yaml
 pipeline:
   portfolio_selector:
+    # Portfolio size range — UNCAPPED
     n_min: 4
-    n_max: 10           # allow up to 10 strategies
-    candidate_cap: 80   # more candidates for 16 markets
-    quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]  # include borderline
+    n_max: 10
+    
+    # Candidate pool — raise for 16 markets
+    candidate_cap: 80
+    
+    # Quality filter — include borderline
+    quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]
+    
+    # Combinatorial guard — raise massively for cloud
+    max_combinations: 1_000_000_000  # 1 billion — let brute force rip
 ```
 
-Wire into run_portfolio_selection():
+Wire ALL of these into `run_portfolio_selection()`:
 ```python
 combinations = sweep_combinations(
     candidates, corr_matrix, return_matrix,
@@ -631,93 +629,74 @@ combinations = sweep_combinations(
 )
 ```
 
-**Step 2: Replace brute-force with greedy + random sampling hybrid**
-
-For small k (4-5) where C(n,k) < 500K: keep brute force — exhaustive is best.
-
-For large k (6-10) where brute force is infeasible:
+Wire quality_flags into `hard_filter_candidates()`:
 ```python
-def _sample_large_k_combinations(
-    strategy_names, k, n_samples, cand_by_name, corr_matrix,
-    multi_layer_corr, thresholds, return_matrix, seed=42
-):
-    """Generate valid large-k combinations via greedy + random sampling.
+valid_flags_str = ps_cfg.get("quality_flags", ["ROBUST", "STABLE"])
+valid_flags = set(f.upper().strip() for f in valid_flags_str)
+```
+
+**Step 2: Parallelize the sweep loop with ProcessPoolExecutor**
+
+The sweep is embarrassingly parallel — each C(n,k) combo's pairwise checks
+are independent. Split the iteration across 96 cores:
+
+```python
+def sweep_combinations_parallel(candidates, corr_matrix, return_matrix, 
+                                n_min=4, n_max=10, n_workers=None, **kwargs):
+    """Parallel brute-force sweep across all C(n,k) combinations."""
+    n_workers = n_workers or os.cpu_count() or 4
     
-    Strategy:
-    1. Start from top brute-force k=4 or k=5 survivors as seeds
-    2. Greedily extend each seed by adding the least-correlated candidate
-    3. Also do N random samples with correlation rejection
-    4. Score all, keep top 50 for MC
-    """
-    rng = random.Random(seed)
-    results = []
+    # Pre-compute correlation matrices as numpy arrays for fast worker access
+    abs_corr_arr = corr_matrix.abs().values
+    col_index = {c: i for i, c in enumerate(corr_matrix.columns)}
     
-    # Method A: Greedy extension from small-k survivors
-    # Take top 50 k=4 combos, try extending each to k strategies
-    for base_combo in small_k_survivors[:50]:
-        combo = list(base_combo["strategy_names"])
-        remaining = [s for s in strategy_names if s not in combo]
+    # For each k, chunk the combinations across workers
+    all_results = []
+    for k in range(n_min, n_max + 1):
+        combos = list(itertools.combinations(strategy_names, k))
+        chunk_size = max(1, len(combos) // n_workers)
+        chunks = [combos[i:i+chunk_size] for i in range(0, len(combos), chunk_size)]
         
-        while len(combo) < k and remaining:
-            # Pick candidate with lowest max correlation to existing combo
-            best_add = min(remaining, key=lambda s: max(
-                abs(corr_matrix.loc[s, c]) for c in combo if s in corr_matrix and c in corr_matrix
-            ))
-            # Check all correlation gates pass
-            if _passes_correlation_gates(combo + [best_add], ...):
-                combo.append(best_add)
-                remaining.remove(best_add)
-            else:
-                remaining.remove(best_add)
-        
-        if len(combo) == k:
-            results.append(combo)
+        with ProcessPoolExecutor(max_workers=n_workers, 
+                                 initializer=_sweep_init,
+                                 initargs=(abs_corr_arr, col_index, ...)) as executor:
+            futures = [executor.submit(_sweep_chunk, chunk, k, ...) for chunk in chunks]
+            for f in futures:
+                all_results.extend(f.result())
     
-    # Method B: Random sampling with correlation rejection
-    for _ in range(n_samples):
-        combo = rng.sample(strategy_names, k)
-        if _passes_all_gates(combo, ...):
-            results.append(combo)
-    
-    return results
+    # Sort by score, keep top 50
+    all_results.sort(key=lambda r: r["score"], reverse=True)
+    return all_results[:50]
 ```
 
-**Step 3: Raise the combinatorial guard for cloud runs**
+The worker function does the same pairwise checks as now, but on numpy arrays
+instead of DataFrames (much faster — no label lookup overhead).
 
-On a 96-core VM with vectorized MC, we can handle more combos.
-Add a configurable guard:
-```yaml
-pipeline:
-  portfolio_selector:
-    max_combinations: 2_000_000  # raise from 500K for cloud runs
+**Step 3: Adaptive n_max based on candidate count**
+
+Rather than a fixed guard, auto-calculate the feasible n_max:
+```python
+# Target: sweep should complete in < 60 seconds on available cores
+target_sweep_seconds = 60
+us_per_combo = 1.0  # microseconds
+n_cores = os.cpu_count() or 4
+
+for test_max in range(n_max, n_min - 1, -1):
+    total = sum(comb(n, k) for k in range(n_min, test_max + 1))
+    wall_secs = total * us_per_combo / 1_000_000 / n_cores
+    if wall_secs <= target_sweep_seconds:
+        actual_n_max = test_max
+        break
+    logger.info(f"n_max={test_max} would take {wall_secs:.0f}s, reducing...")
 ```
 
-On cloud with vectorized MC, each combo takes milliseconds, so 2M combos
-× ~1ms each = ~33 minutes — feasible on 96 cores (parallel → ~30 seconds).
+This auto-adapts: on a 96-core cloud VM it'll happily do k=10, on a local
+4-core machine it'll sensibly cap at k=6 or k=7.
 
-### Summary of config.yaml additions:
-```yaml
-pipeline:
-  portfolio_selector:
-    # Existing
-    oos_pf_threshold: 1.0
-    bootcamp_score_min: 40
-    candidate_cap: 80
-    n_sims_mc: 10000
-    n_sims_sizing: 1000
-    
-    # NEW — portfolio size range
-    n_min: 4
-    n_max: 10
-    
-    # NEW — quality filter expansion
-    quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]
-    
-    # NEW — combinatorial guard (raise for cloud)
-    max_combinations: 2000000
-    
-    # NEW — greedy extension samples for large k
-    greedy_extension_seeds: 50
-    random_samples_per_k: 10000
-```
+### Summary of changes:
+1. Add `n_min`, `n_max`, `quality_flags`, `max_combinations` to config.yaml
+2. Wire all into `run_portfolio_selection()` 
+3. Parallelize `sweep_combinations()` with ProcessPoolExecutor + numpy arrays
+4. Auto-adapt n_max based on available cores and candidate count
+5. Remove the old 500K hardcoded guard
 
