@@ -540,14 +540,15 @@ With 96 cores, rebuilding 526 strategies should take ~30 seconds vs ~15 minutes 
 
 ## Execution Order
 
-1. Task 1 — `simulate_challenge_batch()` in prop_firm_simulator.py
-2. Task 6 — Tests (verify parity before changing anything else)
-3. Task 2 — Vectorized block bootstrap MC  
-4. Task 3 — ProcessPoolExecutor wrappers
-5. Task 7 — Fix generate_returns.py
-6. Task 4 — Multi-program runner
-7. Task 5 — Cloud config + startup script
-8. Commit all, push, pull on console, test launch
+1. Task 8 — Smart combo search + config wiring (FIRST — unlocks 6-10 strategy portfolios)
+2. Task 1 — `simulate_challenge_batch()` in prop_firm_simulator.py
+3. Task 6 — Tests (verify parity before changing anything else)
+4. Task 2 — Vectorized block bootstrap MC  
+5. Task 3 — ProcessPoolExecutor wrappers
+6. Task 7 — Fix generate_returns.py
+7. Task 4 — Multi-program runner
+8. Task 5 — Cloud config + startup script
+9. Commit all, push, pull on console, test launch
 
 ## Key Constraints
 
@@ -572,4 +573,151 @@ With 96 cores, rebuilding 526 strategies should take ~30 seconds vs ~15 minutes 
 - [ ] `run_portfolio_all_programs.py` produces reports for all 4+ programs
 - [ ] Cloud config launches and runs successfully on n2-highcpu-96
 - [ ] Results uploaded to GCS bucket automatically
+
+
+## Task 8: Smart Combination Search (CRITICAL — unlocks 6-10 strategy portfolios)
+
+### The problem
+Current `sweep_combinations()` uses `itertools.combinations(n, k)` brute force:
+- n=50 candidates, k=4: 230K combos ✓ (under 500K guard)
+- n=50 candidates, k=6: 15.9M combos ✗ (auto-reduced by guard)
+- n=50 candidates, k=8: 537M combos ✗✗✗
+- n=30 (after dedup), k=6: 594K combos ✗ (just over guard)
+
+Result: **portfolio selector has NEVER actually tested portfolios > 4-5 strategies**
+because the combinatorial guard auto-reduces n_max.
+
+### Current constraints in code:
+```python
+# sweep_combinations() defaults:
+n_min: int = 4        # hardcoded default
+n_max: int = 8        # hardcoded default, but auto-reduced
+candidate_cap: int = 50   # hard_filter_candidates default
+
+# Combinatorial guard:
+while total > 500_000 and n_max > n_min:
+    n_max -= 1
+
+# run_portfolio_selection() does NOT pass n_min/n_max from config
+```
+
+### What's also NOT configurable from config.yaml:
+- n_min (portfolio minimum size)
+- n_max (portfolio maximum size)
+- candidate_cap needs raising for 16 markets
+- quality filter only allows ROBUST/STABLE — misses ROBUST_BORDERLINE
+
+### The fix — multi-layer approach:
+
+**Step 1: Make n_min, n_max, candidate_cap all configurable from config.yaml**
+
+Add to config.yaml under pipeline.portfolio_selector:
+```yaml
+pipeline:
+  portfolio_selector:
+    n_min: 4
+    n_max: 10           # allow up to 10 strategies
+    candidate_cap: 80   # more candidates for 16 markets
+    quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]  # include borderline
+```
+
+Wire into run_portfolio_selection():
+```python
+combinations = sweep_combinations(
+    candidates, corr_matrix, return_matrix,
+    n_min=int(ps_cfg.get("n_min", 4)),
+    n_max=int(ps_cfg.get("n_max", 10)),
+    ...
+)
+```
+
+**Step 2: Replace brute-force with greedy + random sampling hybrid**
+
+For small k (4-5) where C(n,k) < 500K: keep brute force — exhaustive is best.
+
+For large k (6-10) where brute force is infeasible:
+```python
+def _sample_large_k_combinations(
+    strategy_names, k, n_samples, cand_by_name, corr_matrix,
+    multi_layer_corr, thresholds, return_matrix, seed=42
+):
+    """Generate valid large-k combinations via greedy + random sampling.
+    
+    Strategy:
+    1. Start from top brute-force k=4 or k=5 survivors as seeds
+    2. Greedily extend each seed by adding the least-correlated candidate
+    3. Also do N random samples with correlation rejection
+    4. Score all, keep top 50 for MC
+    """
+    rng = random.Random(seed)
+    results = []
+    
+    # Method A: Greedy extension from small-k survivors
+    # Take top 50 k=4 combos, try extending each to k strategies
+    for base_combo in small_k_survivors[:50]:
+        combo = list(base_combo["strategy_names"])
+        remaining = [s for s in strategy_names if s not in combo]
+        
+        while len(combo) < k and remaining:
+            # Pick candidate with lowest max correlation to existing combo
+            best_add = min(remaining, key=lambda s: max(
+                abs(corr_matrix.loc[s, c]) for c in combo if s in corr_matrix and c in corr_matrix
+            ))
+            # Check all correlation gates pass
+            if _passes_correlation_gates(combo + [best_add], ...):
+                combo.append(best_add)
+                remaining.remove(best_add)
+            else:
+                remaining.remove(best_add)
+        
+        if len(combo) == k:
+            results.append(combo)
+    
+    # Method B: Random sampling with correlation rejection
+    for _ in range(n_samples):
+        combo = rng.sample(strategy_names, k)
+        if _passes_all_gates(combo, ...):
+            results.append(combo)
+    
+    return results
+```
+
+**Step 3: Raise the combinatorial guard for cloud runs**
+
+On a 96-core VM with vectorized MC, we can handle more combos.
+Add a configurable guard:
+```yaml
+pipeline:
+  portfolio_selector:
+    max_combinations: 2_000_000  # raise from 500K for cloud runs
+```
+
+On cloud with vectorized MC, each combo takes milliseconds, so 2M combos
+× ~1ms each = ~33 minutes — feasible on 96 cores (parallel → ~30 seconds).
+
+### Summary of config.yaml additions:
+```yaml
+pipeline:
+  portfolio_selector:
+    # Existing
+    oos_pf_threshold: 1.0
+    bootcamp_score_min: 40
+    candidate_cap: 80
+    n_sims_mc: 10000
+    n_sims_sizing: 1000
+    
+    # NEW — portfolio size range
+    n_min: 4
+    n_max: 10
+    
+    # NEW — quality filter expansion
+    quality_flags: ["ROBUST", "ROBUST_BORDERLINE", "STABLE"]
+    
+    # NEW — combinatorial guard (raise for cloud)
+    max_combinations: 2000000
+    
+    # NEW — greedy extension samples for large k
+    greedy_extension_seeds: 50
+    random_samples_per_k: 10000
+```
 
