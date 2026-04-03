@@ -436,6 +436,7 @@ class MasterStrategyEngine:
                                 [{"datetime": ts_list[j], "equity": cap} for j in range(i + 1, next_signal_i)]
                             )
                             i = next_signal_i
+                            ts_val = ts_list[i]  # update after skip
                     else:
                         # No more signals in the entire dataset, we can finish
                         cap = self.current_capital
