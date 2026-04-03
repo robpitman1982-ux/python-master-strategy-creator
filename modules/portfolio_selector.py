@@ -1375,6 +1375,53 @@ def portfolio_monte_carlo_block_bootstrap(
     return simulate_challenge_batch(trade_matrix, config, source_capital)
 
 
+_mc_shared: dict = {}
+
+
+def _mc_worker_init(
+    return_matrix_vals: np.ndarray,
+    return_matrix_cols: list[str],
+    return_matrix_idx: list,
+    raw_trade_lists: dict[str, list[float]] | None,
+) -> None:
+    """Initialize per-worker shared data for MC workers."""
+    _mc_shared["return_matrix"] = pd.DataFrame(
+        return_matrix_vals, columns=return_matrix_cols, index=return_matrix_idx,
+    )
+    _mc_shared["raw_trade_lists"] = raw_trade_lists
+
+
+def _mc_worker(args: tuple) -> dict | None:
+    """Worker function for parallel MC across combinations."""
+    combo, n_sims, mc_method, config_dict = args
+    names = combo["strategy_names"]
+
+    # Reconstruct config from dict (PropFirmConfig is a dataclass)
+    config = PropFirmConfig(**config_dict)
+    return_matrix = _mc_shared["return_matrix"]
+    raw_trade_lists = _mc_shared.get("raw_trade_lists")
+
+    if mc_method == "block_bootstrap":
+        mc = portfolio_monte_carlo_block_bootstrap(
+            return_matrix, names, config, n_sims=n_sims,
+        )
+    else:
+        trade_lists: dict[str, list[float]] = {}
+        for name in names:
+            if raw_trade_lists and name in raw_trade_lists:
+                trade_lists[name] = raw_trade_lists[name]
+            elif name in return_matrix.columns:
+                vals = return_matrix[name].values
+                trades = [float(v) for v in vals if v != 0.0]
+                if trades:
+                    trade_lists[name] = trades
+        if not trade_lists:
+            return None
+        mc = portfolio_monte_carlo(trade_lists, config, n_sims=n_sims)
+
+    return {**combo, **mc}
+
+
 def run_bootcamp_mc(
     combinations: list[dict],
     return_matrix: pd.DataFrame,
@@ -1385,48 +1432,63 @@ def run_bootcamp_mc(
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
 
+    Uses ProcessPoolExecutor to parallelize across combinations.
+
     Args:
         raw_trade_lists: If provided, use raw per-trade PnL instead of
-            extracting from the daily return matrix. This preserves
-            individual trades that would otherwise be summed on the same day.
+            extracting from the daily return matrix.
         prop_config: Prop firm config to simulate against. Defaults to Bootcamp $250K.
         mc_method: "block_bootstrap" (default) or "shuffle_interleave".
 
     Returns combinations enriched with MC results, sorted by final step pass rate.
     """
     config = prop_config or The5ersBootcampConfig()
+    n_workers = min(len(combinations), os.cpu_count() or 4)
+
+    # Serialize config to dict for pickling
+    from dataclasses import asdict
+    config_dict = asdict(config)
+
+    args_list = [
+        (combo, n_sims, mc_method, config_dict)
+        for combo in combinations
+    ]
+
+    logger.info(
+        f"Portfolio MC: {len(combinations)} combos × {n_sims} sims ({mc_method}), "
+        f"{n_workers} workers"
+    )
+
     results: list[dict] = []
+    if n_workers <= 1 or len(combinations) <= 2:
+        # Single-threaded for small jobs
+        _mc_worker_init(
+            return_matrix.values, list(return_matrix.columns),
+            list(return_matrix.index), raw_trade_lists,
+        )
+        for i, args in enumerate(args_list):
+            result = _mc_worker(args)
+            if result is not None:
+                results.append(result)
+            logger.info(f"  Portfolio MC {i + 1}/{len(combinations)} complete")
+    else:
+        with ProcessPoolExecutor(
+            max_workers=n_workers,
+            initializer=_mc_worker_init,
+            initargs=(
+                return_matrix.values, list(return_matrix.columns),
+                list(return_matrix.index), raw_trade_lists,
+            ),
+        ) as executor:
+            futures = {executor.submit(_mc_worker, args): i for i, args in enumerate(args_list)}
+            for future in as_completed(futures):
+                idx = futures[future]
+                result = future.result()
+                if result is not None:
+                    results.append(result)
+                logger.info(f"  Portfolio MC {idx + 1}/{len(combinations)} complete")
 
-    for i, combo in enumerate(combinations):
-        names = combo["strategy_names"]
-        logger.info(f"Portfolio MC {i + 1}/{len(combinations)}: {len(names)} strategies, {n_sims} sims ({mc_method})")
-
-        if mc_method == "block_bootstrap":
-            mc = portfolio_monte_carlo_block_bootstrap(
-                return_matrix, names, config, n_sims=n_sims,
-            )
-        else:
-            # shuffle_interleave: use raw trade lists if available
-            trade_lists: dict[str, list[float]] = {}
-            for name in names:
-                if raw_trade_lists and name in raw_trade_lists:
-                    trade_lists[name] = raw_trade_lists[name]
-                elif name in return_matrix.columns:
-                    vals = return_matrix[name].values
-                    trades = [float(v) for v in vals if v != 0.0]
-                    if trades:
-                        trade_lists[name] = trades
-
-            if not trade_lists:
-                logger.warning(f"No trade data for combination {i + 1}, skipping")
-                continue
-
-            mc = portfolio_monte_carlo(trade_lists, config, n_sims=n_sims)
-
-        result = {**combo, **mc}
-        results.append(result)
-
-    # Sort by final step pass rate (dynamic: stepN for N-step programs)
+    # Sort by final step pass rate
     final_step_key = f"step{config.n_steps}_pass_rate"
     results.sort(key=lambda r: r.get(final_step_key, r.get("pass_rate", 0.0)), reverse=True)
     logger.info(f"MC complete for {len(results)} portfolios ({config.program_name})")
