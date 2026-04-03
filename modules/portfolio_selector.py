@@ -22,6 +22,8 @@ import itertools
 import logging
 import os
 import random
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from math import comb
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -67,25 +69,26 @@ def hard_filter_candidates(
     oos_pf_threshold: float = 1.0,
     bootcamp_score_min: float = 40,
     candidate_cap: int = 50,
+    quality_flags: list[str] | None = None,
 ) -> list[dict]:
     """Load ultimate_leaderboard_bootcamp.csv and apply hard filters.
 
     Filters:
-    - quality_flag in (ROBUST, STABLE)
+    - quality_flag in quality_flags (default ROBUST, STABLE)
     - oos_pf > oos_pf_threshold (default 1.0)
     - bootcamp_score > bootcamp_score_min (default 40)
     - leader_trades >= 60 (fallback to total_trades)
     - Dedup: same best_refined_strategy_name + market -> keep highest bootcamp_score
-    - Cap at candidate_cap (default 50) candidates by bootcamp_score
+    - Cap at candidate_cap candidates by bootcamp_score
     """
     df = pd.read_csv(leaderboard_path)
     n_total = len(df)
     logger.info(f"Loaded {n_total} rows from {leaderboard_path}")
 
     # Quality filter
-    valid_flags = {"ROBUST", "STABLE"}
+    valid_flags = set(f.upper().strip() for f in (quality_flags or ["ROBUST", "STABLE"]))
     df = df[df["quality_flag"].astype(str).str.strip().str.upper().isin(valid_flags)].copy()
-    logger.info(f"After quality filter (ROBUST/STABLE): {len(df)}")
+    logger.info(f"After quality filter ({', '.join(sorted(valid_flags))}): {len(df)}")
 
     # OOS PF filter
     df["oos_pf"] = pd.to_numeric(df.get("oos_pf", pd.Series(dtype=float)), errors="coerce").fillna(0.0)
@@ -857,6 +860,232 @@ def _compute_ecd(
     return max(ecd_b_given_a, ecd_a_given_b)
 
 
+def _sweep_worker_init(
+    abs_corr_arr: np.ndarray,
+    col_index: dict[str, int],
+    cand_list: list[dict],
+    cand_name_to_idx: dict[str, int],
+    ml_active_arr: np.ndarray | None,
+    ml_dd_arr: np.ndarray | None,
+    ml_tail_arr: np.ndarray | None,
+    eq_curves: dict[str, np.ndarray],
+    eq_peaks: dict[str, np.ndarray],
+    sweep_params: dict,
+) -> None:
+    """Initializer for sweep worker processes — shared data via globals."""
+    global _sw_abs_corr, _sw_col_idx, _sw_cands, _sw_cand_idx
+    global _sw_ml_active, _sw_ml_dd, _sw_ml_tail
+    global _sw_eq_curves, _sw_eq_peaks, _sw_params
+    _sw_abs_corr = abs_corr_arr
+    _sw_col_idx = col_index
+    _sw_cands = cand_list
+    _sw_cand_idx = cand_name_to_idx
+    _sw_ml_active = ml_active_arr
+    _sw_ml_dd = ml_dd_arr
+    _sw_ml_tail = ml_tail_arr
+    _sw_eq_curves = eq_curves
+    _sw_eq_peaks = eq_peaks
+    _sw_params = sweep_params
+
+
+def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
+    """Process a chunk of combinations in a worker process."""
+    params = _sw_params
+    active_thresh = params["active_corr_threshold"]
+    dd_thresh = params["dd_corr_threshold"]
+    tail_thresh = params["tail_coloss_threshold"]
+    use_ecd = params["use_ecd"]
+    max_ecd = params["max_ecd"]
+    max_dd_overlap = params["max_dd_overlap"]
+    max_per_market = params["max_per_market"]
+    max_equity_index = params["max_equity_index"]
+    equity_markets = {"ES", "NQ", "RTY", "YM"}
+    use_ml = _sw_ml_active is not None
+
+    results: list[dict] = []
+
+    for combo in chunk:
+        rejected = False
+        pair_corrs: list[float] = []
+
+        # Correlation gate
+        for i in range(len(combo)):
+            for j in range(i + 1, len(combo)):
+                ci_idx = _sw_col_idx.get(combo[i])
+                cj_idx = _sw_col_idx.get(combo[j])
+                if ci_idx is None or cj_idx is None:
+                    pair_corrs.append(0.0)
+                    continue
+
+                if use_ml:
+                    ac = abs(float(_sw_ml_active[ci_idx, cj_idx]))
+                    dc = abs(float(_sw_ml_dd[ci_idx, cj_idx]))
+                    tc = float(_sw_ml_tail[ci_idx, cj_idx])
+                    pair_corrs.append(ac)
+                    if ac > active_thresh or dc > dd_thresh or tc > tail_thresh:
+                        rejected = True
+                        break
+                else:
+                    val = float(_sw_abs_corr[ci_idx, cj_idx])
+                    pair_corrs.append(val)
+                    if val > 0.4:
+                        rejected = True
+                        break
+            if rejected:
+                break
+
+        if rejected:
+            continue
+
+        # Market concentration check
+        combo_cands = [_sw_cands[_sw_cand_idx[s]] for s in combo]
+        market_counts: dict[str, int] = {}
+        for c in combo_cands:
+            m = str(c.get("market", "")).upper()
+            market_counts[m] = market_counts.get(m, 0) + 1
+        if any(v > max_per_market for v in market_counts.values()):
+            continue
+        equity_count = sum(market_counts.get(m, 0) for m in equity_markets)
+        if equity_count > max_equity_index:
+            continue
+
+        # ECD / DD overlap check using precomputed equity curves
+        if use_ecd:
+            ecd_rejected = False
+            for ci in range(len(combo)):
+                for cj in range(ci + 1, len(combo)):
+                    ecd_val = _fast_ecd(combo[ci], combo[cj])
+                    if ecd_val is not None and ecd_val > max_ecd:
+                        ecd_rejected = True
+                        break
+                if ecd_rejected:
+                    break
+            if ecd_rejected:
+                continue
+        elif max_dd_overlap < 1.0:
+            dd_rejected = False
+            for ci in range(len(combo)):
+                for cj in range(ci + 1, len(combo)):
+                    dd_ov = _fast_dd_overlap(combo[ci], combo[cj])
+                    if dd_ov is not None and dd_ov > max_dd_overlap:
+                        dd_rejected = True
+                        break
+                if dd_rejected:
+                    break
+            if dd_rejected:
+                continue
+
+        # Score
+        n = len(combo_cands)
+        avg_oos_pf = sum(float(c.get("oos_pf", 1.0)) for c in combo_cands) / n
+
+        # Diversity
+        markets = set(c.get("market", "") for c in combo_cands)
+        logic_types = set(c.get("strategy_type", "") for c in combo_cands)
+        has_long = any(not str(c.get("strategy_type", "")).startswith("short_") for c in combo_cands)
+        has_short = any(str(c.get("strategy_type", "")).startswith("short_") for c in combo_cands)
+        market_div = len(markets) / max(n, 1)
+        direction_mix = 1.0 if (has_long and has_short) else 0.0
+        logic_div = len(logic_types) / max(n, 1)
+        diversity = market_div * 0.4 + direction_mix * 0.3 + logic_div * 0.3
+
+        avg_corr = sum(pair_corrs) / len(pair_corrs) if pair_corrs else 0.0
+
+        # Compute max ECD/DD overlap for scoring
+        combo_max_dd_overlap = 0.0
+        if use_ecd:
+            for ci in range(len(combo)):
+                for cj in range(ci + 1, len(combo)):
+                    ecd_val = _fast_ecd(combo[ci], combo[cj])
+                    if ecd_val is not None:
+                        combo_max_dd_overlap = max(combo_max_dd_overlap, ecd_val)
+        elif max_dd_overlap < 1.0:
+            for ci in range(len(combo)):
+                for cj in range(ci + 1, len(combo)):
+                    dd_ov = _fast_dd_overlap(combo[ci], combo[cj])
+                    if dd_ov is not None:
+                        combo_max_dd_overlap = max(combo_max_dd_overlap, dd_ov)
+
+        # Simplified pre-MC score (avoid return_matrix access in worker)
+        recent_pf = sum(float(c.get("recent_12m_pf", 1.0)) for c in combo_cands) / n
+        # Calmar proxy
+        total_annual_return = 0.0
+        worst_dd = 0.0
+        for c in combo_cands:
+            net_pnl = float(c.get("leader_net_pnl", 0))
+            trades = float(c.get("leader_trades", 0))
+            tpy = float(c.get("leader_trades_per_year", 0))
+            years = trades / tpy if tpy > 0 and trades > 0 else 18.0
+            total_annual_return += net_pnl / years if years > 0 else 0
+            dd = float(c.get("max_drawdown", 0)) or float(c.get("mc_max_dd_99", 0))
+            worst_dd = max(worst_dd, dd)
+        calmar_proxy = total_annual_return / worst_dd if worst_dd > 0 else 0
+        calmar_norm = min(calmar_proxy / 5.0, 1.0) * 10.0
+
+        dd_overlap_penalty = combo_max_dd_overlap * 10
+        score = (
+            0.25 * avg_oos_pf
+            + 0.20 * calmar_norm
+            + 0.15 * recent_pf
+            + 0.10 * (market_div * 10)
+            + 0.10 * (10.0 if (has_long and has_short) else 0.0)
+            + 0.10 * (logic_div * 10)
+            - 0.25 * dd_overlap_penalty
+        )
+
+        results.append({
+            "strategy_names": list(combo),
+            "score": score,
+            "avg_oos_pf": avg_oos_pf,
+            "avg_corr": avg_corr,
+            "diversity": diversity,
+            "n_strategies": k,
+        })
+
+    return results
+
+
+def _fast_ecd(col_a: str, col_b: str, stress_percentile: float = 0.10) -> float | None:
+    """Fast ECD using precomputed equity curves in worker globals."""
+    eq_a = _sw_eq_curves.get(col_a)
+    eq_b = _sw_eq_curves.get(col_b)
+    if eq_a is None or eq_b is None or len(eq_a) < 252:
+        return None
+
+    peak_a = _sw_eq_peaks.get(col_a)
+    peak_b = _sw_eq_peaks.get(col_b)
+    dd_a = eq_a / peak_a - 1.0
+    dd_b = eq_b / peak_b - 1.0
+
+    threshold_a = np.quantile(dd_a, stress_percentile)
+    stressed_a = dd_a <= threshold_a
+    ecd_b = abs(float(dd_b[stressed_a].mean())) if stressed_a.sum() > 0 else 0.0
+
+    threshold_b = np.quantile(dd_b, stress_percentile)
+    stressed_b = dd_b <= threshold_b
+    ecd_a = abs(float(dd_a[stressed_b].mean())) if stressed_b.sum() > 0 else 0.0
+
+    return max(ecd_a, ecd_b)
+
+
+def _fast_dd_overlap(col_a: str, col_b: str, dd_threshold: float = 0.02) -> float | None:
+    """Fast DD overlap using precomputed equity curves in worker globals."""
+    eq_a = _sw_eq_curves.get(col_a)
+    eq_b = _sw_eq_curves.get(col_b)
+    if eq_a is None or eq_b is None or len(eq_a) < 252:
+        return None
+
+    peak_a = _sw_eq_peaks.get(col_a)
+    peak_b = _sw_eq_peaks.get(col_b)
+    dd_a = eq_a / peak_a - 1.0
+    dd_b = eq_b / peak_b - 1.0
+
+    in_dd_a = (dd_a < -dd_threshold).astype(float)
+    in_dd_b = (dd_b < -dd_threshold).astype(float)
+    overlap = float((in_dd_a * in_dd_b).sum())
+    return overlap / len(eq_a) if len(eq_a) > 0 else 0.0
+
+
 def sweep_combinations(
     candidates: list[dict],
     corr_matrix: pd.DataFrame,
@@ -872,8 +1101,10 @@ def sweep_combinations(
     tail_coloss_threshold: float = 0.30,
     use_ecd: bool = True,
     max_ecd: float = 0.03,
+    candidate_cap: int = 50,
+    max_combinations: int = 10_000_000_000,
 ) -> list[dict]:
-    """Sweep all C(n,k) combinations, reject high-correlation pairs, score survivors."""
+    """Sweep all C(n,k) combinations with parallel ProcessPoolExecutor."""
     # Only use candidates that are in the return matrix
     available_names = set(return_matrix.columns)
     cand_by_name: dict[str, dict] = {}
@@ -895,145 +1126,103 @@ def sweep_combinations(
 
     n_max = min(n_max, n)
 
-    # Combinatorial guard
-    from math import comb
+    # Adaptive n_max: auto-reduce if sweep would take too long
+    n_cores = min(os.cpu_count() or 4, 8)
+    target_sweep_seconds = 300  # 5 minutes max
+    us_per_combo = 1.0  # microseconds per combo (conservative)
     orig_n_max = n_max
-    total = sum(comb(n, k) for k in range(n_min, n_max + 1))
-    while total > 500_000 and n_max > n_min:
-        n_max -= 1
-        total = sum(comb(n, k) for k in range(n_min, n_max + 1))
+    for test_max in range(n_max, n_min - 1, -1):
+        total = sum(comb(n, k) for k in range(n_min, test_max + 1))
+        if total <= max_combinations:
+            wall_secs = total * us_per_combo / 1_000_000 / n_cores
+            if wall_secs <= target_sweep_seconds:
+                n_max = test_max
+                break
+        n_max = test_max - 1
+    else:
+        n_max = n_min
     if n_max != orig_n_max:
-        logger.warning(f"Reduced n_max from {orig_n_max} to {n_max} to keep combinations under 500k")
+        logger.warning(f"Adaptive n_max: reduced from {orig_n_max} to {n_max} based on {n} candidates, {n_cores} cores")
 
     total_combos = sum(comb(n, k) for k in range(n_min, n_max + 1))
-    logger.info(f"Sweeping {total_combos} combinations (n={n}, k={n_min}..{n_max})")
+    logger.info(f"Sweeping {total_combos:,} combinations (n={n}, k={n_min}..{n_max}, cores={n_cores})")
 
-    abs_corr = corr_matrix.abs()
-    results: list[dict] = []
-    n_rejected = 0
+    # Precompute numpy arrays for fast worker access
+    abs_corr_arr = corr_matrix.abs().values
+    col_names = list(corr_matrix.columns)
+    col_index = {c: i for i, c in enumerate(col_names)}
 
-    # Precompute multi-layer matrices if provided
-    ml_active = multi_layer_corr["active_corr"].abs() if multi_layer_corr else None
-    ml_dd = multi_layer_corr["dd_corr"].abs() if multi_layer_corr else None
-    ml_tail = multi_layer_corr["tail_coloss"] if multi_layer_corr else None
+    ml_active_arr = multi_layer_corr["active_corr"].abs().values if multi_layer_corr else None
+    ml_dd_arr = multi_layer_corr["dd_corr"].abs().values if multi_layer_corr else None
+    ml_tail_arr = multi_layer_corr["tail_coloss"].values if multi_layer_corr else None
 
-    for k in range(n_min, n_max + 1):
-        for combo in itertools.combinations(strategy_names, k):
-            rejected = False
-            pair_corrs: list[float] = []
-            for i in range(len(combo)):
-                for j in range(i + 1, len(combo)):
-                    c_i, c_j = combo[i], combo[j]
+    # Precompute equity curves for ECD/DD overlap
+    base_equity = 100_000.0
+    eq_curves: dict[str, np.ndarray] = {}
+    eq_peaks: dict[str, np.ndarray] = {}
+    for s in strategy_names:
+        if s in return_matrix.columns:
+            eq = base_equity + return_matrix[s].values.cumsum()
+            eq_curves[s] = eq
+            eq_peaks[s] = np.maximum.accumulate(eq)
 
-                    if ml_active is not None:
-                        # Multi-layer correlation gate
-                        ac = float(ml_active.loc[c_i, c_j]) if (c_i in ml_active.columns and c_j in ml_active.columns) else 0.0
-                        dc = float(ml_dd.loc[c_i, c_j]) if (c_i in ml_dd.columns and c_j in ml_dd.columns) else 0.0
-                        tc = float(ml_tail.loc[c_i, c_j]) if (c_i in ml_tail.columns and c_j in ml_tail.columns) else 0.0
-                        pair_corrs.append(ac)
-                        if ac > active_corr_threshold or dc > dd_corr_threshold or tc > tail_coloss_threshold:
-                            rejected = True
-                            break
-                    else:
-                        # Fallback: Pearson correlation gate
-                        if c_i in abs_corr.columns and c_j in abs_corr.columns:
-                            val = float(abs_corr.loc[c_i, c_j])
-                        else:
-                            val = 0.0
-                        pair_corrs.append(val)
-                        if val > 0.4:
-                            rejected = True
-                            break
-                if rejected:
-                    break
+    # Prepare candidate data for workers (list + index)
+    cand_list = [cand_by_name[s] for s in strategy_names]
+    cand_name_to_idx = {s: i for i, s in enumerate(strategy_names)}
 
-            if rejected:
-                n_rejected += 1
+    sweep_params = {
+        "active_corr_threshold": active_corr_threshold,
+        "dd_corr_threshold": dd_corr_threshold,
+        "tail_coloss_threshold": tail_coloss_threshold,
+        "use_ecd": use_ecd,
+        "max_ecd": max_ecd,
+        "max_dd_overlap": max_dd_overlap,
+        "max_per_market": max_per_market,
+        "max_equity_index": max_equity_index,
+    }
+
+    # For small problems, run single-threaded (avoid process overhead)
+    if total_combos < 10_000 or n_cores <= 1:
+        # Single-threaded sweep
+        _sweep_worker_init(
+            abs_corr_arr, col_index, cand_list, cand_name_to_idx,
+            ml_active_arr, ml_dd_arr, ml_tail_arr,
+            eq_curves, eq_peaks, sweep_params,
+        )
+        all_results: list[dict] = []
+        for k in range(n_min, n_max + 1):
+            combos = list(itertools.combinations(strategy_names, k))
+            all_results.extend(_sweep_chunk(combos, k))
+    else:
+        # Parallel sweep across cores
+        all_results = []
+        for k in range(n_min, n_max + 1):
+            combos = list(itertools.combinations(strategy_names, k))
+            if not combos:
                 continue
+            chunk_size = max(1, len(combos) // n_cores)
+            chunks = [combos[i:i + chunk_size] for i in range(0, len(combos), chunk_size)]
 
-            # Market concentration check
-            combo_cands = [cand_by_name[s] for s in combo]
-            market_counts: dict[str, int] = {}
-            for c in combo_cands:
-                m = str(c.get("market", "")).upper()
-                market_counts[m] = market_counts.get(m, 0) + 1
-            if any(v > max_per_market for v in market_counts.values()):
-                n_rejected += 1
-                continue
-            equity_count = sum(market_counts.get(m, 0) for m in _EQUITY_INDEX_MARKETS)
-            if equity_count > max_equity_index:
-                n_rejected += 1
-                continue
+            with ProcessPoolExecutor(
+                max_workers=n_cores,
+                initializer=_sweep_worker_init,
+                initargs=(
+                    abs_corr_arr, col_index, cand_list, cand_name_to_idx,
+                    ml_active_arr, ml_dd_arr, ml_tail_arr,
+                    eq_curves, eq_peaks, sweep_params,
+                ),
+            ) as executor:
+                futures = [executor.submit(_sweep_chunk, chunk, k) for chunk in chunks]
+                for f in as_completed(futures):
+                    all_results.extend(f.result())
 
-            # Drawdown overlap / ECD check
-            if use_ecd:
-                ecd_rejected = False
-                for ci in range(len(combo)):
-                    for cj in range(ci + 1, len(combo)):
-                        ecd_val = _compute_ecd(return_matrix, combo[ci], combo[cj])
-                        if ecd_val is not None and ecd_val > max_ecd:
-                            ecd_rejected = True
-                            break
-                    if ecd_rejected:
-                        break
-                if ecd_rejected:
-                    n_rejected += 1
-                    continue
-            elif max_dd_overlap < 1.0:
-                dd_rejected = False
-                for ci in range(len(combo)):
-                    for cj in range(ci + 1, len(combo)):
-                        dd_ov = _compute_dd_overlap(return_matrix, combo[ci], combo[cj])
-                        if dd_ov is not None and dd_ov > max_dd_overlap:
-                            dd_rejected = True
-                            break
-                    if dd_rejected:
-                        break
-                if dd_rejected:
-                    n_rejected += 1
-                    continue
+            logger.info(f"  k={k}: {len(combos):,} combos, {comb(n, k):,} total")
 
-            # Compute scores
-            avg_oos_pf = mean(
-                float(c.get("oos_pf", 1.0)) for c in combo_cands
-            )
-            avg_corr = mean(pair_corrs) if pair_corrs else 0.0
-            diversity = _diversity_score(combo_cands)
+    # Sort by score descending, keep top candidate_cap
+    all_results.sort(key=lambda r: r["score"], reverse=True)
+    results = all_results[:candidate_cap]
 
-            # Compute max DD overlap / ECD for this combo
-            combo_max_dd_overlap = 0.0
-            if use_ecd:
-                for ci in range(len(combo)):
-                    for cj in range(ci + 1, len(combo)):
-                        ecd_val = _compute_ecd(return_matrix, combo[ci], combo[cj])
-                        if ecd_val is not None:
-                            combo_max_dd_overlap = max(combo_max_dd_overlap, ecd_val)
-            elif max_dd_overlap < 1.0:
-                for ci in range(len(combo)):
-                    for cj in range(ci + 1, len(combo)):
-                        dd_ov = _compute_dd_overlap(return_matrix, combo[ci], combo[cj])
-                        if dd_ov is not None:
-                            combo_max_dd_overlap = max(combo_max_dd_overlap, dd_ov)
-
-            score = _pre_mc_score(
-                combo_cands, list(combo), return_matrix,
-                pair_corrs, max_dd_overlap=combo_max_dd_overlap,
-            )
-
-            results.append({
-                "strategy_names": list(combo),
-                "score": score,
-                "avg_oos_pf": avg_oos_pf,
-                "avg_corr": avg_corr,
-                "diversity": diversity,
-                "n_strategies": k,
-            })
-
-    # Sort by score descending, keep top 50
-    results.sort(key=lambda r: r["score"], reverse=True)
-    results = results[:50]
-
-    logger.info(f"Sweep complete: {len(results)} survivors, {n_rejected} rejected on correlation")
+    logger.info(f"Sweep complete: {len(results)} survivors from {total_combos:,} combos")
     return results
 
 
@@ -1848,11 +2037,15 @@ def run_portfolio_selection(
                 f"(${prop_config.target_balance:,.0f}, {prop_config.n_steps} steps)")
 
     # Stage 1: Hard filter
+    quality_flags_cfg = ps_cfg.get("quality_flags", ["ROBUST", "STABLE"])
+    if isinstance(quality_flags_cfg, str):
+        quality_flags_cfg = [quality_flags_cfg]
     candidates = hard_filter_candidates(
         leaderboard_path,
         oos_pf_threshold=float(ps_cfg.get("oos_pf_threshold", 1.0)),
         bootcamp_score_min=float(ps_cfg.get("bootcamp_score_min", 40)),
-        candidate_cap=int(ps_cfg.get("candidate_cap", 50)),
+        candidate_cap=int(ps_cfg.get("candidate_cap", 60)),
+        quality_flags=quality_flags_cfg,
     )
     if not candidates:
         logger.warning("No candidates passed hard filter. Aborting.")
@@ -1886,6 +2079,8 @@ def run_portfolio_selection(
     # Stage 4: Sweep combinations
     combinations = sweep_combinations(
         candidates, corr_matrix, return_matrix,
+        n_min=int(ps_cfg.get("n_min", 3)),
+        n_max=int(ps_cfg.get("n_max", 8)),
         max_per_market=int(ps_cfg.get("max_strategies_per_market", 2)),
         max_equity_index=int(ps_cfg.get("max_equity_index_strategies", 3)),
         max_dd_overlap=float(ps_cfg.get("max_dd_overlap", 0.30)),
@@ -1895,6 +2090,8 @@ def run_portfolio_selection(
         tail_coloss_threshold=float(ps_cfg.get("tail_coloss_threshold", 0.30)),
         use_ecd=bool(ps_cfg.get("use_ecd", True)),
         max_ecd=float(ps_cfg.get("max_ecd", 0.03)),
+        candidate_cap=int(ps_cfg.get("sweep_top_n", 50)),
+        max_combinations=int(ps_cfg.get("max_combinations", 10_000_000_000)),
     )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")
