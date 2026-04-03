@@ -1,53 +1,42 @@
-# CL (Crude Oil) 3-timeframe sweep
-# Requires CL data exported from TradeStation first
-# CL: $10/tick, $1000/point (1 point = 100 ticks)
-
 datasets:
-  - path: "Data/CL_daily_2008_2026_tradestation.csv"
-    market: "CL"
-    timeframe: "daily"
-  - path: "Data/CL_60m_2008_2026_tradestation.csv"
-    market: "CL"
-    timeframe: "60m"
-  - path: "Data/CL_30m_2008_2026_tradestation.csv"
-    market: "CL"
-    timeframe: "30m"
-
-strategy_types: "all"
-
+- path: Data/CL_daily_2008_2026_tradestation.csv
+  market: CL
+  timeframe: daily
+- path: Data/CL_60m_2008_2026_tradestation.csv
+  market: CL
+  timeframe: 60m
+- path: Data/CL_30m_2008_2026_tradestation.csv
+  market: CL
+  timeframe: 30m
+strategy_types: all
 engine:
   initial_capital: 250000.0
   risk_per_trade: 0.01
-  commission_per_contract: 2.00
+  commission_per_contract: 2.0
   slippage_ticks: 4
   tick_value: 10.0
   dollars_per_point: 1000.0
-
+  use_vectorized_trades: true
 pipeline:
   skip_portfolio_evaluation: true
   max_workers_sweep: 90
   max_workers_refinement: 90
   max_candidates_to_refine: 3
-  oos_split_date: "2019-01-01"
-
+  oos_split_date: '2019-01-01'
 promotion_gate:
-  min_profit_factor: 1.00
-  min_average_trade: 0.00
+  min_profit_factor: 1.0
+  min_average_trade: 0.0
   require_positive_net_pnl: false
   min_trades: 50
   min_trades_per_year: 3.0
   max_promoted_candidates: 20
-
 leaderboard:
   min_net_pnl: 0.0
-  min_pf: 1.00
-  min_oos_pf: 1.00
+  min_pf: 1.0
+  min_oos_pf: 1.0
   min_total_trades: 60
-
-output_dir: "Outputs"
-
+output_dir: Outputs
 cloud:
-  machine_type: "n2-highcpu-96"
-  zone: "us-central1-f"
-  provisioning_model: "STANDARD"
-
+  machine_type: n2-highcpu-96
+  zone: us-central1-f
+  provisioning_model: STANDARD

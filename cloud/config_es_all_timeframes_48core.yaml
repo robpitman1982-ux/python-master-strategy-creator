@@ -1,51 +1,41 @@
-# Full ES sweep — 4 timeframes × 3 families on 48-core dedicated CPU
-# Estimated runtime: ~7 hours
-# Estimated cost: ~$15 ($2.14/hr × 7hr)
-# Droplet: dedicated-cpu-48x96gb in syd1
-
 datasets:
-  - path: "Data/ES_daily_2008_2026_tradestation.csv"
-    market: "ES"
-    timeframe: "daily"
-  - path: "Data/ES_60m_2008_2026_tradestation.csv"
-    market: "ES"
-    timeframe: "60m"
-  - path: "Data/ES_30m_2008_2026_tradestation.csv"
-    market: "ES"
-    timeframe: "30m"
-  - path: "Data/ES_15m_2008_2026_tradestation.csv"
-    market: "ES"
-    timeframe: "15m"
-
-strategy_types: "all"
-
+- path: Data/ES_daily_2008_2026_tradestation.csv
+  market: ES
+  timeframe: daily
+- path: Data/ES_60m_2008_2026_tradestation.csv
+  market: ES
+  timeframe: 60m
+- path: Data/ES_30m_2008_2026_tradestation.csv
+  market: ES
+  timeframe: 30m
+- path: Data/ES_15m_2008_2026_tradestation.csv
+  market: ES
+  timeframe: 15m
+strategy_types: all
 engine:
   initial_capital: 250000.0
   risk_per_trade: 0.01
-  commission_per_contract: 2.00
+  commission_per_contract: 2.0
   slippage_ticks: 4
-  tick_value: 12.50
+  tick_value: 12.5
   dollars_per_point: 50.0
-
+  use_vectorized_trades: true
 pipeline:
-  max_workers_sweep: 46       # Leave 2 cores free for OS on 48-core
+  max_workers_sweep: 46
   max_workers_refinement: 46
   max_candidates_to_refine: 5
-  oos_split_date: "2019-01-01"
-  max_memory_gb: 80           # Auto-reduce workers if estimated memory exceeds this
-
+  oos_split_date: '2019-01-01'
+  max_memory_gb: 80
 promotion_gate:
-  min_profit_factor: 1.00
-  min_average_trade: 0.00
+  min_profit_factor: 1.0
+  min_average_trade: 0.0
   require_positive_net_pnl: false
   min_trades: 50
   min_trades_per_year: 3.0
   max_promoted_candidates: 20
-
 leaderboard:
   min_net_pnl: 0.0
-  min_pf: 1.00
-  min_oos_pf: 1.00
+  min_pf: 1.0
+  min_oos_pf: 1.0
   min_total_trades: 60
-
-output_dir: "Outputs"
+output_dir: Outputs
