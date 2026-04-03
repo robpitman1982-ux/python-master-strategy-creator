@@ -437,3 +437,82 @@ def test_parity_short_data():
     signals[2] = True
     orig, vec = run_both(data, signals, hold_bars=20, stop_distance_atr=2.0)
     compare_trades(orig, vec)
+
+
+# ===================================================================
+# Task 7: Full sweep parity test (real data)
+# ===================================================================
+
+_ES_DAILY = "Data/ES_daily_2008_2026_tradestation.csv"
+
+
+@pytest.mark.skipif(
+    not __import__("pathlib").Path(_ES_DAILY).exists(),
+    reason="ES daily data not available",
+)
+def test_full_sweep_parity_es_daily():
+    """Run real strategy combos through both engines and compare every trade.
+
+    Uses the MeanReversionStrategyType to generate filter combinations,
+    then runs each combo through both the original and vectorized engines
+    with identical parameters.  Zero tolerance on all trades.
+    """
+    from modules.data_loader import load_tradestation_csv
+    from modules.feature_builder import add_precomputed_features
+    from modules.strategy_types.strategy_factory import get_strategy_type
+    from modules.filter_combinator import generate_filter_combinations
+    from modules.vectorized_signals import compute_combined_signal_mask
+    from modules.vectorized_trades import vectorized_backtest
+
+    # Load real data
+    data = load_tradestation_csv(_ES_DAILY, debug=False)
+    data = add_precomputed_features(
+        data, sma_lengths=[10, 20, 50, 200],
+        avg_range_lookbacks=[10, 20],
+        momentum_lookbacks=[5, 10, 20],
+    )
+
+    cfg = EngineConfig(
+        symbol="ES", timeframe="daily", direction="long",
+        oos_split_date="2019-01-01",
+    )
+
+    st = get_strategy_type("mean_reversion")
+    filter_classes = st.get_filter_classes()
+
+    # Generate a subset of combos (3 filters, first 20 combos)
+    combos = list(generate_filter_combinations(
+        filter_classes,
+        min_filters=st.min_filters_per_combo,
+        max_filters=st.min_filters_per_combo,
+    ))[:20]
+
+    hb = st.default_hold_bars
+    sda = st.default_stop_distance_points  # this is actually stop_distance_atr
+
+    total_trades_checked = 0
+    for combo_classes in combos:
+        filter_objects = st.build_filter_objects_from_classes(combo_classes, timeframe="daily")
+        strategy = st.build_combinable_strategy(
+            filters=filter_objects,
+            hold_bars=hb,
+            stop_distance_points=sda,
+        )
+        signal_mask = compute_combined_signal_mask(filter_objects, data)
+
+        # Original engine
+        eng_orig = MasterStrategyEngine(data, cfg)
+        eng_orig.run(strategy=strategy, precomputed_signals=signal_mask)
+        orig_trades = capture_trades(eng_orig)
+
+        # Vectorized engine
+        eng_vec = MasterStrategyEngine(data, cfg)
+        eng_vec.run_vectorized(strategy=strategy, precomputed_signals=signal_mask)
+        vec_trades = capture_trades(eng_vec)
+
+        compare_trades(orig_trades, vec_trades)
+        total_trades_checked += len(orig_trades)
+
+    assert total_trades_checked > 50, (
+        f"Expected 50+ trades across all combos, got {total_trades_checked}"
+    )
