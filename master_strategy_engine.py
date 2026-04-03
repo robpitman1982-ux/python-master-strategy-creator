@@ -771,6 +771,7 @@ def run_single_family(
         oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
         timeframe=timeframe,
         direction=direction,
+        use_vectorized_trades=bool(get_nested(_cfg, "engine", "use_vectorized_trades", default=False)),
     )
 
     # Memory estimation — warn if parallel copies of the dataframe may exceed RAM budget
@@ -1014,6 +1015,7 @@ def _run_dataset(
         oos_split_date=get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
         timeframe=ds_timeframe,
         direction=_direction,
+        use_vectorized_trades=bool(get_nested(_cfg, "engine", "use_vectorized_trades", default=False)),
     )
 
     try:

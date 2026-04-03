@@ -41,6 +41,7 @@ def vectorized_backtest(
     tick_value: float = 12.50,
     dollars_per_point: float = 50.0,
     oos_split_date: str = "2019-01-01",
+    stop_distance_points: float | None = None,
     # Exit-type-specific parameters
     profit_target_atr: float | None = None,
     trailing_stop_atr: float | None = None,
@@ -70,7 +71,12 @@ def vectorized_backtest(
 
     # ── Entry prices & stop distances for every potential entry ─
     entry_atrs = atr_clean[signal_bars]
-    stop_dists = stop_distance_atr * entry_atrs  # (n_pot,)
+    if stop_distance_atr > 0:
+        stop_dists = stop_distance_atr * entry_atrs  # (n_pot,)
+    elif stop_distance_points is not None and stop_distance_points > 0:
+        stop_dists = np.full(n_pot, stop_distance_points)
+    else:
+        stop_dists = stop_distance_atr * entry_atrs  # fallback
 
     if is_long:
         entry_prices = close[signal_bars] + half_slip

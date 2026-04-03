@@ -103,7 +103,10 @@ def _run_trend_combo_case(args) -> dict[str, Any]:
     signal_mask = compute_combined_signal_mask(filter_objects, data)
 
     engine = MasterStrategyEngine(data=data, config=cfg)
-    engine.run(strategy=strategy, precomputed_signals=signal_mask)
+    if cfg.use_vectorized_trades:
+        engine.run_vectorized(strategy=strategy, precomputed_signals=signal_mask)
+    else:
+        engine.run(strategy=strategy, precomputed_signals=signal_mask)
     summary = engine.results()
 
     total_trades = int(str(summary.get("Total Trades", 0)).replace(",", ""))

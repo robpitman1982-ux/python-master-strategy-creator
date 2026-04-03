@@ -23,6 +23,7 @@ class EngineConfig:
     oos_split_date: str = "2019-01-01"
     timeframe: str = "60m"
     direction: str = "long"  # "long" or "short"
+    use_vectorized_trades: bool = False
 
 
 @dataclass
@@ -541,6 +542,114 @@ class MasterStrategyEngine:
                     bars_held=bars_held,
                     exit_reason="FINAL_BAR",
                 )
+
+    def run_vectorized(
+        self,
+        strategy,
+        hold_bars: Optional[int] = None,
+        stop_distance_atr: Optional[float] = None,
+        precomputed_signals: Optional[np.ndarray] = None,
+    ) -> None:
+        """Vectorized backtest — same interface as run(), 100x+ faster.
+
+        Falls back to run() when precomputed_signals is not provided
+        (vectorized path requires a pre-built signal mask).
+        """
+        if precomputed_signals is None:
+            return self.run(strategy, hold_bars=hold_bars,
+                            stop_distance_atr=stop_distance_atr)
+
+        from modules.vectorized_trades import vectorized_backtest
+
+        self.position = None
+        self.trades = []
+        self.equity_curve = []
+        self.current_capital = float(self.initial_capital)
+        self.strategy_name = getattr(strategy, "name", "UnknownStrategy")
+
+        hb = int(hold_bars if hold_bars is not None else getattr(strategy, "hold_bars", 3))
+
+        # Resolve stop distance parameters
+        sda = 0.0
+        sdp = None
+        if stop_distance_atr is not None:
+            sda = float(stop_distance_atr)
+        elif hasattr(strategy, "stop_distance_atr") and getattr(strategy, "stop_distance_atr", None):
+            sda = float(strategy.stop_distance_atr)
+        else:
+            sdp = float(getattr(strategy, "stop_distance_points", 10.0) or 10.0)
+
+        # Resolve exit config
+        ec = getattr(strategy, "exit_config", None)
+        exit_type_str = "time_stop"
+        pt_atr = None
+        ts_atr = None
+        se_ref = None
+        be_atr = None
+        be_lock = 0.0
+        ee_bars = None
+
+        if ec is not None:
+            exit_type_str = ec.exit_type.value if hasattr(ec.exit_type, "value") else str(ec.exit_type)
+            pt_atr = ec.profit_target_atr
+            ts_atr = ec.trailing_stop_atr
+            se_ref = ec.signal_exit_reference
+            be_atr = ec.break_even_atr
+            be_lock = ec.break_even_lock_atr
+            ee_bars = ec.early_exit_bars
+
+        # Resolve SMA array for signal_exit
+        sma_arr = None
+        if exit_type_str == "signal_exit" and se_ref and se_ref.strip().lower() == "fast_sma":
+            sma_col = self._resolve_fast_sma_column(strategy, self.data)
+            if sma_col and sma_col in self.data.columns:
+                sma_arr = self.data[sma_col].values
+
+        atr_arr = self.data["atr_20"].values if "atr_20" in self.data.columns else np.full(len(self.data), 10.0)
+
+        result = vectorized_backtest(
+            signal_mask=precomputed_signals,
+            close=self.data["close"].values,
+            high=self.data["high"].values,
+            low=self.data["low"].values,
+            atr=atr_arr,
+            timestamps=self.data.index,
+            hold_bars=hb,
+            stop_distance_atr=sda,
+            exit_type=exit_type_str,
+            direction=getattr(self.config, "direction", "long"),
+            initial_capital=self.initial_capital,
+            risk_per_trade=self.risk_per_trade,
+            commission_per_contract=self.config.commission_per_contract,
+            slippage_ticks=self.config.slippage_ticks,
+            tick_value=self.config.tick_value,
+            dollars_per_point=self.config.dollars_per_point,
+            oos_split_date=self.config.oos_split_date,
+            stop_distance_points=sdp,
+            profit_target_atr=pt_atr,
+            trailing_stop_atr=ts_atr,
+            signal_exit_sma=sma_arr,
+            early_exit_bars=ee_bars,
+            break_even_atr=be_atr,
+            break_even_lock_atr=be_lock,
+        )
+
+        # Convert vectorized result back to engine state
+        self.current_capital = result["current_capital"]
+        for td in result["trades"]:
+            self.trades.append(Trade(
+                entry_time=td["entry_time"],
+                exit_time=td["exit_time"],
+                direction=td["direction"],
+                entry_price=td["entry_price"],
+                exit_price=td["exit_price"],
+                contracts=td["contracts"],
+                pnl=td["pnl"],
+                bars_held=td["bars_held"],
+                exit_reason=td["exit_reason"],
+                mae_points=0.0,
+                mfe_points=0.0,
+            ))
 
     def trades_dataframe(self) -> pd.DataFrame:
         if not self.trades:

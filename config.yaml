@@ -19,6 +19,7 @@ engine:
   slippage_ticks: 4
   tick_value: 12.50
   dollars_per_point: 50.0
+  use_vectorized_trades: true
 
 # --- Pipeline controls ---
 # Local (many cores): max_workers_sweep: 10, max_workers_refinement: 10
