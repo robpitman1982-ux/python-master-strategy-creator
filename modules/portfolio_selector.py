@@ -1231,6 +1231,38 @@ def sweep_combinations(
 # STAGE 5: Portfolio Monte Carlo
 # ============================================================================
 
+def _build_shuffled_interleave_matrix(
+    strategy_trade_lists: dict[str, list[float]],
+    contract_weights: dict[str, float],
+    n_sims: int,
+    seed: int,
+) -> np.ndarray:
+    """Build (n_sims, n_trades) matrix of shuffled+interleaved portfolio trades."""
+    rng = random.Random(seed)
+    strategy_names = list(strategy_trade_lists.keys())
+    trade_lists = {s: list(strategy_trade_lists[s]) for s in strategy_names}
+    max_len = max(len(trade_lists[s]) for s in strategy_names) if strategy_names else 0
+    n_trades_per_sim = max_len * len(strategy_names)
+
+    matrix = np.zeros((n_sims, n_trades_per_sim))
+    for sim in range(n_sims):
+        shuffled: dict[str, list[float]] = {}
+        for s in strategy_names:
+            t = trade_lists[s].copy()
+            rng.shuffle(t)
+            shuffled[s] = t
+
+        idx = 0
+        for trade_idx in range(max_len):
+            for s in strategy_names:
+                if trade_idx < len(shuffled[s]):
+                    w = contract_weights.get(s, 1.0)
+                    matrix[sim, idx] = shuffled[s][trade_idx] * w
+                    idx += 1
+
+    return matrix
+
+
 def portfolio_monte_carlo(
     strategy_trade_lists: dict[str, list[float]],
     config: PropFirmConfig,
@@ -1244,124 +1276,55 @@ def portfolio_monte_carlo(
     For each simulation:
     1. For each strategy, independently shuffle its trade list
     2. Interleave all shuffled trades into a single combined sequence
-       (round-robin across strategies)
     3. Apply contract_weights scaling to each trade's PnL
-    4. Run the combined trade list through simulate_challenge()
+    4. Run through vectorized simulate_challenge_batch()
 
     Returns dict with pass_rate, step pass rates, DD stats, avg_trades_to_pass.
     """
     if contract_weights is None:
         contract_weights = {s: 1.0 for s in strategy_trade_lists}
 
+    trade_matrix = _build_shuffled_interleave_matrix(
+        strategy_trade_lists, contract_weights, n_sims, seed,
+    )
+
+    return simulate_challenge_batch(trade_matrix, config, source_capital)
+
+
+def _build_block_bootstrap_matrix(
+    daily_returns: np.ndarray,
+    n_sims: int,
+    n_days: int,
+    block_sizes: list[int],
+    seed: int,
+) -> np.ndarray:
+    """Build (n_sims, n_trades) matrix from block-sampled daily returns.
+
+    For each sim, sample consecutive blocks of days (with replacement)
+    until we have >= n_days returns, then extract non-zero as trades.
+    Returns a ragged-padded matrix where each row is that sim's trade sequence.
+    """
     rng = random.Random(seed)
-    strategy_names = list(strategy_trade_lists.keys())
-    trade_lists = {s: list(strategy_trade_lists[s]) for s in strategy_names}
-
-    pass_count = 0
-    step_pass_counts = [0] * config.n_steps
-    worst_dds: list[float] = []
-    trades_to_pass: list[int] = []
-    step_trades_list: list[list[int]] = []  # per-sim [step1_trades, step2_trades, ...]
-    rolling_20_dds: list[float] = []
-    max_losing_streaks: list[int] = []
-    max_recovery_trades_list: list[int] = []
-
+    # First pass: build all sim return series, track max trade count
+    all_trades: list[list[float]] = []
     for _ in range(n_sims):
-        # 1. Independently shuffle each strategy's trades
-        shuffled: dict[str, list[float]] = {}
-        for s in strategy_names:
-            t = trade_lists[s].copy()
-            rng.shuffle(t)
-            shuffled[s] = t
+        sim_returns: list[float] = []
+        while len(sim_returns) < n_days:
+            block_size = rng.choice(block_sizes)
+            start = rng.randint(0, n_days - 1)
+            end = min(start + block_size, n_days)
+            sim_returns.extend(daily_returns[start:end])
+        sim_returns = sim_returns[:n_days]
+        trades = [r for r in sim_returns if r != 0.0]
+        all_trades.append(trades)
 
-        # 2. Interleave by round-robin with weight scaling
-        combined: list[float] = []
-        max_len = max(len(shuffled[s]) for s in strategy_names) if strategy_names else 0
+    max_trades = max(len(t) for t in all_trades) if all_trades else 1
+    matrix = np.zeros((n_sims, max_trades))
+    for i, trades in enumerate(all_trades):
+        if trades:
+            matrix[i, :len(trades)] = trades
 
-        for idx in range(max_len):
-            for s in strategy_names:
-                if idx < len(shuffled[s]):
-                    w = contract_weights.get(s, 1.0)
-                    combined.append(shuffled[s][idx] * w)
-
-        # 3. Run through simulate_challenge
-        result = simulate_challenge(combined, config, source_capital)
-        worst_dds.append(result.worst_drawdown_pct)
-
-        # 4. Risk metrics on the combined trade sequence
-        if combined:
-            # Worst rolling 20-trade DD
-            if len(combined) >= 20:
-                arr = np.array(combined)
-                rolling_sum = np.convolve(arr, np.ones(20), mode='valid')
-                rolling_20_dds.append(float(np.min(rolling_sum)))
-            else:
-                rolling_20_dds.append(float(sum(combined)))
-
-            # Max losing streak
-            streak = 0
-            max_streak = 0
-            for t in combined:
-                if t < 0:
-                    streak += 1
-                    max_streak = max(max_streak, streak)
-                else:
-                    streak = 0
-            max_losing_streaks.append(max_streak)
-
-            # Max recovery time (trades from DD trough back to new equity high)
-            equity = np.cumsum(combined)
-            running_max = np.maximum.accumulate(equity)
-            max_recovery = 0
-            current_recovery = 0
-            for ei in range(len(equity)):
-                if equity[ei] < running_max[ei]:
-                    current_recovery += 1
-                    max_recovery = max(max_recovery, current_recovery)
-                else:
-                    current_recovery = 0
-            max_recovery_trades_list.append(max_recovery)
-
-        for step in result.steps:
-            if step.passed:
-                step_pass_counts[step.step_number - 1] += 1
-            else:
-                break  # Don't count later steps if this one failed
-
-        if result.passed_all_steps:
-            pass_count += 1
-            trades_to_pass.append(result.total_trades_used)
-            step_trades_list.append([s.trades_taken for s in result.steps])
-
-    worst_dd_arr = np.array(worst_dds)
-    step_pass_rates = [c / n_sims for c in step_pass_counts]
-
-    # Per-step trade medians for passing sims
-    step_median_trades: list[float] = []
-    if step_trades_list:
-        for i in range(config.n_steps):
-            vals = [st[i] for st in step_trades_list if i < len(st)]
-            step_median_trades.append(float(np.median(vals)) if vals else 0.0)
-
-    mc_result: dict = {
-        "pass_rate": pass_count / n_sims,
-        "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
-    }
-    for si, rate in enumerate(step_pass_rates):
-        mc_result[f"step{si + 1}_pass_rate"] = rate
-    mc_result.update({
-        "median_worst_dd_pct": float(np.median(worst_dd_arr)),
-        "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
-        "p99_worst_dd_pct": float(np.percentile(worst_dd_arr, 99)),
-        "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
-        "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
-        "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
-        "step_median_trades": step_median_trades,
-        "worst_rolling_20_p95": float(np.percentile(rolling_20_dds, 95)) if rolling_20_dds else 0.0,
-        "max_losing_streak_p95": float(np.percentile(max_losing_streaks, 95)) if max_losing_streaks else 0,
-        "max_recovery_trades_p95": float(np.percentile(max_recovery_trades_list, 95)) if max_recovery_trades_list else 0,
-    })
-    return mc_result
+    return matrix
 
 
 def portfolio_monte_carlo_block_bootstrap(
@@ -1378,11 +1341,6 @@ def portfolio_monte_carlo_block_bootstrap(
 
     Instead of shuffling individual trade lists (which destroys crisis clustering),
     this samples blocks of consecutive days from the daily portfolio return series.
-
-    Steps per simulation:
-    1. Build daily portfolio return series (sum across strategies, weighted).
-    2. Sample blocks of consecutive days (with replacement) until >= original length.
-    3. Extract non-zero days as "trades" for simulate_challenge().
 
     This preserves: crisis clustering, cross-strategy DD correlation,
     volatility regime persistence, serial correlation in returns.
@@ -1408,106 +1366,13 @@ def portfolio_monte_carlo_block_bootstrap(
     if n_days < 30:
         return {"pass_rate": 0.0, "final_pass_rate": 0.0}
 
-    rng = random.Random(seed)
+    # Build trade matrix via block bootstrap
+    trade_matrix = _build_block_bootstrap_matrix(
+        daily_returns, n_sims, n_days, block_sizes, seed,
+    )
 
-    pass_count = 0
-    step_pass_counts = [0] * config.n_steps
-    worst_dds: list[float] = []
-    trades_to_pass: list[int] = []
-    step_trades_list: list[list[int]] = []
-    rolling_20_dds: list[float] = []
-    max_losing_streaks: list[int] = []
-    max_recovery_trades_list: list[int] = []
-
-    for _ in range(n_sims):
-        # Sample blocks to build simulated return series
-        sim_returns: list[float] = []
-        while len(sim_returns) < n_days:
-            block_size = rng.choice(block_sizes)
-            start = rng.randint(0, n_days - 1)
-            end = min(start + block_size, n_days)
-            sim_returns.extend(daily_returns[start:end])
-
-        sim_returns = sim_returns[:n_days]
-
-        # Extract non-zero returns as "trades" for simulate_challenge
-        trades = [r for r in sim_returns if r != 0.0]
-        if not trades:
-            worst_dds.append(0.0)
-            continue
-
-        result = simulate_challenge(trades, config, source_capital)
-        worst_dds.append(result.worst_drawdown_pct)
-
-        # Risk metrics
-        if len(trades) >= 20:
-            arr = np.array(trades)
-            rolling_sum = np.convolve(arr, np.ones(20), mode='valid')
-            rolling_20_dds.append(float(np.min(rolling_sum)))
-        elif trades:
-            rolling_20_dds.append(float(sum(trades)))
-
-        streak = 0
-        max_streak = 0
-        for t in trades:
-            if t < 0:
-                streak += 1
-                max_streak = max(max_streak, streak)
-            else:
-                streak = 0
-        max_losing_streaks.append(max_streak)
-
-        equity = np.cumsum(trades)
-        running_max = np.maximum.accumulate(equity)
-        max_recovery = 0
-        current_recovery = 0
-        for ei in range(len(equity)):
-            if equity[ei] < running_max[ei]:
-                current_recovery += 1
-                max_recovery = max(max_recovery, current_recovery)
-            else:
-                current_recovery = 0
-        max_recovery_trades_list.append(max_recovery)
-
-        for step in result.steps:
-            if step.passed:
-                step_pass_counts[step.step_number - 1] += 1
-            else:
-                break
-
-        if result.passed_all_steps:
-            pass_count += 1
-            trades_to_pass.append(result.total_trades_used)
-            step_trades_list.append([s.trades_taken for s in result.steps])
-
-    worst_dd_arr = np.array(worst_dds) if worst_dds else np.array([0.0])
-    step_pass_rates = [c / n_sims for c in step_pass_counts]
-
-    step_median_trades: list[float] = []
-    if step_trades_list:
-        for i in range(config.n_steps):
-            vals = [st[i] for st in step_trades_list if i < len(st)]
-            step_median_trades.append(float(np.median(vals)) if vals else 0.0)
-
-    mc_result: dict = {
-        "pass_rate": pass_count / n_sims,
-        "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
-    }
-    for si, rate in enumerate(step_pass_rates):
-        mc_result[f"step{si + 1}_pass_rate"] = rate
-    mc_result.update({
-        "median_worst_dd_pct": float(np.median(worst_dd_arr)),
-        "p95_worst_dd_pct": float(np.percentile(worst_dd_arr, 95)),
-        "p99_worst_dd_pct": float(np.percentile(worst_dd_arr, 99)),
-        "avg_trades_to_pass": float(np.mean(trades_to_pass)) if trades_to_pass else 0.0,
-        "median_trades_to_pass": float(np.median(trades_to_pass)) if trades_to_pass else 0.0,
-        "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if trades_to_pass else 0.0,
-        "step_median_trades": step_median_trades,
-        "worst_rolling_20_p95": float(np.percentile(rolling_20_dds, 95)) if rolling_20_dds else 0.0,
-        "max_losing_streak_p95": float(np.percentile(max_losing_streaks, 95)) if max_losing_streaks else 0,
-        "max_recovery_trades_p95": float(np.percentile(max_recovery_trades_list, 95)) if max_recovery_trades_list else 0,
-    })
-    return mc_result
+    # Run vectorized batch simulation
+    return simulate_challenge_batch(trade_matrix, config, source_capital)
 
 
 def run_bootcamp_mc(
