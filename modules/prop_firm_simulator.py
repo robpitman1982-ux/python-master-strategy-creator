@@ -353,10 +353,12 @@ def simulate_single_step(
 
     # Daily DD tracking
     daily_dd_limit = None
+    day_start_balance = step_balance
     if config.max_daily_drawdown_pct is not None:
-        daily_dd_limit = step_balance * config.max_daily_drawdown_pct
+        daily_dd_limit = max(step_balance, day_start_balance) * config.max_daily_drawdown_pct
     trades_per_day_group = max(1, math.ceil(trades_per_day))
     daily_pnl_accumulator = 0.0
+    paused_until_next_day = False  # True when daily DD pause is active
 
     balance = step_balance
     peak = step_balance
@@ -366,6 +368,19 @@ def simulate_single_step(
     target_hit_idx = None
 
     for i, raw_pnl in enumerate(trade_pnls):
+        # Day boundary reset (at start of each new day)
+        if i > 0 and i % trades_per_day_group == 0:
+            daily_pnl_accumulator = 0.0
+            paused_until_next_day = False
+            day_start_balance = balance
+            # Recalculate daily DD limit if configured
+            if daily_dd_limit is not None and config.daily_dd_recalculates:
+                daily_dd_limit = max(balance, step_balance) * config.max_daily_drawdown_pct
+
+        # Skip trades if paused for the rest of this day
+        if paused_until_next_day:
+            continue
+
         scaled_pnl = _scale_trade_pnl(raw_pnl, source_capital, step_balance)
         balance += scaled_pnl
         equity_curve.append(balance)
@@ -382,28 +397,30 @@ def simulate_single_step(
         # Daily drawdown check
         if daily_dd_limit is not None:
             daily_pnl_accumulator += scaled_pnl
-            # Check if daily loss exceeds limit (negative PnL)
             if daily_pnl_accumulator <= -daily_dd_limit:
-                return StepResult(
-                    step_number=step_number,
-                    starting_balance=step_balance,
-                    ending_balance=balance,
-                    profit_target=profit_target_dollars,
-                    max_drawdown_limit=drawdown_floor,
-                    peak_balance=peak,
-                    trough_balance=trough,
-                    max_drawdown_dollars=max_dd_dollars,
-                    max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
-                    trades_taken=i + 1,
-                    passed=False,
-                    failure_reason=f"Daily DD breach: ${daily_pnl_accumulator:,.0f} exceeds -{config.max_daily_drawdown_pct*100:.0f}% (${daily_dd_limit:,.0f})",
-                    equity_curve=equity_curve,
-                    target_hit_trade_idx=None,
-                    daily_dd_breach=True,
-                )
-            # Reset accumulator at day boundary
-            if (i + 1) % trades_per_day_group == 0:
-                daily_pnl_accumulator = 0.0
+                if config.daily_dd_is_pause:
+                    # Pause: skip remaining trades this day, continue next day
+                    paused_until_next_day = True
+                    continue
+                else:
+                    # Terminate step
+                    return StepResult(
+                        step_number=step_number,
+                        starting_balance=step_balance,
+                        ending_balance=balance,
+                        profit_target=profit_target_dollars,
+                        max_drawdown_limit=drawdown_floor,
+                        peak_balance=peak,
+                        trough_balance=trough,
+                        max_drawdown_dollars=max_dd_dollars,
+                        max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
+                        trades_taken=i + 1,
+                        passed=False,
+                        failure_reason=f"Daily DD breach: ${daily_pnl_accumulator:,.0f} exceeds -{config.max_daily_drawdown_pct*100:.0f}% (${daily_dd_limit:,.0f})",
+                        equity_curve=equity_curve,
+                        target_hit_trade_idx=None,
+                        daily_dd_breach=True,
+                    )
 
         # Check drawdown breach
         if config.drawdown_type == "static":
