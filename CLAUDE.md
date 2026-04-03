@@ -40,9 +40,11 @@ python-master-strategy-creator/
 │   ├── __init__.py
 │   ├── test_smoke.py                  # 30 smoke tests (config, engine, filters, consistency, progress, leaderboard, timeframe, hybrid scaling, prop firm, portfolio evaluator timeframe, daily DD, program selector)
 │   ├── test_subtypes.py               # 4 smoke tests covering strategy subtype registration and validity
+│   ├── test_engine_parity.py          # 25 parity tests: vectorized vs original engine (zero tolerance) + benchmarks
 │   └── test_generate_returns.py       # 7 tests for parallel rebuild, data cache, folder naming
 ├── modules/
 │   ├── __init__.py
+│   ├── vectorized_trades.py           # Vectorized trade simulation (14-23x faster than engine.run loop)
 │   ├── config_loader.py               # load_config() + get_nested() + get_timeframe_multiplier() + scale_lookbacks()
 │   ├── master_leaderboard.py          # aggregate_master_leaderboard() — consolidates all dataset leaderboards
 │   ├── consistency.py                 # analyse_yearly_consistency() — year-by-year PnL checks
@@ -309,6 +311,8 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 - [x] Dashboard: short family support in live monitor (short_mean_reversion, short_trend, short_breakout) (Session 49)
 - [x] Dashboard inline pills: flex layout, skip empty groups, 0.95rem font, mini progress bars with color coding (Session 49)
 - [x] generate_returns.py parallelised — ProcessPoolExecutor for per-strategy rebuilds, _load_cached for data dedup (Session 53, upgraded to ProcessPool Session 60)
+- [x] Vectorized trade loop — `modules/vectorized_trades.py` replaces per-bar Python loop with numpy 2D array ops; 14-23x speedup verified with zero-tolerance parity; `engine.use_vectorized_trades: true` in config.yaml (Session 61)
+- [x] Fixed stale `ts_val` bug in engine.py fast-path signal skip — entry_time was recording wrong timestamp after skip (Session 61)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -364,7 +368,7 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 - `from __future__ import annotations` in every module
 - Parallel execution via `ProcessPoolExecutor` (sweep) and `ThreadPoolExecutor` (refinement)
 - All monetary parsing handles "$1,234.56" format from engine output
-- Tests: `python -m pytest tests/test_smoke.py tests/test_subtypes.py tests/test_cross_dataset_evaluator.py tests/test_cloud_launcher.py tests/test_parallel_vm.py -v` — 29+ tests fast, others require tmp dir permissions
+- Tests: `python -m pytest tests/test_smoke.py tests/test_subtypes.py tests/test_engine_parity.py -v` — 68 tests (43 smoke/subtypes + 25 parity/benchmark)
 - Dashboard: `streamlit run dashboard.py` (requires `streamlit` and `plotly`)
 - Git: commit after every meaningful change with descriptive messages
 
@@ -398,4 +402,4 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-04-04 — Session 60: Vectorized portfolio selector + parallel sweep + multi-program runner
+2026-04-04 — Session 61: Vectorized trade loop (14-23x speedup, zero-tolerance parity)

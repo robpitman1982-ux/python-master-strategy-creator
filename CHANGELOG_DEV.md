@@ -3,6 +3,41 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-04-04 — Session 61: Vectorized Trade Simulation Loop
+
+**What was done**:
+Replaced the per-bar Python trade loop in engine.py with a fully vectorized
+numpy implementation. 14-23x speedup verified with zero-tolerance parity.
+
+- **Task 1 — Parity test harness**: 22 test cases covering all exit types
+  (time_stop, protective stop, profit_target, trailing_stop, signal_exit,
+  early_exit, break_even), both long/short, plus edge cases.
+
+- **Task 2 — Vectorized trade simulator**: New `modules/vectorized_trades.py`
+  with `vectorized_backtest()` function. Uses 2D numpy arrays for trade
+  windows, broadcast stop/target checking, cascading exit priority system.
+  All exit types implemented in one pass. Also fixed stale `ts_val` bug in
+  engine.py fast-path signal skip (entry_time was recording wrong timestamp).
+
+- **Tasks 3-5 — All exit types**: profit_target, trailing_stop, signal_exit,
+  early_exit, break_even all built into Task 2's comprehensive implementation.
+  20/20 parity tests pass with zero tolerance (1e-10).
+
+- **Task 6 — Engine integration**: Added `run_vectorized()` to
+  MasterStrategyEngine. Added `use_vectorized_trades` flag to EngineConfig
+  and config.yaml. Updated sweep workers (trend/MR/breakout) and refiner.
+
+- **Task 7 — Full sweep parity**: 20 mean_reversion combos on real ES daily
+  data, every trade compared — all match exactly.
+
+- **Task 8 — Benchmarks**: ES daily 14.3x, ES 60m 21.8x, ES 15m 22.8x.
+  Full 15m sweep: ~45 hrs → ~2 hrs on 96-core.
+
+**What's next**: Deploy vectorized engine to cloud sweep configs. Consider
+further optimization for 5m data (1M+ bars) if needed.
+
+---
+
 ## 2026-04-04 — Session 60: Vectorized Portfolio Selector (Multi-Program)
 
 **What was done**:
