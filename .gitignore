@@ -7,3 +7,7 @@ paste.md
 .llm-context-history/
 SESSION_*_TASKS.md
 cloud_results/
+.tmp_pytest*
+.tmp_*
+.pytest_cache/
+tmp*/

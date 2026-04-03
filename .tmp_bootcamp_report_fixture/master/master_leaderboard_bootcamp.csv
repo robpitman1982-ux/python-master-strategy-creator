@@ -1,2 +1,0 @@
-rank,market,timeframe,strategy_type,leader_strategy_name,bootcamp_score,leader_pf,oos_pf,leader_max_drawdown,leader_trades_per_year,quality_flag
-1,ES,30m,breakout,BreakoutBootcamp,72.5,1.2,1.35,15000.0,8.0,ROBUST

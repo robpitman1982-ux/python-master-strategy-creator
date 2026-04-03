@@ -1,4 +1,0 @@
-datasets:
-  - path: Data/ES_60m.csv
-    market: ES
-    timeframe: 60m

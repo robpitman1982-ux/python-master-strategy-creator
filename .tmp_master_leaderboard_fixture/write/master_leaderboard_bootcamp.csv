@@ -1,2 +1,0 @@
-rank,market,timeframe,strategy_type,leader_strategy_name,quality_flag,leader_pf,leader_net_pnl,leader_trades,bootcamp_score,is_pf,oos_pf,recent_12m_pf,accepted_final
-1,ES,60m,mean_reversion,BootcampMR,ROBUST,1.4,60000.0,180,75.5,1.1,1.35,1.3,True

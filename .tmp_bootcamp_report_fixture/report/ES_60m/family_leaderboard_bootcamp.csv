@@ -1,3 +1,0 @@
-strategy_type,leader_strategy_name,accepted_final,bootcamp_score,leader_pf,oos_pf,leader_net_pnl,leader_max_drawdown,leader_trades_per_year,quality_flag
-trend,TrendBootcampA,True,61.0,1.15,1.22,42000.0,13000.0,6.0,STABLE
-mean_reversion,MRBootcampB,True,74.0,1.32,1.44,51000.0,12000.0,10.0,ROBUST

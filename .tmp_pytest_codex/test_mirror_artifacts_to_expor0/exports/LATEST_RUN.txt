@@ -1,3 +1,0 @@
-strategy-sweep-20260324T010203Z
-C:\Users\Rob\Documents\GIT Repos\python-master-strategy-creator\.tmp_pytest_codex\test_mirror_artifacts_to_expor0\runs\strategy-sweep-20260324T010203Z
-C:\Users\Rob\Documents\GIT Repos\python-master-strategy-creator\.tmp_pytest_codex\test_mirror_artifacts_to_expor0\exports\latest

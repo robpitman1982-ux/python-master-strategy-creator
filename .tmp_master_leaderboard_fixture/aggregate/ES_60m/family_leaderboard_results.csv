@@ -1,2 +1,0 @@
-strategy_type,leader_strategy_name,accepted_final,quality_flag,leader_pf,leader_net_pnl,leader_trades,is_pf,oos_pf,recent_12m_pf
-trend,TrendClassic,True,STABLE,1.1,40000.0,120,1.02,1.15,1.1
