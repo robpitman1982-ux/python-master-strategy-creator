@@ -3,6 +3,8 @@
 Reads Outputs/ultimate_leaderboard_bootcamp.csv, rebuilds trades for each
 accepted strategy, and writes per-dataset strategy_returns.csv files into
 the corresponding Outputs/runs/{run_id}/Outputs/{MARKET}_{TIMEFRAME}/ folders.
+
+Uses ProcessPoolExecutor for CPU-bound strategy rebuilds (bypasses GIL).
 """
 from __future__ import annotations
 
@@ -10,7 +12,7 @@ import os
 import sys
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -41,6 +43,64 @@ def _dataset_to_folder(dataset: str) -> str:
     if len(parts) >= 2:
         return f"{parts[0]}_{parts[1]}"
     return stem
+
+
+# --- ProcessPoolExecutor worker ---
+
+_worker_data: dict = {}
+
+
+def _worker_init(data_csv_path: str) -> None:
+    """Initialize per-worker data cache (called once per process)."""
+    _worker_data["data"] = load_tradestation_csv(data_csv_path)
+
+
+def _rebuild_one(args: tuple) -> tuple[str, pd.Series, list[dict]] | None:
+    """Rebuild a single strategy in a worker process."""
+    row_dict, outputs_dir_str, market, timeframe = args
+    data = _worker_data["data"]
+    outputs_dir = Path(outputs_dir_str)
+
+    strategy_name = str(row_dict.get("leader_strategy_name", "UNKNOWN")).strip()
+    strategy_type = str(row_dict.get("strategy_type", "")).strip()
+    if strategy_name in ["", "NONE"]:
+        return None
+
+    col_key = f"{strategy_type}_{strategy_name}" if strategy_type else strategy_name
+
+    try:
+        row = pd.Series(row_dict)
+        trades_df, filters_str, cfg = _rebuild_strategy_from_leaderboard_row(
+            row=row,
+            data=data,
+            outputs_dir=outputs_dir,
+            market_symbol=market,
+            timeframe=timeframe,
+        )
+
+        if trades_df.empty:
+            return None
+
+        trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
+        trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
+
+        daily_pnl = trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0.0)
+
+        per_trade: list[dict] = []
+        for _, trade in trades_df.iterrows():
+            per_trade.append({
+                "exit_time": str(trade["exit_time"]),
+                "strategy": col_key,
+                "net_pnl": float(trade["net_pnl"]),
+            })
+
+        # Convert daily_pnl index to strings for pickling
+        return (col_key, daily_pnl.to_dict(), per_trade)
+
+    except Exception as e:
+        print(f"    REBUILD FAILED for {col_key}: {e}")
+        traceback.print_exc()
+        return None
 
 
 def main() -> None:
@@ -87,65 +147,40 @@ def main() -> None:
             print(f"  SKIP: Outputs dir not found: {outputs_dir}")
             continue
 
-        # Load data once for this dataset (cached across groups sharing same CSV)
+        # Load data once (for timing display only — workers load their own)
         t0 = time.time()
         data = _load_cached(data_csv)
         print(f"  Data loaded: {len(data)} bars ({time.time() - t0:.1f}s)")
 
         # Build daily returns and per-trade PnL for each strategy
         daily_returns: dict[str, pd.Series] = {}
-        trade_rows: list[dict] = []  # per-trade PnL rows for strategy_trades.csv
+        trade_rows: list[dict] = []
         rebuilt = 0
 
-        def _rebuild_one(row: pd.Series) -> tuple[str, pd.Series, list[dict]] | None:
-            """Rebuild a single strategy. Returns (col_key, daily_pnl, trade_dicts) or None."""
-            strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
-            strategy_type = str(row.get("strategy_type", "")).strip()
-            if strategy_name in ["", "NONE"]:
-                return None
-
-            col_key = f"{strategy_type}_{strategy_name}" if strategy_type else strategy_name
-
-            try:
-                trades_df, filters_str, cfg = _rebuild_strategy_from_leaderboard_row(
-                    row=row,
-                    data=data,
-                    outputs_dir=outputs_dir,
-                    market_symbol=market,
-                    timeframe=timeframe,
-                )
-
-                if trades_df.empty:
-                    print(f"    WARN: No trades rebuilt for {col_key} (empty DataFrame returned)")
-                    return None
-
-                trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
-                trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
-
-                daily_pnl = trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0.0)
-
-                per_trade: list[dict] = []
-                for _, trade in trades_df.iterrows():
-                    per_trade.append({
-                        "exit_time": trade["exit_time"],
-                        "strategy": col_key,
-                        "net_pnl": trade["net_pnl"],
-                    })
-
-                return (col_key, daily_pnl, per_trade)
-
-            except Exception as e:
-                print(f"    REBUILD FAILED for {col_key}: {e}")
-                traceback.print_exc()
-                return None
+        # Prepare args for workers (dicts are picklable, pd.Series are not always)
+        args_list = []
+        for _, row in group.iterrows():
+            args_list.append((
+                row.to_dict(),
+                str(outputs_dir),
+                market,
+                timeframe,
+            ))
 
         max_workers = min(os.cpu_count() or 4, len(group))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(_rebuild_one, row): row for _, row in group.iterrows()}
+        with ProcessPoolExecutor(
+            max_workers=max_workers,
+            initializer=_worker_init,
+            initargs=(str(data_csv),),
+        ) as executor:
+            futures = {executor.submit(_rebuild_one, args): args for args in args_list}
             for future in as_completed(futures):
                 result = future.result()
                 if result:
-                    col_key, daily_pnl, trades_list = result
+                    col_key, daily_pnl_dict, trades_list = result
+                    # Reconstruct pd.Series from dict
+                    daily_pnl = pd.Series(daily_pnl_dict)
+                    daily_pnl.index = pd.to_datetime(daily_pnl.index)
                     daily_returns[col_key] = daily_pnl
                     trade_rows.extend(trades_list)
                     rebuilt += 1
