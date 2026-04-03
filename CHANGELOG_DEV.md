@@ -3,6 +3,50 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-04-04 — Session 60: Vectorized Portfolio Selector (Multi-Program)
+
+**What was done**:
+Session 60 vectorized the portfolio selector's Monte Carlo simulation and
+parallelized the combinatorial sweep for local 8-core execution.
+
+- **Task 8 — Parallel sweep + config wiring**: Added `n_min=3`, `n_max=8`,
+  `quality_flags`, `candidate_cap=60`, `max_combinations` to config.yaml.
+  Replaced serial `sweep_combinations()` with ProcessPoolExecutor parallel
+  version using numpy arrays. Adaptive n_max based on candidate count and cores.
+  Removed old 500K hardcoded guard.
+
+- **Task 1 — Vectorized challenge simulator**: Added `simulate_challenge_batch()`
+  to prop_firm_simulator.py. Processes all N simulations as numpy 2D arrays per
+  step. Handles multi-step (Bootcamp 3-step, High Stakes 2-step), static/trailing
+  DD, daily DD breach detection.
+
+- **Task 6 — Tests**: 8 new tests in test_vectorized_mc.py verifying parity
+  between vectorized and sequential MC, multi-step handling, edge cases, and
+  risk metric output completeness.
+
+- **Task 2 — Vectorized block bootstrap MC**: Rewrote both
+  `portfolio_monte_carlo()` and `portfolio_monte_carlo_block_bootstrap()` to
+  use `simulate_challenge_batch()`. Pre-generates trade matrices then runs
+  batch simulation instead of per-sim Python loops.
+
+- **Task 3 — Parallel MC**: Parallelized `run_bootcamp_mc()` with
+  ProcessPoolExecutor across combinations. Shared return_matrix via initializer.
+
+- **Task 7 — generate_returns.py ProcessPool**: Switched from ThreadPoolExecutor
+  to ProcessPoolExecutor to bypass GIL for CPU-bound strategy rebuilds.
+
+- **Task 4 — Multi-program runner**: New `run_portfolio_all_programs.py` runs
+  portfolio selector across all 4 prop firm programs (Bootcamp $250K,
+  High Stakes $100K, Hyper Growth $5K, Pro Growth $5K). Combined summary CSV.
+
+**What's next**:
+- Run locally: `python run_portfolio_all_programs.py --programs all`
+- Verify k=3..8 portfolios are found and compared
+- Fix sizing optimizer DD constraint bug (separate session)
+- Add walk-forward validation as alternative to fixed IS/OOS split
+
+---
+
 ## 2026-04-03 — Session 59: Bulletproof SPOT runner + 9 new market configs
 
 **What was done**:

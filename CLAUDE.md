@@ -30,6 +30,7 @@ python-master-strategy-creator/
 ├── dashboard_utils.py                  # Pure helpers for dashboard run discovery, cost estimates, badges, result loading
 ├── generate_returns.py                 # Rebuild accepted strategies → strategy_returns.csv + strategy_trades.csv (parallel)
 ├── run_cloud_sweep.py                  # One-click wrapper around cloud.launch_gcp_run (auto-detects storage path)
+├── run_portfolio_all_programs.py        # Multi-program portfolio selector (all 4 prop firm programs)
 ├── run_spot_resilient.py               # Queue-based SPOT runner: zone rotation, preemption retry, 1-TF-per-VM
 ├── paths.py                            # Shared path constants: REPO_ROOT, UPLOADS_DIR, RUNS_DIR, CONSOLE_STORAGE_ROOT (auto-detected)
 ├── scripts/
@@ -307,7 +308,7 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 - [x] Verified rebuild works for ALL 20/20 market/timeframe combos (Session 49)
 - [x] Dashboard: short family support in live monitor (short_mean_reversion, short_trend, short_breakout) (Session 49)
 - [x] Dashboard inline pills: flex layout, skip empty groups, 0.95rem font, mini progress bars with color coding (Session 49)
-- [x] generate_returns.py parallelised — ThreadPoolExecutor for per-strategy rebuilds, _load_cached for data dedup (Session 53)
+- [x] generate_returns.py parallelised — ProcessPoolExecutor for per-strategy rebuilds, _load_cached for data dedup (Session 53, upgraded to ProcessPool Session 60)
 
 ### Prop firm system (System 2 — in progress)
 - [x] Prop firm challenge simulator module — Monte Carlo pass rate, multi-step simulation, strategy ranking
@@ -336,6 +337,12 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 - [x] Portfolio selector: block bootstrap MC preserving crisis clustering (Session 58)
 - [x] Portfolio selector: regime survival gate (2022/2023/2024-2025 PF check) (Session 58)
 - [x] Daily DD breach tracking in StepResult/ChallengeResult (Session 58)
+- [x] Vectorized simulate_challenge_batch() — numpy 2D array MC for N sims simultaneously (Session 60)
+- [x] Vectorized portfolio_monte_carlo + block_bootstrap — pre-generate trade matrices, batch simulate (Session 60)
+- [x] Parallel sweep_combinations() — ProcessPoolExecutor + numpy arrays, adaptive n_max (Session 60)
+- [x] Parallel run_bootcamp_mc() — ProcessPoolExecutor across combinations (Session 60)
+- [x] Config: n_min=3, n_max=8, quality_flags, candidate_cap=60, max_combinations (Session 60)
+- [x] Multi-program runner — run_portfolio_all_programs.py for all 4 prop firm programs (Session 60)
 - [ ] Integrate prop firm scoring into pipeline as alternative leaderboard ranking
 - [ ] Create prop-firm-specific config YAML with softer gates and DD-based ranking
 - [ ] Add prop firm evaluation to portfolio_evaluator.py output
@@ -391,4 +398,4 @@ Queue persisted to `spot_queue.yaml`. On preemption, rotates through 7 zones (ma
 **Canonical storage**: `~/strategy_console_storage/` on strategy-console — auto-detected by `paths.py` (override with `STRATEGY_CONSOLE_STORAGE` env var).
 
 ## Last updated
-2026-04-03 — Session 59: 9 new market configs + bulletproof SPOT runner + launcher defaults for Nikola's console
+2026-04-04 — Session 60: Vectorized portfolio selector + parallel sweep + multi-program runner
