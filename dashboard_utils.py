@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -92,6 +93,14 @@ class ReadinessReport:
     state: str
     summary: str
     checks: list[tuple[str, bool]]
+
+
+MONITOR_FAMILIES = ["trend", "mean_reversion", "breakout"]
+MONITOR_FAMILY_LABELS = {
+    "trend": "Trend",
+    "mean_reversion": "Mean Reversion",
+    "breakout": "Breakout",
+}
 
 
 def read_json_file(path: Path) -> dict[str, Any]:
@@ -630,6 +639,282 @@ def summarize_dataset_progress(dataset_statuses: list[dict[str, Any]], run_manif
     }
 
 
+def choose_default_run_record(
+    run_records: list[dict[str, Any]],
+    *,
+    prefer_running: bool = False,
+    require_outputs: bool = False,
+) -> dict[str, Any] | None:
+    def _eligible(record: dict[str, Any]) -> bool:
+        return not require_outputs or record.get("outputs_dir") is not None
+
+    candidates = [record for record in run_records if _eligible(record)]
+    if not candidates:
+        return None
+
+    if prefer_running:
+        for preferred_state in ("running", "preserved", "completed", "failed", "unknown"):
+            match = next(
+                (record for record in candidates if classify_run_status(record.get("launcher_status", {})) == preferred_state),
+                None,
+            )
+            if match is not None:
+                return match
+        return candidates[0]
+
+    for preferred_state in ("completed", "running", "preserved", "failed", "unknown"):
+        match = next(
+            (record for record in candidates if classify_run_status(record.get("launcher_status", {})) == preferred_state),
+            None,
+        )
+        if match is not None:
+            return match
+    return candidates[0]
+
+
+def _timeframe_sort_key(value: str | None) -> tuple[int, int, str]:
+    text = str(value or "").strip().lower()
+    if text == "daily":
+        return (0, 0, text)
+    match = re.fullmatch(r"(\d+)([mhd])", text)
+    if not match:
+        return (9, 9999, text)
+    quantity = int(match.group(1))
+    unit = match.group(2)
+    unit_rank = {"d": 1, "h": 2, "m": 3}.get(unit, 9)
+    return (unit_rank, -quantity, text)
+
+
+def format_run_scope(run_manifest: dict[str, Any]) -> str:
+    datasets = run_manifest.get("datasets", [])
+    if not isinstance(datasets, list) or not datasets:
+        return "Run scope unavailable"
+
+    by_market: dict[str, list[str]] = {}
+    for dataset in datasets:
+        if isinstance(dataset, dict):
+            market = str(dataset.get("market") or "Unknown").strip() or "Unknown"
+            timeframe = str(dataset.get("timeframe") or "Unknown").strip() or "Unknown"
+        else:
+            market, timeframe = parse_dataset_identity(str(dataset))
+        by_market.setdefault(market, []).append(timeframe)
+
+    parts: list[str] = []
+    for market in sorted(by_market):
+        unique_timeframes = sorted(set(by_market[market]), key=_timeframe_sort_key)
+        parts.append(f"{market} — {', '.join(unique_timeframes)}")
+    return "  •  ".join(parts)
+
+
+def _dataset_key_parts(dataset: dict[str, Any]) -> tuple[str, str]:
+    if isinstance(dataset, dict):
+        market = str(dataset.get("market") or "Unknown").strip() or "Unknown"
+        timeframe = str(dataset.get("timeframe") or "Unknown").strip() or "Unknown"
+        return market, timeframe
+    return parse_dataset_identity(str(dataset))
+
+
+def _family_matches(name: str | None, family: str) -> bool:
+    text = str(name or "").strip().lower()
+    return text == family or text.startswith(f"{family}_")
+
+
+def _fallback_dataset_statuses(run_manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    datasets = run_manifest.get("datasets", [])
+    payload: list[dict[str, Any]] = []
+    if not isinstance(datasets, list):
+        return payload
+
+    for dataset in datasets:
+        market, timeframe = _dataset_key_parts(dataset)
+        payload.append(
+            {
+                "dataset": f"{market}_{timeframe}",
+                "market": market,
+                "timeframe": timeframe,
+                "current_family": "",
+                "current_stage": "WAITING",
+                "progress_pct": 0.0,
+                "eta_seconds": 0.0,
+                "elapsed_seconds": 0.0,
+                "families_completed": [],
+                "families_remaining": MONITOR_FAMILIES.copy(),
+            }
+        )
+    return payload
+
+
+def build_monitor_progress_rows(
+    dataset_statuses: list[dict[str, Any]],
+    run_manifest: dict[str, Any],
+) -> dict[str, Any]:
+    normalized = [normalize_dataset_status(status) for status in dataset_statuses] or _fallback_dataset_statuses(run_manifest)
+
+    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    for status in normalized:
+        key = (str(status.get("market") or "Unknown"), str(status.get("timeframe") or "Unknown"))
+        by_key[key] = status
+
+    declared_datasets = run_manifest.get("datasets", [])
+    ordered_keys: list[tuple[str, str]] = []
+    if isinstance(declared_datasets, list) and declared_datasets:
+        for dataset in declared_datasets:
+            key = _dataset_key_parts(dataset)
+            if key not in ordered_keys:
+                ordered_keys.append(key)
+    for key in sorted(by_key, key=lambda item: (item[0], _timeframe_sort_key(item[1]))):
+        if key not in ordered_keys:
+            ordered_keys.append(key)
+
+    rows: list[dict[str, Any]] = []
+    current_focus: dict[str, Any] | None = None
+    most_recent_complete: dict[str, Any] | None = None
+    completed_count = 0
+    total_items = max(len(ordered_keys) * len(MONITOR_FAMILIES), 1)
+
+    for market, timeframe in ordered_keys:
+        status = by_key.get((market, timeframe), normalize_dataset_status({
+            "dataset": f"{market}_{timeframe}",
+            "market": market,
+            "timeframe": timeframe,
+            "current_stage": "WAITING",
+            "families_completed": [],
+        }))
+        current_family = str(status.get("current_family") or "").strip().lower()
+        stage_text = str(status.get("current_stage") or "WAITING").strip()
+        stage_lower = stage_text.lower()
+        dataset_complete = bool(status.get("progress_pct", 0) >= 100 or stage_lower in {"done", "complete", "completed"})
+        item_rows: list[dict[str, Any]] = []
+
+        for family in MONITOR_FAMILIES:
+            if dataset_complete:
+                item_status = "complete"
+            elif any(_family_matches(name, family) for name in status.get("families_completed", [])):
+                item_status = "complete"
+            elif _family_matches(current_family, family):
+                item_status = "active"
+            elif "fail" in stage_lower and _family_matches(current_family, family):
+                item_status = "failed"
+            else:
+                item_status = "pending"
+
+            if item_status == "complete":
+                completed_count += 1
+                most_recent_complete = {
+                    "market": market,
+                    "timeframe": timeframe,
+                    "family": family,
+                    "label": f"{market} {timeframe} {MONITOR_FAMILY_LABELS[family]}",
+                }
+            elif item_status == "active" and current_focus is None:
+                current_focus = {
+                    "market": market,
+                    "timeframe": timeframe,
+                    "family": family,
+                    "label": f"{market} {timeframe} {MONITOR_FAMILY_LABELS[family]}",
+                    "stage": stage_text,
+                }
+
+            item_rows.append(
+                {
+                    "family_key": family,
+                    "family_label": MONITOR_FAMILY_LABELS[family],
+                    "status": item_status,
+                    "stage": stage_text if item_status == "active" else "",
+                }
+            )
+
+        rows.append(
+            {
+                "market": market,
+                "timeframe": timeframe,
+                "dataset": f"{market}_{timeframe}",
+                "label": f"{market} {timeframe}",
+                "items": item_rows,
+                "progress_pct": float(status.get("progress_pct", 0) or 0),
+                "elapsed_seconds": float(status.get("elapsed_seconds", 0) or 0),
+                "eta_seconds": float(status.get("eta_seconds", 0) or 0),
+                "stage": stage_text,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "completed_items": completed_count,
+        "total_items": total_items,
+        "active_focus": current_focus,
+        "recent_focus": most_recent_complete,
+    }
+
+
+def detect_preemption_warning(launcher_status: dict[str, Any], log_tail: str = "") -> str | None:
+    haystacks = [
+        json.dumps(launcher_status, sort_keys=True).lower(),
+        str(log_tail or "").lower(),
+    ]
+    for text in haystacks:
+        if "preempt" in text:
+            return "WARNING: SPOT VM PREEMPTED"
+    return None
+
+
+def load_current_leader_snapshot(
+    outputs_dir: Path | None,
+    monitor_summary: dict[str, Any],
+) -> Any:
+    import pandas as pd
+
+    candidates = load_promoted_candidates(outputs_dir)
+    if candidates is None or candidates.empty:
+        return None
+
+    filtered = candidates.copy()
+    focus = monitor_summary.get("active_focus") or monitor_summary.get("recent_focus") or {}
+    focus_market = str(focus.get("market") or "").strip()
+    focus_timeframe = str(focus.get("timeframe") or "").strip()
+    focus_family = str(focus.get("family") or "").strip()
+
+    if "dataset" in filtered.columns and focus_market and focus_timeframe:
+        dataset_value = f"{focus_market}_{focus_timeframe}"
+        dataset_filtered = filtered[filtered["dataset"].astype(str).str.lower() == dataset_value.lower()]
+        if not dataset_filtered.empty:
+            filtered = dataset_filtered
+
+    if "strategy_type" in filtered.columns and focus_family:
+        family_filtered = filtered[
+            filtered["strategy_type"].astype(str).str.lower().apply(lambda value: _family_matches(value, focus_family))
+        ]
+        if not family_filtered.empty:
+            filtered = family_filtered
+
+    sort_candidates = ["profit_factor", "leader_pf", "bootcamp_score", "net_pnl", "leader_net_pnl"]
+    sort_column = next((column for column in sort_candidates if column in filtered.columns), None)
+    if sort_column is not None:
+        filtered = filtered.sort_values(sort_column, ascending=False)
+
+    keep_columns = [
+        "strategy_name",
+        "leader_strategy_name",
+        "strategy_type",
+        "dataset",
+        "market",
+        "timeframe",
+        "profit_factor",
+        "leader_pf",
+        "net_pnl",
+        "leader_net_pnl",
+        "max_drawdown",
+        "leader_max_drawdown",
+        "total_trades",
+        "leader_trades",
+        "quality_flag",
+    ]
+    existing = [column for column in keep_columns if column in filtered.columns]
+    if not existing:
+        return filtered.head(8)
+    return filtered[existing].head(8).reset_index(drop=True)
+
+
 def detect_result_files(base: Path | None) -> dict[str, Path | None]:
     if base is None or not base.exists():
         return {name: None for name in RESULT_FILE_NAMES}
@@ -653,11 +938,52 @@ def load_log_tail(run_dir: Path, line_count: int = 60) -> str:
         run_dir / "artifacts" / "logs" / "engine_run.log",
         run_dir / "logs" / "engine_run.log",
         run_dir / "engine_run.log",
+        run_dir / "full_rerun.log",
+        run_dir / "artifacts" / "full_rerun.log",
+        # Check repo-root-level log if run_dir is under Outputs/runs/
+        run_dir.parent.parent.parent / "full_rerun.log",
     ]
     for candidate in candidates:
         if candidate.exists():
             lines = candidate.read_text(encoding="utf-8", errors="replace").splitlines()
             return "\n".join(lines[-line_count:]) or "(log is empty)"
+
+    launcher_status = read_json_file(run_dir / "launcher_status.json")
+    manifest = read_json_file(run_dir / "run_manifest.json")
+    state = str(launcher_status.get("state", "")).strip()
+    remote_guard = launcher_status.get("remote_restart_guard", {})
+    guard_state = str(remote_guard.get("status_state", "")).strip()
+    guard_terminal = bool(remote_guard.get("status_terminal"))
+    guard_runner_active = bool(remote_guard.get("runner_process_active"))
+    is_active = state == "running" or (
+        guard_state == "running" and not guard_terminal and guard_runner_active
+    )
+
+    instance_name = str(manifest.get("instance_name", "")).strip()
+    zone = str(manifest.get("zone", "")).strip()
+    run_id = str(manifest.get("run_id", "")).strip()
+    if is_active and instance_name and zone and run_id:
+        remote_root = f"/tmp/strategy_engine_runs/{run_id}"
+        remote_command = (
+            "if [ -f \"{root}/logs/engine_run.log\" ]; then tail -n {count} \"{root}/logs/engine_run.log\"; "
+            "elif [ -f \"{root}/runner.log\" ]; then tail -n {count} \"{root}/runner.log\"; "
+            "elif [ -f \"{root}/run_status.json\" ]; then cat \"{root}/run_status.json\"; fi"
+        ).format(root=remote_root, count=max(int(line_count), 20))
+        cmd = [
+            "gcloud",
+            "compute",
+            "ssh",
+            instance_name,
+            f"--zone={zone}",
+            f"--command={remote_command}",
+            "--quiet",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if proc.returncode == 0 and proc.stdout.strip():
+                return proc.stdout.strip()
+        except Exception as exc:
+            log.warning("Remote log tail failed for %s in %s: %s", instance_name, zone, exc)
     return ""
 
 

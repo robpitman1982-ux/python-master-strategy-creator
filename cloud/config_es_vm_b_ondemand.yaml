@@ -50,7 +50,7 @@ leaderboard:
 output_dir: "Outputs"
 
 cloud:
-  zone: "us-central1-c"
+  zone: "us-central1-f"
   machine_type: "n2-highcpu-96"
   provisioning_model: "STANDARD"
   boot_disk_size: "120GB"

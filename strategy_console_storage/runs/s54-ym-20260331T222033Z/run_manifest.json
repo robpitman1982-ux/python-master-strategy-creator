@@ -1,0 +1,41 @@
+{
+  "run_id": "s54-ym-20260331T222033Z",
+  "created_utc": "2026-03-31T22:20:33+00:00",
+  "created_local": "2026-04-01 09:20:33 AUS Eastern Summer Time",
+  "run_label": "2026-04-01_09-20_YM_2tf",
+  "instance_name": "s54-ym",
+  "zone": "us-central1-c",
+  "machine_type": "n2-highcpu-96",
+  "provisioning_model": "STANDARD",
+  "boot_disk_size": "120GB",
+  "image_family": "ubuntu-2404-lts-amd64",
+  "config_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\cloud\\config_s54_test_ym.yaml",
+  "config_sha256": "f61a32b75dfc053666086033985c790113fd720f228c7928f2d4ef9b7979794b",
+  "project_id": "project-813d2513-0ba3-4c51-8a1",
+  "datasets": [
+    {
+      "market": "YM",
+      "timeframe": "daily",
+      "local_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\Data\\YM_daily_2008_2026_tradestation.csv",
+      "file_name": "YM_daily_2008_2026_tradestation.csv",
+      "bundle_repo_path": "Data/YM_daily_2008_2026_tradestation.csv",
+      "size_bytes": 253523,
+      "sha256": "d4410abb297ae3a0f481c597c336df7b247b76f1184926b3c46de3c3fde55a03"
+    },
+    {
+      "market": "YM",
+      "timeframe": "60m",
+      "local_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\Data\\YM_60m_2008_2026_tradestation.csv",
+      "file_name": "YM_60m_2008_2026_tradestation.csv",
+      "bundle_repo_path": "Data/YM_60m_2008_2026_tradestation.csv",
+      "size_bytes": 5494905,
+      "sha256": "e392be2946aa69f55fb6b995ba078a3090cfc5263357df1a76c3949b65d00c89"
+    }
+  ],
+  "remote_run_root": "/tmp/strategy_engine_runs/s54-ym-20260331T222033Z",
+  "remote_bundle_path": "/tmp/strategy_engine_runs/s54-ym-20260331T222033Z/input_bundle.tar.gz",
+  "remote_runner_path": "/tmp/strategy_engine_runs/s54-ym-20260331T222033Z/remote_runner.sh",
+  "remote_status_path": "/tmp/strategy_engine_runs/s54-ym-20260331T222033Z/run_status.json",
+  "remote_artifact_tarball": "/tmp/strategy_engine_runs/s54-ym-20260331T222033Z/artifacts.tar.gz",
+  "local_results_dir": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\strategy_console_storage\\runs\\s54-ym-20260331T222033Z"
+}

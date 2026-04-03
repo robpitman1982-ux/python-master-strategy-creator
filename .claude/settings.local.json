@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcloud storage:*)",
+      "Bash(gcloud compute:*)",
+      "Bash(for region:*)",
+      "Bash(do echo:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(1 done:*)",
+      "Bash(python -m pytest tests/test_smoke.py tests/test_cloud_launcher.py -v --basetemp=.tmp_pytest_gemini_check -x -q)",
+      "Bash(python -m pytest tests/test_cloud_launcher.py -v)",
+      "Bash(where gcloud:*)",
+      "Bash(gcloud auth:*)",
+      "Bash(gcloud config:*)",
+      "Bash(python run_cloud_sweep.py --config cloud/config_es_daily_60m_ondemand.yaml --fire-and-forget)"
+    ]
+  }
+}

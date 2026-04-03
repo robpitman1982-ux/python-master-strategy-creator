@@ -1,4 +1,4 @@
-# Full ES sweep — 5 timeframes × 3 families on GCP n2-highcpu-96 ON-DEMAND in us-central1-c
+# Full ES sweep — 5 timeframes × 3 families on GCP n2-highcpu-96 ON-DEMAND in us-central1-f
 # Datasets: daily (4.5K bars), 60m (107K), 30m (215K), 15m (430K), 5m (1.3M)
 # Estimated runtime: ~5-7 hours (5m dominates due to 1.3M bars)
 # Estimated cost: ~$17-23 USD on-demand (no preemption risk)
@@ -56,7 +56,7 @@ leaderboard:
 output_dir: "Outputs"
 
 cloud:
-  zone: "us-central1-c"
+  zone: "us-central1-f"
   machine_type: "n2-highcpu-96"
   provisioning_model: "STANDARD"
   boot_disk_size: "120GB"

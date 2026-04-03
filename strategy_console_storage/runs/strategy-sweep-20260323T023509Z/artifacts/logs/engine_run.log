@@ -1,0 +1,1547 @@
+[OK] Loaded config from config.yaml
+[OK] Loaded config from /tmp/strategy_engine_runs/strategy-sweep-20260323T023509Z/config.yaml
+
+========================================================================
+📂 DATASET 1/1: ES 60m
+   Path: Data/ES_60m_2008_2026_tradestation.csv
+========================================================================
+[2026-03-23 02:39:23] [MEA] [START] Beginning mean_reversion family
+
+Selected strategy type: mean_reversion
+Available strategy types: ['trend', 'breakout', 'mean_reversion']
+
+Loading data from: Data/ES_60m_2008_2026_tradestation.csv
+
+[LOADER DEBUG] Columns: ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Up', 'Down']
+[LOADER DEBUG] Final rows after cleaning and filtering: 107,358
+
+Data: 107,358 bars, 4.9 MB per copy
+   Parallel estimate: 34 MB for 7 workers
+
+ Adding precomputed feature columns for strategy type: mean_reversion (timeframe=60m)
+
+✅ Sanity Check run completed.
+
+📊 COMPUTE BUDGET — mean_reversion filter sweep
+   Evaluations:  968
+   Est. time:    8.1 minutes (at 0.50s/eval)
+  Combo 1/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose | PF=0.54 | Net=-250030.53 | trades=1497
+  Combo 2/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown | PF=0.64 | Net=-250151.78 | trades=1363
+  Combo 3/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 4/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar | PF=0.56 | Net=-250037.03 | trades=1347
+  Combo 5/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime | PF=0.52 | Net=-250058.94 | trades=1425
+  Combo 6/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_AboveLongTermSMA | PF=0.54 | Net=-250040.25 | trades=1087
+  Combo 7/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_CloseNearLow | PF=0.61 | Net=-250057.91 | trades=1526
+  Combo 8/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_StretchFromLongTermSMA | PF=0.54 | Net=-250056.03 | trades=1321
+  Combo 9/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown | PF=0.54 | Net=-250076.87 | trades=1324
+  Combo 10/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown | PF=0.50 | Net=-250039.53 | trades=1152
+  Combo 11/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar | PF=0.71 | Net=-53313.19 | trades=178
+  Combo 12/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime | PF=0.55 | Net=-250063.94 | trades=1429
+  Combo 13/792 | ComboMR_BelowFastSMA_DownClose_AboveLongTermSMA | PF=0.51 | Net=-250083.19 | trades=1066
+  Combo 14/792 | ComboMR_BelowFastSMA_DownClose_CloseNearLow | PF=0.53 | Net=-250161.37 | trades=1460
+  Combo 15/792 | ComboMR_BelowFastSMA_DownClose_StretchFromLongTermSMA | PF=0.61 | Net=-250111.28 | trades=1416
+  Combo 16/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown | PF=0.50 | Net=-250039.53 | trades=1152
+  Combo 17/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar | PF=0.93 | Net=-7827.09 | trades=95
+  Combo 18/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime | PF=0.53 | Net=-250104.69 | trades=1235
+  Combo 19/792 | ComboMR_BelowFastSMA_TwoBarDown_AboveLongTermSMA | PF=0.45 | Net=-250179.91 | trades=954
+  Combo 20/792 | ComboMR_BelowFastSMA_TwoBarDown_CloseNearLow | PF=0.53 | Net=-250051.34 | trades=1204
+  Combo 21/792 | ComboMR_BelowFastSMA_TwoBarDown_StretchFromLongTermSMA | PF=0.60 | Net=-250099.72 | trades=1321
+  Combo 22/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar | PF=1.21 | Net=13728.41 | trades=59
+  Combo 23/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime | PF=0.51 | Net=-250104.59 | trades=1085
+  Combo 24/792 | ComboMR_BelowFastSMA_ThreeBarDown_AboveLongTermSMA | PF=0.45 | Net=-250059.87 | trades=890
+  Combo 25/792 | ComboMR_BelowFastSMA_ThreeBarDown_CloseNearLow | PF=0.61 | Net=-250141.56 | trades=1392
+  Combo 26/792 | ComboMR_BelowFastSMA_ThreeBarDown_StretchFromLongTermSMA | PF=0.54 | Net=-250094.78 | trades=1193
+  Combo 27/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime | PF=0.53 | Net=-250082.66 | trades=1245
+  Combo 28/792 | ComboMR_BelowFastSMA_ReversalUpBar_AboveLongTermSMA | PF=0.49 | Net=-250066.09 | trades=1061
+  Combo 29/792 | ComboMR_BelowFastSMA_ReversalUpBar_CloseNearLow | PF=0.78 | Net=-167590.22 | trades=1016
+  Combo 30/792 | ComboMR_BelowFastSMA_ReversalUpBar_StretchFromLongTermSMA | PF=0.57 | Net=-250044.06 | trades=1486
+  Combo 31/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_AboveLongTermSMA | PF=0.47 | Net=-250055.97 | trades=1060
+  Combo 32/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_CloseNearLow | PF=0.50 | Net=-250144.25 | trades=1306
+  Combo 33/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.62 | Net=-250088.22 | trades=1326
+  Combo 34/792 | ComboMR_BelowFastSMA_AboveLongTermSMA_CloseNearLow | PF=0.47 | Net=-250046.47 | trades=987
+  Combo 35/792 | ComboMR_BelowFastSMA_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 36/792 | ComboMR_BelowFastSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-250019.72 | trades=1478
+  Combo 37/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown | PF=0.64 | Net=-250151.78 | trades=1363
+  Combo 38/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 39/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar | PF=0.97 | Net=-4199.69 | trades=128
+  Combo 40/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime | PF=0.50 | Net=-250126.75 | trades=1339
+  Combo 41/792 | ComboMR_DistanceBelowSMA_DownClose_AboveLongTermSMA | PF=0.58 | Net=-250112.72 | trades=1166
+  Combo 42/792 | ComboMR_DistanceBelowSMA_DownClose_CloseNearLow | PF=0.61 | Net=-250208.22 | trades=1537
+  Combo 43/792 | ComboMR_DistanceBelowSMA_DownClose_StretchFromLongTermSMA | PF=0.55 | Net=-250073.47 | trades=1397
+  Combo 44/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 45/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar | PF=1.51 | Net=34448.62 | trades=68
+  Combo 46/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime | PF=0.60 | Net=-250115.62 | trades=1216
+  Combo 47/792 | ComboMR_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA | PF=0.58 | Net=-250013.53 | trades=1070
+  Combo 48/792 | ComboMR_DistanceBelowSMA_TwoBarDown_CloseNearLow | PF=0.64 | Net=-250202.16 | trades=1266
+  Combo 49/792 | ComboMR_DistanceBelowSMA_TwoBarDown_StretchFromLongTermSMA | PF=0.63 | Net=-250048.66 | trades=1263
+  Combo 50/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 51/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 52/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 53/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 54/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 55/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime | PF=0.55 | Net=-250136.56 | trades=1197
+  Combo 56/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA | PF=0.55 | Net=-250020.22 | trades=1045
+  Combo 57/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_CloseNearLow | PF=0.75 | Net=-135280.69 | trades=574
+  Combo 58/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_StretchFromLongTermSMA | PF=0.63 | Net=-250295.37 | trades=1942
+  Combo 59/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA | PF=0.51 | Net=-250070.00 | trades=1026
+  Combo 60/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_CloseNearLow | PF=0.52 | Net=-250442.31 | trades=1250
+  Combo 61/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250063.78 | trades=1264
+  Combo 62/792 | ComboMR_DistanceBelowSMA_AboveLongTermSMA_CloseNearLow | PF=0.53 | Net=-250217.84 | trades=1137
+  Combo 63/792 | ComboMR_DistanceBelowSMA_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 64/792 | ComboMR_DistanceBelowSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.61 | Net=-250033.47 | trades=1396
+  Combo 65/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown | PF=0.48 | Net=-250132.69 | trades=1181
+  Combo 66/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar | PF=0.79 | Net=-31339.00 | trades=140
+  Combo 67/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime | PF=0.50 | Net=-250004.69 | trades=1280
+  Combo 68/792 | ComboMR_DownClose_TwoBarDown_AboveLongTermSMA | PF=0.48 | Net=-250037.19 | trades=1122
+  Combo 69/792 | ComboMR_DownClose_TwoBarDown_CloseNearLow | PF=0.50 | Net=-250035.06 | trades=1284
+  Combo 70/792 | ComboMR_DownClose_TwoBarDown_StretchFromLongTermSMA | PF=0.59 | Net=-250002.06 | trades=1173
+  Combo 71/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar | PF=1.22 | Net=16320.19 | trades=72
+  Combo 72/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime | PF=0.47 | Net=-250044.97 | trades=1069
+  Combo 73/792 | ComboMR_DownClose_ThreeBarDown_AboveLongTermSMA | PF=0.47 | Net=-250027.44 | trades=1035
+  Combo 74/792 | ComboMR_DownClose_ThreeBarDown_CloseNearLow | PF=0.57 | Net=-250077.12 | trades=1227
+  Combo 75/792 | ComboMR_DownClose_ThreeBarDown_StretchFromLongTermSMA | PF=0.55 | Net=-250145.59 | trades=1412
+  Combo 76/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime | PF=0.56 | Net=-108720.34 | trades=269
+  Combo 77/792 | ComboMR_DownClose_ReversalUpBar_AboveLongTermSMA | PF=0.43 | Net=-111815.78 | trades=188
+  Combo 78/792 | ComboMR_DownClose_ReversalUpBar_CloseNearLow | PF=0.17 | Net=-56340.88 | trades=37
+  Combo 79/792 | ComboMR_DownClose_ReversalUpBar_StretchFromLongTermSMA | PF=0.94 | Net=-6872.50 | trades=121
+[2026-03-23 02:43:57] [MEA] [SWEEP] 79/792 (10.0%) — ETA 37.6 min
+  Combo 80/792 | ComboMR_DownClose_LowVolatilityRegime_AboveLongTermSMA | PF=0.43 | Net=-250029.16 | trades=1242
+  Combo 81/792 | ComboMR_DownClose_LowVolatilityRegime_CloseNearLow | PF=0.55 | Net=-250128.78 | trades=1238
+  Combo 82/792 | ComboMR_DownClose_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.68 | Net=-250044.19 | trades=1607
+  Combo 83/792 | ComboMR_DownClose_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250016.19 | trades=1206
+  Combo 84/792 | ComboMR_DownClose_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 85/792 | ComboMR_DownClose_CloseNearLow_StretchFromLongTermSMA | PF=0.70 | Net=-250163.56 | trades=1724
+  Combo 86/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.22 | Net=16320.19 | trades=72
+  Combo 87/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.47 | Net=-250044.97 | trades=1069
+  Combo 88/792 | ComboMR_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.47 | Net=-250027.44 | trades=1035
+  Combo 89/792 | ComboMR_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.57 | Net=-250077.12 | trades=1227
+  Combo 90/792 | ComboMR_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.55 | Net=-250145.59 | trades=1412
+  Combo 91/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=0.69 | Net=-39318.03 | trades=111
+  Combo 92/792 | ComboMR_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.60 | Net=-37824.72 | trades=78
+  Combo 93/792 | ComboMR_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.42 | Net=-12721.25 | trades=13
+  Combo 94/792 | ComboMR_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.23 | Net=11807.84 | trades=54
+  Combo 95/792 | ComboMR_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.43 | Net=-250097.09 | trades=1007
+  Combo 96/792 | ComboMR_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.44 | Net=-250012.22 | trades=1168
+  Combo 97/792 | ComboMR_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250157.22 | trades=1240
+  Combo 98/792 | ComboMR_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250068.87 | trades=1109
+  Combo 99/792 | ComboMR_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 100/792 | ComboMR_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.58 | Net=-250061.44 | trades=1276
+  Combo 101/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.07 | Net=4410.22 | trades=60
+  Combo 102/792 | ComboMR_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.59 | Net=-16046.66 | trades=30
+  Combo 103/792 | ComboMR_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 104/792 | ComboMR_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.92 | Net=27169.22 | trades=38
+  Combo 105/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250011.16 | trades=1027
+  Combo 106/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.51 | Net=-250025.69 | trades=1205
+  Combo 107/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250219.97 | trades=1211
+  Combo 108/792 | ComboMR_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250288.94 | trades=944
+  Combo 109/792 | ComboMR_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 110/792 | ComboMR_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.65 | Net=-251197.31 | trades=1441
+  Combo 111/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.49 | Net=-250002.97 | trades=1106
+  Combo 112/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.52 | Net=-250096.38 | trades=1092
+  Combo 113/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250152.03 | trades=1303
+  Combo 114/792 | ComboMR_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.45 | Net=-250293.69 | trades=950
+  Combo 115/792 | ComboMR_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 116/792 | ComboMR_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.86 | Net=-102628.22 | trades=803
+  Combo 117/792 | ComboMR_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.39 | Net=-250103.09 | trades=1063
+  Combo 118/792 | ComboMR_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 119/792 | ComboMR_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.66 | Net=-250160.50 | trades=1450
+  Combo 120/792 | ComboMR_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 121/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown | PF=0.64 | Net=-250151.78 | trades=1363
+  Combo 122/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 123/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar | PF=0.97 | Net=-4199.69 | trades=128
+  Combo 124/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime | PF=0.50 | Net=-250126.75 | trades=1339
+  Combo 125/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_AboveLongTermSMA | PF=0.58 | Net=-250112.72 | trades=1166
+  Combo 126/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_CloseNearLow | PF=0.61 | Net=-250208.22 | trades=1537
+  Combo 127/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_StretchFromLongTermSMA | PF=0.55 | Net=-250073.47 | trades=1397
+  Combo 128/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 129/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar | PF=1.51 | Net=34448.62 | trades=68
+  Combo 130/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime | PF=0.60 | Net=-250115.62 | trades=1216
+  Combo 131/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA | PF=0.58 | Net=-250013.53 | trades=1070
+  Combo 132/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_CloseNearLow | PF=0.64 | Net=-250202.16 | trades=1266
+  Combo 133/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_StretchFromLongTermSMA | PF=0.63 | Net=-250048.66 | trades=1263
+  Combo 134/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 135/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 136/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 137/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 138/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 139/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime | PF=0.55 | Net=-250136.56 | trades=1197
+  Combo 140/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA | PF=0.55 | Net=-250020.22 | trades=1045
+  Combo 141/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_CloseNearLow | PF=0.75 | Net=-135280.69 | trades=574
+  Combo 142/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_StretchFromLongTermSMA | PF=0.63 | Net=-250295.37 | trades=1942
+  Combo 143/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA | PF=0.51 | Net=-250070.00 | trades=1026
+  Combo 144/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_CloseNearLow | PF=0.52 | Net=-250442.31 | trades=1250
+  Combo 145/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250063.78 | trades=1264
+  Combo 146/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_AboveLongTermSMA_CloseNearLow | PF=0.53 | Net=-250217.84 | trades=1137
+  Combo 147/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 148/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.61 | Net=-250033.47 | trades=1396
+  Combo 149/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown | PF=0.50 | Net=-250039.53 | trades=1152
+  Combo 150/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar | PF=0.93 | Net=-7827.09 | trades=95
+  Combo 151/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime | PF=0.53 | Net=-250104.69 | trades=1235
+  Combo 152/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_AboveLongTermSMA | PF=0.45 | Net=-250179.91 | trades=954
+  Combo 153/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_CloseNearLow | PF=0.53 | Net=-250051.34 | trades=1204
+  Combo 154/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_StretchFromLongTermSMA | PF=0.60 | Net=-250099.72 | trades=1321
+  Combo 155/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar | PF=1.21 | Net=13728.41 | trades=59
+  Combo 156/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime | PF=0.51 | Net=-250104.59 | trades=1085
+  Combo 157/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_AboveLongTermSMA | PF=0.45 | Net=-250059.87 | trades=890
+  Combo 158/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_CloseNearLow | PF=0.61 | Net=-250141.56 | trades=1392
+[2026-03-23 02:48:05] [MEA] [SWEEP] 158/792 (19.9%) — ETA 33.4 min
+  Combo 159/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_StretchFromLongTermSMA | PF=0.54 | Net=-250094.78 | trades=1193
+  Combo 160/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime | PF=0.63 | Net=-55087.16 | trades=130
+  Combo 161/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_AboveLongTermSMA | PF=0.47 | Net=-51722.19 | trades=72
+  Combo 162/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_CloseNearLow | PF=0.17 | Net=-34245.47 | trades=20
+  Combo 163/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA | PF=1.15 | Net=12203.19 | trades=89
+  Combo 164/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250225.59 | trades=1003
+  Combo 165/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_CloseNearLow | PF=0.51 | Net=-250107.94 | trades=1273
+  Combo 166/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.59 | Net=-250062.87 | trades=1226
+  Combo 167/792 | ComboMR_BelowFastSMA_DownClose_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250026.41 | trades=951
+  Combo 168/792 | ComboMR_BelowFastSMA_DownClose_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 169/792 | ComboMR_BelowFastSMA_DownClose_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-250067.72 | trades=1547
+  Combo 170/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.21 | Net=13728.41 | trades=59
+  Combo 171/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.51 | Net=-250104.59 | trades=1085
+  Combo 172/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.45 | Net=-250059.87 | trades=890
+  Combo 173/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.61 | Net=-250141.56 | trades=1392
+  Combo 174/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.54 | Net=-250094.78 | trades=1193
+  Combo 175/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=0.69 | Net=-28210.12 | trades=72
+  Combo 176/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.68 | Net=-17460.37 | trades=44
+  Combo 177/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 178/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.32 | Net=13800.16 | trades=44
+  Combo 179/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.45 | Net=-250062.38 | trades=912
+  Combo 180/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.49 | Net=-250159.03 | trades=1118
+  Combo 181/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.57 | Net=-250069.91 | trades=1249
+  Combo 182/792 | ComboMR_BelowFastSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250046.91 | trades=947
+  Combo 183/792 | ComboMR_BelowFastSMA_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 184/792 | ComboMR_BelowFastSMA_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.60 | Net=-250061.19 | trades=1416
+  Combo 185/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.03 | Net=1736.31 | trades=47
+  Combo 186/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.46 | Net=-16268.37 | trades=22
+  Combo 187/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 188/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.88 | Net=25117.94 | trades=34
+  Combo 189/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250059.75 | trades=962
+  Combo 190/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.59 | Net=-250212.25 | trades=1223
+  Combo 191/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250339.59 | trades=1109
+  Combo 192/792 | ComboMR_BelowFastSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250039.50 | trades=1005
+  Combo 193/792 | ComboMR_BelowFastSMA_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 194/792 | ComboMR_BelowFastSMA_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.71 | Net=-250127.81 | trades=1606
+  Combo 195/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.45 | Net=-250133.59 | trades=933
+  Combo 196/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.78 | Net=-144235.59 | trades=710
+  Combo 197/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250030.78 | trades=1531
+  Combo 198/792 | ComboMR_BelowFastSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.73 | Net=-131831.31 | trades=468
+  Combo 199/792 | ComboMR_BelowFastSMA_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 200/792 | ComboMR_BelowFastSMA_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.84 | Net=-91800.97 | trades=506
+  Combo 201/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250022.03 | trades=984
+  Combo 202/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 203/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.60 | Net=-250172.19 | trades=1197
+  Combo 204/792 | ComboMR_BelowFastSMA_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 205/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 206/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar | PF=1.51 | Net=34448.62 | trades=68
+  Combo 207/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime | PF=0.60 | Net=-250115.62 | trades=1216
+  Combo 208/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA | PF=0.58 | Net=-250013.53 | trades=1070
+  Combo 209/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_CloseNearLow | PF=0.64 | Net=-250202.16 | trades=1266
+  Combo 210/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_StretchFromLongTermSMA | PF=0.63 | Net=-250048.66 | trades=1263
+  Combo 211/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 212/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 213/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 214/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 215/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 216/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime | PF=0.87 | Net=-12649.75 | trades=92
+  Combo 217/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA | PF=0.61 | Net=-21943.19 | trades=43
+  Combo 218/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_CloseNearLow | PF=0.20 | Net=-27982.38 | trades=17
+  Combo 219/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA | PF=1.32 | Net=21164.06 | trades=75
+  Combo 220/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA | PF=0.51 | Net=-250038.75 | trades=1118
+  Combo 221/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_CloseNearLow | PF=0.53 | Net=-250096.09 | trades=1272
+  Combo 222/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250090.66 | trades=1330
+  Combo 223/792 | ComboMR_DistanceBelowSMA_DownClose_AboveLongTermSMA_CloseNearLow | PF=0.55 | Net=-250110.03 | trades=1182
+  Combo 224/792 | ComboMR_DistanceBelowSMA_DownClose_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 225/792 | ComboMR_DistanceBelowSMA_DownClose_CloseNearLow_StretchFromLongTermSMA | PF=0.61 | Net=-250060.56 | trades=1456
+  Combo 226/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 227/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 228/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 229/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 230/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 231/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.28 | Net=14594.06 | trades=49
+  Combo 232/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.60 | Net=13381.69 | trades=25
+  Combo 233/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 234/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.48 | Net=18005.25 | trades=40
+  Combo 235/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250026.41 | trades=943
+  Combo 236/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.56 | Net=-250038.16 | trades=1169
+  Combo 237/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250025.87 | trades=1200
+[2026-03-23 02:52:19] [MEA] [SWEEP] 237/792 (29.9%) — ETA 29.4 min
+  Combo 238/792 | ComboMR_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.49 | Net=-250146.53 | trades=1040
+  Combo 239/792 | ComboMR_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 240/792 | ComboMR_DistanceBelowSMA_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.66 | Net=-250113.47 | trades=1330
+  Combo 241/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 242/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 243/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 244/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 245/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 246/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 247/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 248/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 249/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 250/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 251/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250009.00 | trades=880
+  Combo 252/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.66 | Net=-135206.88 | trades=375
+  Combo 253/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250661.56 | trades=1496
+  Combo 254/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.73 | Net=-72101.78 | trades=204
+  Combo 255/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 256/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.76 | Net=-96429.16 | trades=347
+  Combo 257/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250012.09 | trades=1112
+  Combo 258/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 259/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.56 | Net=-250099.53 | trades=1290
+  Combo 260/792 | ComboMR_DistanceBelowSMA_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 261/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.22 | Net=16320.19 | trades=72
+  Combo 262/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.47 | Net=-250044.97 | trades=1069
+  Combo 263/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.47 | Net=-250027.44 | trades=1035
+  Combo 264/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.57 | Net=-250077.12 | trades=1227
+  Combo 265/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.55 | Net=-250145.59 | trades=1412
+  Combo 266/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=0.69 | Net=-39318.03 | trades=111
+  Combo 267/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.60 | Net=-37824.72 | trades=78
+  Combo 268/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.42 | Net=-12721.25 | trades=13
+  Combo 269/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.23 | Net=11807.84 | trades=54
+  Combo 270/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.43 | Net=-250097.09 | trades=1007
+  Combo 271/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.44 | Net=-250012.22 | trades=1168
+  Combo 272/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250157.22 | trades=1240
+  Combo 273/792 | ComboMR_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250068.87 | trades=1109
+  Combo 274/792 | ComboMR_DownClose_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 275/792 | ComboMR_DownClose_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.58 | Net=-250061.44 | trades=1276
+  Combo 276/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.07 | Net=4410.22 | trades=60
+  Combo 277/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.59 | Net=-16046.66 | trades=30
+  Combo 278/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 279/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.92 | Net=27169.22 | trades=38
+  Combo 280/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250011.16 | trades=1027
+  Combo 281/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.51 | Net=-250025.69 | trades=1205
+  Combo 282/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250219.97 | trades=1211
+  Combo 283/792 | ComboMR_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250288.94 | trades=944
+  Combo 284/792 | ComboMR_DownClose_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 285/792 | ComboMR_DownClose_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.65 | Net=-251197.31 | trades=1441
+  Combo 286/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.44 | Net=-99971.25 | trades=160
+  Combo 287/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-47406.00 | trades=31
+  Combo 288/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.88 | Net=-10395.53 | trades=90
+  Combo 289/792 | ComboMR_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.11 | Net=-34987.69 | trades=18
+  Combo 290/792 | ComboMR_DownClose_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 291/792 | ComboMR_DownClose_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.13 | Net=-25378.47 | trades=16
+  Combo 292/792 | ComboMR_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.44 | Net=-250091.87 | trades=1136
+  Combo 293/792 | ComboMR_DownClose_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 294/792 | ComboMR_DownClose_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.67 | Net=-250018.28 | trades=1408
+  Combo 295/792 | ComboMR_DownClose_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 296/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.07 | Net=4410.22 | trades=60
+  Combo 297/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.59 | Net=-16046.66 | trades=30
+  Combo 298/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 299/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.92 | Net=27169.22 | trades=38
+  Combo 300/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250011.16 | trades=1027
+  Combo 301/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.51 | Net=-250025.69 | trades=1205
+  Combo 302/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250219.97 | trades=1211
+  Combo 303/792 | ComboMR_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250288.94 | trades=944
+  Combo 304/792 | ComboMR_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 305/792 | ComboMR_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.65 | Net=-251197.31 | trades=1441
+  Combo 306/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-36057.19 | trades=64
+  Combo 307/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.17 | Net=-18205.25 | trades=12
+  Combo 308/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.97 | Net=-1506.91 | trades=41
+  Combo 309/792 | ComboMR_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.83 | Net=-1102.28 | trades=4
+  Combo 310/792 | ComboMR_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 311/792 | ComboMR_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.25 | Net=-11795.09 | trades=9
+  Combo 312/792 | ComboMR_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250029.00 | trades=1010
+  Combo 313/792 | ComboMR_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 314/792 | ComboMR_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.57 | Net=-250125.19 | trades=1366
+  Combo 315/792 | ComboMR_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 316/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.61 | Net=-14447.84 | trades=28
+[2026-03-23 02:56:29] [MEA] [SWEEP] 316/792 (39.9%) — ETA 25.2 min
+  Combo 317/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 318/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.62 | Net=15593.16 | trades=29
+  Combo 319/792 | ComboMR_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 320/792 | ComboMR_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 321/792 | ComboMR_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 322/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250153.28 | trades=990
+  Combo 323/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 324/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.73 | Net=-244278.44 | trades=1556
+  Combo 325/792 | ComboMR_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 326/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250300.06 | trades=946
+  Combo 327/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 328/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.81 | Net=-101276.50 | trades=574
+  Combo 329/792 | ComboMR_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 330/792 | ComboMR_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 331/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown | PF=0.58 | Net=-250089.56 | trades=1128
+  Combo 332/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar | PF=1.51 | Net=34448.62 | trades=68
+  Combo 333/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime | PF=0.60 | Net=-250115.62 | trades=1216
+  Combo 334/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA | PF=0.58 | Net=-250013.53 | trades=1070
+  Combo 335/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_CloseNearLow | PF=0.64 | Net=-250202.16 | trades=1266
+  Combo 336/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_StretchFromLongTermSMA | PF=0.63 | Net=-250048.66 | trades=1263
+  Combo 337/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 338/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 339/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 340/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 341/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 342/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime | PF=0.87 | Net=-12649.75 | trades=92
+  Combo 343/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA | PF=0.61 | Net=-21943.19 | trades=43
+  Combo 344/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_CloseNearLow | PF=0.20 | Net=-27982.38 | trades=17
+  Combo 345/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA | PF=1.32 | Net=21164.06 | trades=75
+  Combo 346/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA | PF=0.51 | Net=-250038.75 | trades=1118
+  Combo 347/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_CloseNearLow | PF=0.53 | Net=-250096.09 | trades=1272
+  Combo 348/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250090.66 | trades=1330
+  Combo 349/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_AboveLongTermSMA_CloseNearLow | PF=0.55 | Net=-250110.03 | trades=1182
+  Combo 350/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 351/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_CloseNearLow_StretchFromLongTermSMA | PF=0.61 | Net=-250060.56 | trades=1456
+  Combo 352/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 353/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 354/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 355/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 356/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 357/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.28 | Net=14594.06 | trades=49
+  Combo 358/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.60 | Net=13381.69 | trades=25
+  Combo 359/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 360/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.48 | Net=18005.25 | trades=40
+  Combo 361/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250026.41 | trades=943
+  Combo 362/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.56 | Net=-250038.16 | trades=1169
+  Combo 363/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250025.87 | trades=1200
+  Combo 364/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.49 | Net=-250146.53 | trades=1040
+  Combo 365/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 366/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.66 | Net=-250113.47 | trades=1330
+  Combo 367/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 368/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 369/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 370/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 371/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 372/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 373/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 374/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 375/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 376/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 377/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250009.00 | trades=880
+  Combo 378/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.66 | Net=-135206.88 | trades=375
+  Combo 379/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250661.56 | trades=1496
+  Combo 380/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.73 | Net=-72101.78 | trades=204
+  Combo 381/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 382/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.76 | Net=-96429.16 | trades=347
+  Combo 383/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250012.09 | trades=1112
+  Combo 384/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 385/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.56 | Net=-250099.53 | trades=1290
+  Combo 386/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 387/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.21 | Net=13728.41 | trades=59
+  Combo 388/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.51 | Net=-250104.59 | trades=1085
+  Combo 389/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.45 | Net=-250059.87 | trades=890
+  Combo 390/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.61 | Net=-250141.56 | trades=1392
+  Combo 391/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.54 | Net=-250094.78 | trades=1193
+  Combo 392/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=0.69 | Net=-28210.12 | trades=72
+  Combo 393/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.68 | Net=-17460.37 | trades=44
+  Combo 394/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 395/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.32 | Net=13800.16 | trades=44
+[2026-03-23 03:00:58] [MEA] [SWEEP] 395/792 (49.9%) — ETA 21.3 min
+  Combo 396/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.45 | Net=-250062.38 | trades=912
+  Combo 397/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.49 | Net=-250159.03 | trades=1118
+  Combo 398/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.57 | Net=-250069.91 | trades=1249
+  Combo 399/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250046.91 | trades=947
+  Combo 400/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 401/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.60 | Net=-250061.19 | trades=1416
+  Combo 402/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.03 | Net=1736.31 | trades=47
+  Combo 403/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.46 | Net=-16268.37 | trades=22
+  Combo 404/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 405/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.88 | Net=25117.94 | trades=34
+  Combo 406/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250059.75 | trades=962
+  Combo 407/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.59 | Net=-250212.25 | trades=1223
+  Combo 408/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250339.59 | trades=1109
+  Combo 409/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250039.50 | trades=1005
+  Combo 410/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 411/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.71 | Net=-250127.81 | trades=1606
+  Combo 412/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.35 | Net=-52253.91 | trades=54
+  Combo 413/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.09 | Net=-31524.56 | trades=15
+  Combo 414/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.03 | Net=1897.34 | trades=62
+  Combo 415/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.34 | Net=-10734.09 | trades=7
+  Combo 416/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 417/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.13 | Net=-19547.66 | trades=11
+  Combo 418/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.45 | Net=-250112.47 | trades=945
+  Combo 419/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 420/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.62 | Net=-250162.69 | trades=1231
+  Combo 421/792 | ComboMR_BelowFastSMA_DownClose_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 422/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.03 | Net=1736.31 | trades=47
+  Combo 423/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.46 | Net=-16268.37 | trades=22
+  Combo 424/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 425/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.88 | Net=25117.94 | trades=34
+  Combo 426/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250059.75 | trades=962
+  Combo 427/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.59 | Net=-250212.25 | trades=1223
+  Combo 428/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250339.59 | trades=1109
+  Combo 429/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250039.50 | trades=1005
+  Combo 430/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 431/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.71 | Net=-250127.81 | trades=1606
+  Combo 432/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-26053.19 | trades=35
+  Combo 433/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-12687.25 | trades=7
+  Combo 434/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.06 | Net=2018.91 | trades=32
+  Combo 435/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=2.13 | Net=2915.34 | trades=2
+  Combo 436/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 437/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 438/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.41 | Net=-250113.78 | trades=941
+  Combo 439/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 440/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.59 | Net=-250169.84 | trades=1274
+  Combo 441/792 | ComboMR_BelowFastSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 442/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.48 | Net=-14386.06 | trades=20
+  Combo 443/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 444/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.51 | Net=12826.16 | trades=25
+  Combo 445/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 446/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 447/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 448/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.56 | Net=-239030.59 | trades=1218
+  Combo 449/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 450/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.74 | Net=-236527.09 | trades=1403
+  Combo 451/792 | ComboMR_BelowFastSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 452/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.81 | Net=-86214.03 | trades=354
+  Combo 453/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 454/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.76 | Net=-94988.28 | trades=329
+  Combo 455/792 | ComboMR_BelowFastSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 456/792 | ComboMR_BelowFastSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 457/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 458/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 459/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 460/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 461/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 462/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.28 | Net=14594.06 | trades=49
+  Combo 463/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.60 | Net=13381.69 | trades=25
+  Combo 464/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 465/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.48 | Net=18005.25 | trades=40
+  Combo 466/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250026.41 | trades=943
+  Combo 467/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.56 | Net=-250038.16 | trades=1169
+  Combo 468/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250025.87 | trades=1200
+  Combo 469/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.49 | Net=-250146.53 | trades=1040
+  Combo 470/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 471/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.66 | Net=-250113.47 | trades=1330
+  Combo 472/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 473/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 474/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+[2026-03-23 03:05:17] [MEA] [SWEEP] 474/792 (59.8%) — ETA 17.1 min
+  Combo 475/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 476/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 477/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 478/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 479/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 480/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 481/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 482/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.44 | Net=-24673.44 | trades=31
+  Combo 483/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.09 | Net=-29229.94 | trades=14
+  Combo 484/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.22 | Net=10360.50 | trades=53
+  Combo 485/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.40 | Net=-8279.16 | trades=6
+  Combo 486/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 487/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.14 | Net=-17624.97 | trades=10
+  Combo 488/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250188.06 | trades=1062
+  Combo 489/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 490/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.56 | Net=-250067.09 | trades=1299
+  Combo 491/792 | ComboMR_DistanceBelowSMA_DownClose_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 492/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 493/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 494/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 495/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 496/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 497/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 498/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 499/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 500/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 501/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 502/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.06 | Net=956.13 | trades=18
+  Combo 503/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-12687.25 | trades=7
+  Combo 504/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.26 | Net=8037.69 | trades=29
+  Combo 505/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=2.13 | Net=2915.34 | trades=2
+  Combo 506/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 507/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 508/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.44 | Net=-250114.03 | trades=962
+  Combo 509/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 510/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-250549.19 | trades=1336
+  Combo 511/792 | ComboMR_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 512/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.02 | Net=230.59 | trades=13
+  Combo 513/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 514/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.73 | Net=15874.91 | trades=23
+  Combo 515/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 516/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 517/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 518/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.57 | Net=-217826.75 | trades=812
+  Combo 519/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 520/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.75 | Net=-220069.47 | trades=1198
+  Combo 521/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 522/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.68 | Net=-67607.44 | trades=148
+  Combo 523/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 524/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-96637.78 | trades=211
+  Combo 525/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 526/792 | ComboMR_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 527/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.07 | Net=4410.22 | trades=60
+  Combo 528/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.59 | Net=-16046.66 | trades=30
+  Combo 529/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 530/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.92 | Net=27169.22 | trades=38
+  Combo 531/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250011.16 | trades=1027
+  Combo 532/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.51 | Net=-250025.69 | trades=1205
+  Combo 533/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.54 | Net=-250219.97 | trades=1211
+  Combo 534/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.46 | Net=-250288.94 | trades=944
+  Combo 535/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 536/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.65 | Net=-251197.31 | trades=1441
+  Combo 537/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-36057.19 | trades=64
+  Combo 538/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.17 | Net=-18205.25 | trades=12
+  Combo 539/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.97 | Net=-1506.91 | trades=41
+  Combo 540/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.83 | Net=-1102.28 | trades=4
+  Combo 541/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 542/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.25 | Net=-11795.09 | trades=9
+  Combo 543/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250029.00 | trades=1010
+  Combo 544/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 545/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.57 | Net=-250125.19 | trades=1366
+  Combo 546/792 | ComboMR_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 547/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.61 | Net=-14447.84 | trades=28
+  Combo 548/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 549/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.62 | Net=15593.16 | trades=29
+  Combo 550/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 551/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 552/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 553/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250153.28 | trades=990
+[2026-03-23 03:09:41] [MEA] [SWEEP] 553/792 (69.8%) — ETA 12.9 min
+  Combo 554/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 555/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.73 | Net=-244278.44 | trades=1556
+  Combo 556/792 | ComboMR_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 557/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-35670.63 | trades=15
+  Combo 558/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 559/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.15 | Net=-20258.66 | trades=13
+  Combo 560/792 | ComboMR_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 561/792 | ComboMR_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 562/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.61 | Net=-14447.84 | trades=28
+  Combo 563/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 564/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.62 | Net=15593.16 | trades=29
+  Combo 565/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 566/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 567/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 568/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250153.28 | trades=990
+  Combo 569/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 570/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.73 | Net=-244278.44 | trades=1556
+  Combo 571/792 | ComboMR_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 572/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-6586.28 | trades=3
+  Combo 573/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 574/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.25 | Net=-11795.09 | trades=9
+  Combo 575/792 | ComboMR_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 576/792 | ComboMR_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 577/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 578/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 579/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 580/792 | ComboMR_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 581/792 | ComboMR_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 582/792 | ComboMR_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 583/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar | PF=1.68 | Net=31074.78 | trades=48
+  Combo 584/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime | PF=0.57 | Net=-250205.16 | trades=1194
+  Combo 585/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA | PF=0.60 | Net=-250176.69 | trades=1206
+  Combo 586/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow | PF=0.66 | Net=-250198.84 | trades=1273
+  Combo 587/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_StretchFromLongTermSMA | PF=0.57 | Net=-250034.62 | trades=1118
+  Combo 588/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.28 | Net=14594.06 | trades=49
+  Combo 589/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.60 | Net=13381.69 | trades=25
+  Combo 590/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow | PF=0.54 | Net=-7203.25 | trades=8
+  Combo 591/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.48 | Net=18005.25 | trades=40
+  Combo 592/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.50 | Net=-250026.41 | trades=943
+  Combo 593/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow | PF=0.56 | Net=-250038.16 | trades=1169
+  Combo 594/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.60 | Net=-250025.87 | trades=1200
+  Combo 595/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow | PF=0.49 | Net=-250146.53 | trades=1040
+  Combo 596/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 597/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.66 | Net=-250113.47 | trades=1330
+  Combo 598/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 599/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 600/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 601/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 602/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 603/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 604/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 605/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 606/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 607/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 608/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.44 | Net=-24673.44 | trades=31
+  Combo 609/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.09 | Net=-29229.94 | trades=14
+  Combo 610/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.22 | Net=10360.50 | trades=53
+  Combo 611/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.40 | Net=-8279.16 | trades=6
+  Combo 612/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 613/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.14 | Net=-17624.97 | trades=10
+  Combo 614/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250188.06 | trades=1062
+  Combo 615/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 616/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.56 | Net=-250067.09 | trades=1299
+  Combo 617/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 618/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 619/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 620/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 621/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 622/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 623/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 624/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 625/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 626/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 627/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 628/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.06 | Net=956.13 | trades=18
+  Combo 629/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-12687.25 | trades=7
+  Combo 630/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.26 | Net=8037.69 | trades=29
+  Combo 631/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=2.13 | Net=2915.34 | trades=2
+  Combo 632/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+[2026-03-23 03:14:18] [MEA] [SWEEP] 632/792 (79.8%) — ETA 8.7 min
+  Combo 633/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 634/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.44 | Net=-250114.03 | trades=962
+  Combo 635/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 636/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-250549.19 | trades=1336
+  Combo 637/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 638/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.02 | Net=230.59 | trades=13
+  Combo 639/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 640/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.73 | Net=15874.91 | trades=23
+  Combo 641/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 642/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 643/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 644/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.57 | Net=-217826.75 | trades=812
+  Combo 645/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 646/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.75 | Net=-220069.47 | trades=1198
+  Combo 647/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 648/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.68 | Net=-67607.44 | trades=148
+  Combo 649/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 650/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-96637.78 | trades=211
+  Combo 651/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 652/792 | ComboMR_BelowFastSMA_DistanceBelowSMA_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 653/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.03 | Net=1736.31 | trades=47
+  Combo 654/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=0.46 | Net=-16268.37 | trades=22
+  Combo 655/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 656/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=1.88 | Net=25117.94 | trades=34
+  Combo 657/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-250059.75 | trades=962
+  Combo 658/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.59 | Net=-250212.25 | trades=1223
+  Combo 659/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.55 | Net=-250339.59 | trades=1109
+  Combo 660/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.48 | Net=-250039.50 | trades=1005
+  Combo 661/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 662/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.71 | Net=-250127.81 | trades=1606
+  Combo 663/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.46 | Net=-26053.19 | trades=35
+  Combo 664/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-12687.25 | trades=7
+  Combo 665/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.06 | Net=2018.91 | trades=32
+  Combo 666/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=2.13 | Net=2915.34 | trades=2
+  Combo 667/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 668/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 669/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.41 | Net=-250113.78 | trades=941
+  Combo 670/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 671/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.59 | Net=-250169.84 | trades=1274
+  Combo 672/792 | ComboMR_BelowFastSMA_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 673/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.48 | Net=-14386.06 | trades=20
+  Combo 674/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 675/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.51 | Net=12826.16 | trades=25
+  Combo 676/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 677/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 678/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 679/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.56 | Net=-239030.59 | trades=1218
+  Combo 680/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 681/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.74 | Net=-236527.09 | trades=1403
+  Combo 682/792 | ComboMR_BelowFastSMA_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 683/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-11995.16 | trades=4
+  Combo 684/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 685/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.16 | Net=-15929.66 | trades=9
+  Combo 686/792 | ComboMR_BelowFastSMA_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 687/792 | ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 688/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.48 | Net=-14386.06 | trades=20
+  Combo 689/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 690/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.51 | Net=12826.16 | trades=25
+  Combo 691/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 692/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 693/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 694/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.56 | Net=-239030.59 | trades=1218
+  Combo 695/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 696/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.74 | Net=-236527.09 | trades=1403
+  Combo 697/792 | ComboMR_BelowFastSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 698/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 699/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 700/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 701/792 | ComboMR_BelowFastSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 702/792 | ComboMR_BelowFastSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 703/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 704/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 705/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 706/792 | ComboMR_BelowFastSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 707/792 | ComboMR_BelowFastSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 708/792 | ComboMR_BelowFastSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 709/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime | PF=1.57 | Net=22355.28 | trades=38
+  Combo 710/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA | PF=1.05 | Net=736.59 | trades=14
+  Combo 711/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+[2026-03-23 03:18:39] [MEA] [SWEEP] 711/792 (89.8%) — ETA 4.4 min
+  Combo 712/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_StretchFromLongTermSMA | PF=2.01 | Net=26271.47 | trades=31
+  Combo 713/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA | PF=0.55 | Net=-250554.66 | trades=1067
+  Combo 714/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow | PF=0.64 | Net=-250090.41 | trades=1298
+  Combo 715/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_StretchFromLongTermSMA | PF=0.58 | Net=-250052.87 | trades=992
+  Combo 716/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow | PF=0.59 | Net=-236778.78 | trades=1046
+  Combo 717/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 718/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ThreeBarDown_CloseNearLow_StretchFromLongTermSMA | PF=0.72 | Net=-250463.00 | trades=1597
+  Combo 719/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.06 | Net=956.13 | trades=18
+  Combo 720/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.20 | Net=-12687.25 | trades=7
+  Combo 721/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.26 | Net=8037.69 | trades=29
+  Combo 722/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=2.13 | Net=2915.34 | trades=2
+  Combo 723/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 724/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 725/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.44 | Net=-250114.03 | trades=962
+  Combo 726/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 727/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.64 | Net=-250549.19 | trades=1336
+  Combo 728/792 | ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 729/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.02 | Net=230.59 | trades=13
+  Combo 730/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 731/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.73 | Net=15874.91 | trades=23
+  Combo 732/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 733/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 734/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 735/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.57 | Net=-217826.75 | trades=812
+  Combo 736/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 737/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.75 | Net=-220069.47 | trades=1198
+  Combo 738/792 | ComboMR_DistanceBelowSMA_DownClose_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 739/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-11995.16 | trades=4
+  Combo 740/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 741/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.16 | Net=-15929.66 | trades=9
+  Combo 742/792 | ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 743/792 | ComboMR_DistanceBelowSMA_DownClose_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 744/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=1.02 | Net=230.59 | trades=13
+  Combo 745/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.29 | Net=-7809.44 | trades=5
+  Combo 746/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.73 | Net=15874.91 | trades=23
+  Combo 747/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 748/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 749/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 750/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.57 | Net=-217826.75 | trades=812
+  Combo 751/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 752/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.75 | Net=-220069.47 | trades=1198
+  Combo 753/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 754/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 755/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 756/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.24 | Net=-10118.59 | trades=6
+  Combo 757/792 | ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 758/792 | ComboMR_DistanceBelowSMA_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 759/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 760/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 761/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.37 | Net=-5240.78 | trades=4
+  Combo 762/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 763/792 | ComboMR_DistanceBelowSMA_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 764/792 | ComboMR_DistanceBelowSMA_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 765/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA | PF=0.61 | Net=-14447.84 | trades=28
+  Combo 766/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow | PF=0.31 | Net=-7517.44 | trades=6
+  Combo 767/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_StretchFromLongTermSMA | PF=1.62 | Net=15593.16 | trades=29
+  Combo 768/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 769/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 770/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 771/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.43 | Net=-250153.28 | trades=990
+  Combo 772/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 773/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.73 | Net=-244278.44 | trades=1556
+  Combo 774/792 | ComboMR_DownClose_TwoBarDown_ThreeBarDown_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 775/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-6586.28 | trades=3
+  Combo 776/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 777/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.25 | Net=-11795.09 | trades=9
+  Combo 778/792 | ComboMR_DownClose_TwoBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 779/792 | ComboMR_DownClose_TwoBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 780/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 781/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 782/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 783/792 | ComboMR_DownClose_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 784/792 | ComboMR_DownClose_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 785/792 | ComboMR_DownClose_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 786/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow | PF=0.00 | Net=-2568.66 | trades=1
+  Combo 787/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 788/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_CloseNearLow_StretchFromLongTermSMA | PF=0.41 | Net=-4948.78 | trades=5
+  Combo 789/792 | ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 790/792 | ComboMR_TwoBarDown_ThreeBarDown_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+[2026-03-23 03:23:08] [MEA] [SWEEP] 790/792 (99.7%) — ETA 0.1 min
+  Combo 791/792 | ComboMR_TwoBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+  Combo 792/792 | ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime_AboveLongTermSMA_CloseNearLow_StretchFromLongTermSMA | PF=0.00 | Net=0.00 | trades=0
+[2026-03-23 03:23:10] [MEA] [SWEEP] 792/792 (100.0%) — ETA 0.0 min
+
+⏱ Filter combination sweep runtime: 2603.89 seconds
+
+🚦 Promotion Gate Results for strategy type: mean_reversion
+Minimum PF required: 0.80
+
+✅ Promoted Candidates (20 Distinct — capped at 20):
+                                                                       strategy_name  profit_factor  average_trade  net_pnl  total_trades  trades_per_year                                                                                                    filters
+                                   ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar           1.51         506.60 34448.62            68             3.74                                                DistanceBelowSMAFilter,TwoBarDownFilter,ReversalUpBarFilter
+                      ComboMR_BelowFastSMA_DistanceBelowSMA_TwoBarDown_ReversalUpBar           1.51         506.60 34448.62            68             3.74                             BelowFastSMAFilter,DistanceBelowSMAFilter,TwoBarDownFilter,ReversalUpBarFilter
+                         ComboMR_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar           1.51         506.60 34448.62            68             3.74                                DistanceBelowSMAFilter,DownCloseFilter,TwoBarDownFilter,ReversalUpBarFilter
+            ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_TwoBarDown_ReversalUpBar           1.51         506.60 34448.62            68             3.74             BelowFastSMAFilter,DistanceBelowSMAFilter,DownCloseFilter,TwoBarDownFilter,ReversalUpBarFilter
+             ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA           1.32         282.19 21164.06            75             4.12                    DistanceBelowSMAFilter,DownCloseFilter,ReversalUpBarFilter,StretchFromLongTermSMAFilter
+ComboMR_BelowFastSMA_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA           1.32         282.19 21164.06            75             4.12 BelowFastSMAFilter,DistanceBelowSMAFilter,DownCloseFilter,ReversalUpBarFilter,StretchFromLongTermSMAFilter
+                                        ComboMR_DownClose_ThreeBarDown_ReversalUpBar           1.22         226.67 16320.19            72             3.96                                                     DownCloseFilter,ThreeBarDownFilter,ReversalUpBarFilter
+                                       ComboMR_TwoBarDown_ThreeBarDown_ReversalUpBar           1.22         226.67 16320.19            72             3.96                                                    TwoBarDownFilter,ThreeBarDownFilter,ReversalUpBarFilter
+                             ComboMR_DownClose_TwoBarDown_ThreeBarDown_ReversalUpBar           1.22         226.67 16320.19            72             3.96                                    DownCloseFilter,TwoBarDownFilter,ThreeBarDownFilter,ReversalUpBarFilter
+                              ComboMR_ThreeBarDown_ReversalUpBar_LowVolatilityRegime           1.07          73.50  4410.22            60             3.30                                           ThreeBarDownFilter,ReversalUpBarFilter,LowVolatilityRegimeFilter
+[2026-03-23 03:23:10] [MEA] [PROMOTION] 20 candidates promoted (cap=20)
+
+🔍 Deduplication: 20 → 9 candidates (removed 11 near-duplicates)
+
+📊 COMPUTE BUDGET — mean_reversion refinement (2 candidates × 288 grid points, 60m timeframe)
+   Evaluations:  576
+   Est. time:    4.8 minutes (at 0.50s/eval)
+   hold_bars (scaled): [2, 3, 4, 5, 6, 8, 10, 12]
+   stop_distance_points (ATR-based, unscaled): [0.4, 0.5, 0.75, 1.0, 1.25, 1.5]
+[2026-03-23 03:23:10] [MEA] [REFINEMENT] Candidate 1/2: ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar
+
+==================================================
+🏆 Attempting Refinement on Promoted Candidate #1
+==================================================
+Strategy: ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar
+Filters:  DistanceBelowSMAFilter,TwoBarDownFilter,ReversalUpBarFilter
+
+🎯 Running top-combo parameter refinement...
+Total combinations: 288 | Years in sample: 18.20
+Trade filters: min_trades=60, min_trades_per_year=3.00
+  Done 1/288 | hb=2, stop=0.4, range=0.4, mom=0 | PF=0.63 | Net=-45723.75 | trades=83 | ACCEPT
+  Done 2/288 | hb=2, stop=0.4, range=0.6, mom=0 | PF=0.79 | Net=-22290.25 | trades=73 | ACCEPT
+  Done 3/288 | hb=2, stop=0.4, range=0.8, mom=0 | PF=0.90 | Net=-9607.50 | trades=68 | ACCEPT
+  Done 4/288 | hb=2, stop=0.4, range=1.0, mom=0 | PF=0.93 | Net=-6405.25 | trades=63 | ACCEPT
+  Done 5/288 | hb=2, stop=0.4, range=1.2, mom=0 | PF=1.08 | Net=6411.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 6/288 | hb=2, stop=0.4, range=1.4, mom=0 | PF=1.27 | Net=18465.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 7/288 | hb=2, stop=0.5, range=0.4, mom=0 | PF=0.61 | Net=-42546.88 | trades=83 | ACCEPT
+  Done 8/288 | hb=2, stop=0.5, range=0.6, mom=0 | PF=0.72 | Net=-25624.00 | trades=73 | ACCEPT
+  Done 9/288 | hb=2, stop=0.5, range=0.8, mom=0 | PF=0.84 | Net=-12931.88 | trades=68 | ACCEPT
+  Done 10/288 | hb=2, stop=0.5, range=1.0, mom=0 | PF=0.91 | Net=-6786.38 | trades=63 | ACCEPT
+  Done 11/288 | hb=2, stop=0.5, range=1.2, mom=0 | PF=1.03 | Net=2261.37 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 12/288 | hb=2, stop=0.5, range=1.4, mom=0 | PF=1.21 | Net=11814.62 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 13/288 | hb=2, stop=0.75, range=0.4, mom=0 | PF=0.60 | Net=-29937.00 | trades=83 | ACCEPT
+  Done 14/288 | hb=2, stop=0.75, range=0.6, mom=0 | PF=0.73 | Net=-17173.09 | trades=73 | ACCEPT
+  Done 15/288 | hb=2, stop=0.75, range=0.8, mom=0 | PF=0.86 | Net=-7643.84 | trades=68 | ACCEPT
+  Done 16/288 | hb=2, stop=0.75, range=1.0, mom=0 | PF=0.94 | Net=-3296.28 | trades=63 | ACCEPT
+  Done 17/288 | hb=2, stop=0.75, range=1.2, mom=0 | PF=0.98 | Net=-1094.63 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 18/288 | hb=2, stop=0.75, range=1.4, mom=0 | PF=1.27 | Net=10362.06 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 19/288 | hb=2, stop=1.0, range=0.4, mom=0 | PF=0.61 | Net=-23308.37 | trades=83 | ACCEPT
+  Done 20/288 | hb=2, stop=1.0, range=0.6, mom=0 | PF=0.78 | Net=-10109.25 | trades=73 | ACCEPT
+  Done 21/288 | hb=2, stop=1.0, range=0.8, mom=0 | PF=0.91 | Net=-3833.62 | trades=68 | ACCEPT
+  Done 22/288 | hb=2, stop=1.0, range=1.0, mom=0 | PF=0.98 | Net=-697.62 | trades=63 | ACCEPT
+  Done 23/288 | hb=2, stop=1.0, range=1.2, mom=0 | PF=1.02 | Net=635.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 24/288 | hb=2, stop=1.0, range=1.4, mom=0 | PF=1.24 | Net=6652.63 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 25/288 | hb=2, stop=1.25, range=0.4, mom=0 | PF=0.56 | Net=-21493.25 | trades=83 | ACCEPT
+  Done 26/288 | hb=2, stop=1.25, range=0.6, mom=0 | PF=0.68 | Net=-12872.16 | trades=73 | ACCEPT
+  Done 27/288 | hb=2, stop=1.25, range=0.8, mom=0 | PF=0.79 | Net=-7270.66 | trades=68 | ACCEPT
+  Done 28/288 | hb=2, stop=1.25, range=1.0, mom=0 | PF=0.86 | Net=-4567.16 | trades=63 | ACCEPT
+[2026-03-23 03:24:43] [MEA] [REFINEMENT] 28/288 (9.7%) — ETA 14.3 min
+  Done 29/288 | hb=2, stop=1.25, range=1.2, mom=0 | PF=0.91 | Net=-2492.94 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 30/288 | hb=2, stop=1.25, range=1.4, mom=0 | PF=1.09 | Net=2092.06 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 31/288 | hb=2, stop=1.5, range=0.4, mom=0 | PF=0.50 | Net=-21757.88 | trades=83 | ACCEPT
+  Done 32/288 | hb=2, stop=1.5, range=0.6, mom=0 | PF=0.67 | Net=-11289.50 | trades=73 | ACCEPT
+  Done 33/288 | hb=2, stop=1.5, range=0.8, mom=0 | PF=0.79 | Net=-6411.50 | trades=68 | ACCEPT
+  Done 34/288 | hb=2, stop=1.5, range=1.0, mom=0 | PF=0.86 | Net=-4011.50 | trades=63 | ACCEPT
+  Done 35/288 | hb=2, stop=1.5, range=1.2, mom=0 | PF=0.91 | Net=-2246.25 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 36/288 | hb=2, stop=1.5, range=1.4, mom=0 | PF=1.10 | Net=2031.25 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 37/288 | hb=3, stop=0.4, range=0.4, mom=0 | PF=0.71 | Net=-37965.00 | trades=83 | ACCEPT
+  Done 38/288 | hb=3, stop=0.4, range=0.6, mom=0 | PF=0.91 | Net=-10055.50 | trades=73 | ACCEPT
+  Done 39/288 | hb=3, stop=0.4, range=0.8, mom=0 | PF=1.01 | Net=1103.25 | trades=68 | ACCEPT
+  Done 40/288 | hb=3, stop=0.4, range=1.0, mom=0 | PF=0.98 | Net=-1937.25 | trades=63 | ACCEPT
+  Done 41/288 | hb=3, stop=0.4, range=1.2, mom=0 | PF=1.10 | Net=7927.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 42/288 | hb=3, stop=0.4, range=1.4, mom=0 | PF=1.26 | Net=18622.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 43/288 | hb=3, stop=0.5, range=0.4, mom=0 | PF=0.70 | Net=-34838.94 | trades=83 | ACCEPT
+  Done 44/288 | hb=3, stop=0.5, range=0.6, mom=0 | PF=0.92 | Net=-7770.81 | trades=73 | ACCEPT
+  Done 45/288 | hb=3, stop=0.5, range=0.8, mom=0 | PF=1.03 | Net=2825.37 | trades=68 | ACCEPT
+  Done 46/288 | hb=3, stop=0.5, range=1.0, mom=0 | PF=1.01 | Net=621.94 | trades=63 | ACCEPT
+  Done 47/288 | hb=3, stop=0.5, range=1.2, mom=0 | PF=1.11 | Net=7985.87 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 48/288 | hb=3, stop=0.5, range=1.4, mom=0 | PF=1.32 | Net=19304.63 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 49/288 | hb=3, stop=0.75, range=0.4, mom=0 | PF=0.78 | Net=-16938.91 | trades=83 | ACCEPT
+  Done 50/288 | hb=3, stop=0.75, range=0.6, mom=0 | PF=1.00 | Net=-145.81 | trades=73 | ACCEPT
+  Done 51/288 | hb=3, stop=0.75, range=0.8, mom=0 | PF=1.24 | Net=13413.66 | trades=68 | ACCEPT
+  Done 52/288 | hb=3, stop=0.75, range=1.0, mom=0 | PF=1.27 | Net=14037.37 | trades=63 | ACCEPT
+  Done 53/288 | hb=3, stop=0.75, range=1.2, mom=0 | PF=1.36 | Net=15873.94 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 54/288 | hb=3, stop=0.75, range=1.4, mom=0 | PF=1.47 | Net=19101.31 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 55/288 | hb=3, stop=1.0, range=0.4, mom=0 | PF=0.88 | Net=-6702.00 | trades=83 | ACCEPT
+  Done 56/288 | hb=3, stop=1.0, range=0.6, mom=0 | PF=1.12 | Net=5190.88 | trades=73 | ACCEPT
+[2026-03-23 03:26:13] [MEA] [REFINEMENT] 56/288 (19.4%) — ETA 12.6 min
+  Done 57/288 | hb=3, stop=1.0, range=0.8, mom=0 | PF=1.34 | Net=13068.63 | trades=68 | ACCEPT
+  Done 58/288 | hb=3, stop=1.0, range=1.0, mom=0 | PF=1.33 | Net=11955.00 | trades=63 | ACCEPT
+  Done 59/288 | hb=3, stop=1.0, range=1.2, mom=0 | PF=1.48 | Net=14596.13 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 60/288 | hb=3, stop=1.0, range=1.4, mom=0 | PF=1.57 | Net=15842.38 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 61/288 | hb=3, stop=1.25, range=0.4, mom=0 | PF=0.81 | Net=-8709.72 | trades=83 | ACCEPT
+  Done 62/288 | hb=3, stop=1.25, range=0.6, mom=0 | PF=1.05 | Net=1914.28 | trades=73 | ACCEPT
+  Done 63/288 | hb=3, stop=1.25, range=0.8, mom=0 | PF=1.23 | Net=7307.03 | trades=68 | ACCEPT
+  Done 64/288 | hb=3, stop=1.25, range=1.0, mom=0 | PF=1.23 | Net=6797.53 | trades=63 | ACCEPT
+  Done 65/288 | hb=3, stop=1.25, range=1.2, mom=0 | PF=1.35 | Net=8486.09 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 66/288 | hb=3, stop=1.25, range=1.4, mom=0 | PF=1.55 | Net=11543.16 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 67/288 | hb=3, stop=1.5, range=0.4, mom=0 | PF=0.84 | Net=-6528.88 | trades=83 | ACCEPT
+  Done 68/288 | hb=3, stop=1.5, range=0.6, mom=0 | PF=1.02 | Net=734.00 | trades=73 | ACCEPT
+  Done 69/288 | hb=3, stop=1.5, range=0.8, mom=0 | PF=1.17 | Net=4804.50 | trades=68 | ACCEPT
+  Done 70/288 | hb=3, stop=1.5, range=1.0, mom=0 | PF=1.18 | Net=4579.00 | trades=63 | ACCEPT
+  Done 71/288 | hb=3, stop=1.5, range=1.2, mom=0 | PF=1.32 | Net=6948.56 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 72/288 | hb=3, stop=1.5, range=1.4, mom=0 | PF=1.56 | Net=10135.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 73/288 | hb=4, stop=0.4, range=0.4, mom=0 | PF=0.85 | Net=-20719.50 | trades=83 | ACCEPT
+  Done 74/288 | hb=4, stop=0.4, range=0.6, mom=0 | PF=1.05 | Net=5875.75 | trades=73 | ACCEPT
+  Done 75/288 | hb=4, stop=0.4, range=0.8, mom=0 | PF=1.16 | Net=17752.50 | trades=68 | ACCEPT
+  Done 76/288 | hb=4, stop=0.4, range=1.0, mom=0 | PF=1.14 | Net=14168.75 | trades=63 | ACCEPT
+  Done 77/288 | hb=4, stop=0.4, range=1.2, mom=0 | PF=1.30 | Net=26510.50 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 78/288 | hb=4, stop=0.4, range=1.4, mom=0 | PF=1.54 | Net=41257.00 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 79/288 | hb=4, stop=0.5, range=0.4, mom=0 | PF=0.83 | Net=-21369.25 | trades=83 | ACCEPT
+  Done 80/288 | hb=4, stop=0.5, range=0.6, mom=0 | PF=1.04 | Net=4213.94 | trades=73 | ACCEPT
+  Done 81/288 | hb=4, stop=0.5, range=0.8, mom=0 | PF=1.15 | Net=15016.00 | trades=68 | ACCEPT
+  Done 82/288 | hb=4, stop=0.5, range=1.0, mom=0 | PF=1.14 | Net=12820.12 | trades=63 | ACCEPT
+  Done 83/288 | hb=4, stop=0.5, range=1.2, mom=0 | PF=1.27 | Net=20923.31 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 84/288 | hb=4, stop=0.5, range=1.4, mom=0 | PF=1.47 | Net=30951.81 | trades=49 | REJECT_LOW_TRADES(49<60)
+[2026-03-23 03:27:41] [MEA] [REFINEMENT] 84/288 (29.2%) — ETA 10.9 min
+  Done 85/288 | hb=4, stop=0.75, range=0.4, mom=0 | PF=0.92 | Net=-7108.53 | trades=83 | ACCEPT
+  Done 86/288 | hb=4, stop=0.75, range=0.6, mom=0 | PF=1.17 | Net=12181.03 | trades=73 | ACCEPT
+  Done 87/288 | hb=4, stop=0.75, range=0.8, mom=0 | PF=1.32 | Net=21103.69 | trades=68 | ACCEPT
+  Done 88/288 | hb=4, stop=0.75, range=1.0, mom=0 | PF=1.36 | Net=21121.22 | trades=63 | ACCEPT
+  Done 89/288 | hb=4, stop=0.75, range=1.2, mom=0 | PF=1.41 | Net=21102.78 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 90/288 | hb=4, stop=0.75, range=1.4, mom=0 | PF=1.59 | Net=26454.62 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 91/288 | hb=4, stop=1.0, range=0.4, mom=0 | PF=0.94 | Net=-4133.62 | trades=83 | ACCEPT
+  Done 92/288 | hb=4, stop=1.0, range=0.6, mom=0 | PF=1.19 | Net=9730.88 | trades=73 | ACCEPT
+  Done 93/288 | hb=4, stop=1.0, range=0.8, mom=0 | PF=1.36 | Net=16794.25 | trades=68 | ACCEPT
+  Done 94/288 | hb=4, stop=1.0, range=1.0, mom=0 | PF=1.33 | Net=14566.50 | trades=63 | ACCEPT
+  Done 95/288 | hb=4, stop=1.0, range=1.2, mom=0 | PF=1.39 | Net=14523.63 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 96/288 | hb=4, stop=1.0, range=1.4, mom=0 | PF=1.56 | Net=18854.50 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 97/288 | hb=4, stop=1.25, range=0.4, mom=0 | PF=0.87 | Net=-7190.47 | trades=83 | ACCEPT
+  Done 98/288 | hb=4, stop=1.25, range=0.6, mom=0 | PF=1.10 | Net=4136.28 | trades=73 | ACCEPT
+  Done 99/288 | hb=4, stop=1.25, range=0.8, mom=0 | PF=1.27 | Net=10017.09 | trades=68 | ACCEPT
+  Done 100/288 | hb=4, stop=1.25, range=1.0, mom=0 | PF=1.24 | Net=8299.09 | trades=63 | ACCEPT
+  Done 101/288 | hb=4, stop=1.25, range=1.2, mom=0 | PF=1.30 | Net=8787.66 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 102/288 | hb=4, stop=1.25, range=1.4, mom=0 | PF=1.53 | Net=13319.72 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 103/288 | hb=4, stop=1.5, range=0.4, mom=0 | PF=0.86 | Net=-6374.19 | trades=83 | ACCEPT
+  Done 104/288 | hb=4, stop=1.5, range=0.6, mom=0 | PF=1.08 | Net=3096.87 | trades=73 | ACCEPT
+  Done 105/288 | hb=4, stop=1.5, range=0.8, mom=0 | PF=1.26 | Net=8467.50 | trades=68 | ACCEPT
+  Done 106/288 | hb=4, stop=1.5, range=1.0, mom=0 | PF=1.22 | Net=6658.00 | trades=63 | ACCEPT
+  Done 107/288 | hb=4, stop=1.5, range=1.2, mom=0 | PF=1.32 | Net=8123.56 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 108/288 | hb=4, stop=1.5, range=1.4, mom=0 | PF=1.61 | Net=12723.25 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 109/288 | hb=5, stop=0.4, range=0.4, mom=0 | PF=0.94 | Net=-8485.00 | trades=83 | ACCEPT
+  Done 110/288 | hb=5, stop=0.4, range=0.6, mom=0 | PF=1.18 | Net=22455.25 | trades=73 | ACCEPT
+  Done 111/288 | hb=5, stop=0.4, range=0.8, mom=0 | PF=1.42 | Net=47694.25 | trades=68 | ACCEPT
+  Done 112/288 | hb=5, stop=0.4, range=1.0, mom=0 | PF=1.31 | Net=32607.50 | trades=63 | ACCEPT
+[2026-03-23 03:29:13] [MEA] [REFINEMENT] 112/288 (38.9%) — ETA 9.5 min
+  Done 113/288 | hb=5, stop=0.4, range=1.2, mom=0 | PF=1.54 | Net=47437.75 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 114/288 | hb=5, stop=0.4, range=1.4, mom=0 | PF=1.74 | Net=57125.00 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 115/288 | hb=5, stop=0.5, range=0.4, mom=0 | PF=0.92 | Net=-9877.38 | trades=83 | ACCEPT
+  Done 116/288 | hb=5, stop=0.5, range=0.6, mom=0 | PF=1.20 | Net=21240.56 | trades=73 | ACCEPT
+  Done 117/288 | hb=5, stop=0.5, range=0.8, mom=0 | PF=1.37 | Net=37217.06 | trades=68 | ACCEPT
+  Done 118/288 | hb=5, stop=0.5, range=1.0, mom=0 | PF=1.30 | Net=27381.31 | trades=63 | ACCEPT
+  Done 119/288 | hb=5, stop=0.5, range=1.2, mom=0 | PF=1.48 | Net=37333.25 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 120/288 | hb=5, stop=0.5, range=1.4, mom=0 | PF=1.75 | Net=51079.63 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 121/288 | hb=5, stop=0.75, range=0.4, mom=0 | PF=0.97 | Net=-2720.00 | trades=83 | ACCEPT
+  Done 122/288 | hb=5, stop=0.75, range=0.6, mom=0 | PF=1.27 | Net=20590.94 | trades=73 | ACCEPT
+  Done 123/288 | hb=5, stop=0.75, range=0.8, mom=0 | PF=1.51 | Net=34448.62 | trades=68 | ACCEPT
+  Done 124/288 | hb=5, stop=0.75, range=1.0, mom=0 | PF=1.52 | Net=32106.87 | trades=63 | ACCEPT
+  Done 125/288 | hb=5, stop=0.75, range=1.2, mom=0 | PF=1.63 | Net=33246.44 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 126/288 | hb=5, stop=0.75, range=1.4, mom=0 | PF=1.87 | Net=39853.84 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 127/288 | hb=5, stop=1.0, range=0.4, mom=0 | PF=0.97 | Net=-1889.50 | trades=83 | ACCEPT
+  Done 128/288 | hb=5, stop=1.0, range=0.6, mom=0 | PF=1.27 | Net=15456.88 | trades=73 | ACCEPT
+  Done 129/288 | hb=5, stop=1.0, range=0.8, mom=0 | PF=1.44 | Net=22340.88 | trades=68 | ACCEPT
+  Done 130/288 | hb=5, stop=1.0, range=1.0, mom=0 | PF=1.44 | Net=20639.63 | trades=63 | ACCEPT
+  Done 131/288 | hb=5, stop=1.0, range=1.2, mom=0 | PF=1.58 | Net=22879.25 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 132/288 | hb=5, stop=1.0, range=1.4, mom=0 | PF=1.83 | Net=27807.88 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 133/288 | hb=5, stop=1.25, range=0.4, mom=0 | PF=0.92 | Net=-4372.22 | trades=83 | ACCEPT
+  Done 134/288 | hb=5, stop=1.25, range=0.6, mom=0 | PF=1.22 | Net=9828.66 | trades=73 | ACCEPT
+  Done 135/288 | hb=5, stop=1.25, range=0.8, mom=0 | PF=1.42 | Net=16317.97 | trades=68 | ACCEPT
+  Done 136/288 | hb=5, stop=1.25, range=1.0, mom=0 | PF=1.44 | Net=15491.09 | trades=63 | ACCEPT
+  Done 137/288 | hb=5, stop=1.25, range=1.2, mom=0 | PF=1.60 | Net=17304.66 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 138/288 | hb=5, stop=1.25, range=1.4, mom=0 | PF=1.94 | Net=22203.22 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 139/288 | hb=5, stop=1.5, range=0.4, mom=0 | PF=0.94 | Net=-3079.94 | trades=83 | ACCEPT
+  Done 140/288 | hb=5, stop=1.5, range=0.6, mom=0 | PF=1.20 | Net=7720.87 | trades=73 | ACCEPT
+[2026-03-23 03:30:43] [MEA] [REFINEMENT] 140/288 (48.6%) — ETA 8.0 min
+  Done 141/288 | hb=5, stop=1.5, range=0.8, mom=0 | PF=1.39 | Net=13525.00 | trades=68 | ACCEPT
+  Done 142/288 | hb=5, stop=1.5, range=1.0, mom=0 | PF=1.43 | Net=13246.50 | trades=63 | ACCEPT
+  Done 143/288 | hb=5, stop=1.5, range=1.2, mom=0 | PF=1.64 | Net=15790.56 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 144/288 | hb=5, stop=1.5, range=1.4, mom=0 | PF=2.06 | Net=20665.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 145/288 | hb=6, stop=0.4, range=0.4, mom=0 | PF=0.95 | Net=-7679.25 | trades=83 | ACCEPT
+  Done 146/288 | hb=6, stop=0.4, range=0.6, mom=0 | PF=1.17 | Net=22516.25 | trades=73 | ACCEPT
+  Done 147/288 | hb=6, stop=0.4, range=0.8, mom=0 | PF=1.36 | Net=44294.75 | trades=68 | ACCEPT
+  Done 148/288 | hb=6, stop=0.4, range=1.0, mom=0 | PF=1.29 | Net=33474.25 | trades=63 | ACCEPT
+  Done 149/288 | hb=6, stop=0.4, range=1.2, mom=0 | PF=1.43 | Net=41220.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 150/288 | hb=6, stop=0.4, range=1.4, mom=0 | PF=1.70 | Net=58651.50 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 151/288 | hb=6, stop=0.5, range=0.4, mom=0 | PF=0.93 | Net=-10182.25 | trades=83 | ACCEPT
+  Done 152/288 | hb=6, stop=0.5, range=0.6, mom=0 | PF=1.16 | Net=19393.00 | trades=73 | ACCEPT
+  Done 153/288 | hb=6, stop=0.5, range=0.8, mom=0 | PF=1.32 | Net=36225.44 | trades=68 | ACCEPT
+  Done 154/288 | hb=6, stop=0.5, range=1.0, mom=0 | PF=1.25 | Net=25641.69 | trades=63 | ACCEPT
+  Done 155/288 | hb=6, stop=0.5, range=1.2, mom=0 | PF=1.46 | Net=39538.06 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 156/288 | hb=6, stop=0.5, range=1.4, mom=0 | PF=1.68 | Net=51451.50 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 157/288 | hb=6, stop=0.75, range=0.4, mom=0 | PF=0.99 | Net=-1103.69 | trades=83 | ACCEPT
+  Done 158/288 | hb=6, stop=0.75, range=0.6, mom=0 | PF=1.25 | Net=21021.97 | trades=73 | ACCEPT
+  Done 159/288 | hb=6, stop=0.75, range=0.8, mom=0 | PF=1.43 | Net=32865.84 | trades=68 | ACCEPT
+  Done 160/288 | hb=6, stop=0.75, range=1.0, mom=0 | PF=1.43 | Net=30547.28 | trades=63 | ACCEPT
+  Done 161/288 | hb=6, stop=0.75, range=1.2, mom=0 | PF=1.57 | Net=33629.28 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 162/288 | hb=6, stop=0.75, range=1.4, mom=0 | PF=1.80 | Net=41735.78 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 163/288 | hb=6, stop=1.0, range=0.4, mom=0 | PF=0.99 | Net=-1074.75 | trades=83 | ACCEPT
+  Done 164/288 | hb=6, stop=1.0, range=0.6, mom=0 | PF=1.27 | Net=16429.38 | trades=73 | ACCEPT
+  Done 165/288 | hb=6, stop=1.0, range=0.8, mom=0 | PF=1.38 | Net=21130.00 | trades=68 | ACCEPT
+  Done 166/288 | hb=6, stop=1.0, range=1.0, mom=0 | PF=1.39 | Net=20028.63 | trades=63 | ACCEPT
+  Done 167/288 | hb=6, stop=1.0, range=1.2, mom=0 | PF=1.55 | Net=22921.38 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 168/288 | hb=6, stop=1.0, range=1.4, mom=0 | PF=1.77 | Net=27952.63 | trades=49 | REJECT_LOW_TRADES(49<60)
+[2026-03-23 03:32:10] [MEA] [REFINEMENT] 168/288 (58.3%) — ETA 6.4 min
+  Done 169/288 | hb=6, stop=1.25, range=0.4, mom=0 | PF=0.97 | Net=-2013.22 | trades=83 | ACCEPT
+  Done 170/288 | hb=6, stop=1.25, range=0.6, mom=0 | PF=1.27 | Net=12612.66 | trades=73 | ACCEPT
+  Done 171/288 | hb=6, stop=1.25, range=0.8, mom=0 | PF=1.43 | Net=17680.97 | trades=68 | ACCEPT
+  Done 172/288 | hb=6, stop=1.25, range=1.0, mom=0 | PF=1.48 | Net=17891.59 | trades=63 | ACCEPT
+  Done 173/288 | hb=6, stop=1.25, range=1.2, mom=0 | PF=1.67 | Net=20009.16 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 174/288 | hb=6, stop=1.25, range=1.4, mom=0 | PF=2.09 | Net=27099.72 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 175/288 | hb=6, stop=1.5, range=0.4, mom=0 | PF=0.97 | Net=-1433.94 | trades=83 | ACCEPT
+  Done 176/288 | hb=6, stop=1.5, range=0.6, mom=0 | PF=1.22 | Net=8954.87 | trades=73 | ACCEPT
+  Done 177/288 | hb=6, stop=1.5, range=0.8, mom=0 | PF=1.40 | Net=14384.00 | trades=68 | ACCEPT
+  Done 178/288 | hb=6, stop=1.5, range=1.0, mom=0 | PF=1.44 | Net=14426.50 | trades=63 | ACCEPT
+  Done 179/288 | hb=6, stop=1.5, range=1.2, mom=0 | PF=1.65 | Net=16816.06 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 180/288 | hb=6, stop=1.5, range=1.4, mom=0 | PF=2.02 | Net=21478.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 181/288 | hb=8, stop=0.4, range=0.4, mom=0 | PF=0.91 | Net=-15329.75 | trades=83 | ACCEPT
+  Done 182/288 | hb=8, stop=0.4, range=0.6, mom=0 | PF=1.13 | Net=19964.75 | trades=73 | ACCEPT
+  Done 183/288 | hb=8, stop=0.4, range=0.8, mom=0 | PF=1.24 | Net=34698.50 | trades=68 | ACCEPT
+  Done 184/288 | hb=8, stop=0.4, range=1.0, mom=0 | PF=1.24 | Net=31740.00 | trades=63 | ACCEPT
+  Done 185/288 | hb=8, stop=0.4, range=1.2, mom=0 | PF=1.29 | Net=32045.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 186/288 | hb=8, stop=0.4, range=1.4, mom=0 | PF=1.53 | Net=52044.50 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 187/288 | hb=8, stop=0.5, range=0.4, mom=0 | PF=0.91 | Net=-14457.94 | trades=83 | ACCEPT
+  Done 188/288 | hb=8, stop=0.5, range=0.6, mom=0 | PF=1.07 | Net=9281.56 | trades=73 | ACCEPT
+  Done 189/288 | hb=8, stop=0.5, range=0.8, mom=0 | PF=1.20 | Net=25765.12 | trades=68 | ACCEPT
+  Done 190/288 | hb=8, stop=0.5, range=1.0, mom=0 | PF=1.18 | Net=21319.19 | trades=63 | ACCEPT
+  Done 191/288 | hb=8, stop=0.5, range=1.2, mom=0 | PF=1.28 | Net=27513.31 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 192/288 | hb=8, stop=0.5, range=1.4, mom=0 | PF=1.52 | Net=45393.00 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 193/288 | hb=8, stop=0.75, range=0.4, mom=0 | PF=1.05 | Net=6186.81 | trades=83 | ACCEPT
+  Done 194/288 | hb=8, stop=0.75, range=0.6, mom=0 | PF=1.22 | Net=21579.62 | trades=73 | ACCEPT
+  Done 195/288 | hb=8, stop=0.75, range=0.8, mom=0 | PF=1.39 | Net=33782.34 | trades=68 | ACCEPT
+  Done 196/288 | hb=8, stop=0.75, range=1.0, mom=0 | PF=1.40 | Net=32387.12 | trades=63 | ACCEPT
+[2026-03-23 03:33:42] [MEA] [REFINEMENT] 196/288 (68.1%) — ETA 4.9 min
+  Done 197/288 | hb=8, stop=0.75, range=1.2, mom=0 | PF=1.55 | Net=36205.06 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 198/288 | hb=8, stop=0.75, range=1.4, mom=0 | PF=1.72 | Net=43045.06 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 199/288 | hb=8, stop=1.0, range=0.4, mom=0 | PF=1.00 | Net=200.50 | trades=83 | ACCEPT
+  Done 200/288 | hb=8, stop=1.0, range=0.6, mom=0 | PF=1.20 | Net=14132.38 | trades=73 | ACCEPT
+  Done 201/288 | hb=8, stop=1.0, range=0.8, mom=0 | PF=1.30 | Net=20274.50 | trades=68 | ACCEPT
+  Done 202/288 | hb=8, stop=1.0, range=1.0, mom=0 | PF=1.35 | Net=21061.88 | trades=63 | ACCEPT
+  Done 203/288 | hb=8, stop=1.0, range=1.2, mom=0 | PF=1.53 | Net=25432.25 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 204/288 | hb=8, stop=1.0, range=1.4, mom=0 | PF=1.70 | Net=29586.38 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 205/288 | hb=8, stop=1.25, range=0.4, mom=0 | PF=0.93 | Net=-4759.56 | trades=83 | ACCEPT
+  Done 206/288 | hb=8, stop=1.25, range=0.6, mom=0 | PF=1.16 | Net=9248.91 | trades=73 | ACCEPT
+  Done 207/288 | hb=8, stop=1.25, range=0.8, mom=0 | PF=1.32 | Net=16669.19 | trades=68 | ACCEPT
+  Done 208/288 | hb=8, stop=1.25, range=1.0, mom=0 | PF=1.34 | Net=16100.81 | trades=63 | ACCEPT
+  Done 209/288 | hb=8, stop=1.25, range=1.2, mom=0 | PF=1.59 | Net=21252.84 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 210/288 | hb=8, stop=1.25, range=1.4, mom=0 | PF=1.91 | Net=28026.31 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 211/288 | hb=8, stop=1.5, range=0.4, mom=0 | PF=0.91 | Net=-5876.63 | trades=83 | ACCEPT
+  Done 212/288 | hb=8, stop=1.5, range=0.6, mom=0 | PF=1.13 | Net=6685.00 | trades=73 | ACCEPT
+  Done 213/288 | hb=8, stop=1.5, range=0.8, mom=0 | PF=1.29 | Net=13339.00 | trades=68 | ACCEPT
+  Done 214/288 | hb=8, stop=1.5, range=1.0, mom=0 | PF=1.32 | Net=13446.44 | trades=63 | ACCEPT
+  Done 215/288 | hb=8, stop=1.5, range=1.2, mom=0 | PF=1.60 | Net=18793.37 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 216/288 | hb=8, stop=1.5, range=1.4, mom=0 | PF=1.92 | Net=23601.06 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 217/288 | hb=10, stop=0.4, range=0.4, mom=0 | PF=0.85 | Net=-26989.75 | trades=83 | ACCEPT
+  Done 218/288 | hb=10, stop=0.4, range=0.6, mom=0 | PF=1.03 | Net=5222.25 | trades=73 | ACCEPT
+  Done 219/288 | hb=10, stop=0.4, range=0.8, mom=0 | PF=1.15 | Net=22453.50 | trades=68 | ACCEPT
+  Done 220/288 | hb=10, stop=0.4, range=1.0, mom=0 | PF=1.16 | Net=23193.75 | trades=63 | ACCEPT
+  Done 221/288 | hb=10, stop=0.4, range=1.2, mom=0 | PF=1.22 | Net=26164.25 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 222/288 | hb=10, stop=0.4, range=1.4, mom=0 | PF=1.45 | Net=46851.00 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 223/288 | hb=10, stop=0.5, range=0.4, mom=0 | PF=0.94 | Net=-10493.75 | trades=83 | ACCEPT
+  Done 224/288 | hb=10, stop=0.5, range=0.6, mom=0 | PF=1.06 | Net=8533.19 | trades=73 | ACCEPT
+[2026-03-23 03:35:12] [MEA] [REFINEMENT] 224/288 (77.8%) — ETA 3.4 min
+  Done 225/288 | hb=10, stop=0.5, range=0.8, mom=0 | PF=1.18 | Net=25652.62 | trades=68 | ACCEPT
+  Done 226/288 | hb=10, stop=0.5, range=1.0, mom=0 | PF=1.13 | Net=16611.25 | trades=63 | ACCEPT
+  Done 227/288 | hb=10, stop=0.5, range=1.2, mom=0 | PF=1.21 | Net=22943.94 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 228/288 | hb=10, stop=0.5, range=1.4, mom=0 | PF=1.48 | Net=45584.62 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 229/288 | hb=10, stop=0.75, range=0.4, mom=0 | PF=1.03 | Net=3960.69 | trades=83 | ACCEPT
+  Done 230/288 | hb=10, stop=0.75, range=0.6, mom=0 | PF=1.20 | Net=21421.53 | trades=73 | ACCEPT
+  Done 231/288 | hb=10, stop=0.75, range=0.8, mom=0 | PF=1.33 | Net=31577.25 | trades=68 | ACCEPT
+  Done 232/288 | hb=10, stop=0.75, range=1.0, mom=0 | PF=1.30 | Net=27497.09 | trades=63 | ACCEPT
+  Done 233/288 | hb=10, stop=0.75, range=1.2, mom=0 | PF=1.38 | Net=29535.00 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 234/288 | hb=10, stop=0.75, range=1.4, mom=0 | PF=1.69 | Net=44723.31 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 235/288 | hb=10, stop=1.0, range=0.4, mom=0 | PF=1.06 | Net=5949.75 | trades=83 | ACCEPT
+  Done 236/288 | hb=10, stop=1.0, range=0.6, mom=0 | PF=1.22 | Net=18727.75 | trades=73 | ACCEPT
+  Done 237/288 | hb=10, stop=1.0, range=0.8, mom=0 | PF=1.34 | Net=26846.00 | trades=68 | ACCEPT
+  Done 238/288 | hb=10, stop=1.0, range=1.0, mom=0 | PF=1.33 | Net=24115.88 | trades=63 | ACCEPT
+  Done 239/288 | hb=10, stop=1.0, range=1.2, mom=0 | PF=1.48 | Net=28301.63 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 240/288 | hb=10, stop=1.0, range=1.4, mom=0 | PF=1.71 | Net=36031.38 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 241/288 | hb=10, stop=1.25, range=0.4, mom=0 | PF=0.96 | Net=-3419.31 | trades=83 | ACCEPT
+  Done 242/288 | hb=10, stop=1.25, range=0.6, mom=0 | PF=1.14 | Net=9779.88 | trades=73 | ACCEPT
+  Done 243/288 | hb=10, stop=1.25, range=0.8, mom=0 | PF=1.26 | Net=16717.34 | trades=68 | ACCEPT
+  Done 244/288 | hb=10, stop=1.25, range=1.0, mom=0 | PF=1.27 | Net=16010.19 | trades=63 | ACCEPT
+  Done 245/288 | hb=10, stop=1.25, range=1.2, mom=0 | PF=1.48 | Net=22341.03 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 246/288 | hb=10, stop=1.25, range=1.4, mom=0 | PF=1.77 | Net=29456.19 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 247/288 | hb=10, stop=1.5, range=0.4, mom=0 | PF=0.91 | Net=-7275.38 | trades=83 | ACCEPT
+  Done 248/288 | hb=10, stop=1.5, range=0.6, mom=0 | PF=1.07 | Net=4143.37 | trades=73 | ACCEPT
+  Done 249/288 | hb=10, stop=1.5, range=0.8, mom=0 | PF=1.14 | Net=8449.37 | trades=68 | ACCEPT
+  Done 250/288 | hb=10, stop=1.5, range=1.0, mom=0 | PF=1.15 | Net=8570.87 | trades=63 | ACCEPT
+  Done 251/288 | hb=10, stop=1.5, range=1.2, mom=0 | PF=1.38 | Net=16078.19 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 252/288 | hb=10, stop=1.5, range=1.4, mom=0 | PF=1.66 | Net=23016.81 | trades=49 | REJECT_LOW_TRADES(49<60)
+[2026-03-23 03:36:39] [MEA] [REFINEMENT] 252/288 (87.5%) — ETA 1.9 min
+  Done 253/288 | hb=12, stop=0.4, range=0.4, mom=0 | PF=0.89 | Net=-20465.00 | trades=83 | ACCEPT
+  Done 254/288 | hb=12, stop=0.4, range=0.6, mom=0 | PF=1.09 | Net=15347.75 | trades=73 | ACCEPT
+  Done 255/288 | hb=12, stop=0.4, range=0.8, mom=0 | PF=1.17 | Net=27090.00 | trades=68 | ACCEPT
+  Done 256/288 | hb=12, stop=0.4, range=1.0, mom=0 | PF=1.20 | Net=29442.25 | trades=63 | ACCEPT
+  Done 257/288 | hb=12, stop=0.4, range=1.2, mom=0 | PF=1.37 | Net=44537.50 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 258/288 | hb=12, stop=0.4, range=1.4, mom=0 | PF=1.57 | Net=60185.75 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 259/288 | hb=12, stop=0.5, range=0.4, mom=0 | PF=0.97 | Net=-4528.44 | trades=83 | ACCEPT
+  Done 260/288 | hb=12, stop=0.5, range=0.6, mom=0 | PF=1.08 | Net=11730.00 | trades=73 | ACCEPT
+  Done 261/288 | hb=12, stop=0.5, range=0.8, mom=0 | PF=1.22 | Net=30768.50 | trades=68 | ACCEPT
+  Done 262/288 | hb=12, stop=0.5, range=1.0, mom=0 | PF=1.21 | Net=27991.19 | trades=63 | ACCEPT
+  Done 263/288 | hb=12, stop=0.5, range=1.2, mom=0 | PF=1.39 | Net=43092.81 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 264/288 | hb=12, stop=0.5, range=1.4, mom=0 | PF=1.60 | Net=57515.50 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 265/288 | hb=12, stop=0.75, range=0.4, mom=0 | PF=1.03 | Net=3780.16 | trades=83 | ACCEPT
+  Done 266/288 | hb=12, stop=0.75, range=0.6, mom=0 | PF=1.15 | Net=16277.31 | trades=73 | ACCEPT
+  Done 267/288 | hb=12, stop=0.75, range=0.8, mom=0 | PF=1.33 | Net=33663.56 | trades=68 | ACCEPT
+  Done 268/288 | hb=12, stop=0.75, range=1.0, mom=0 | PF=1.36 | Net=34401.53 | trades=63 | ACCEPT
+  Done 269/288 | hb=12, stop=0.75, range=1.2, mom=0 | PF=1.52 | Net=41244.31 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 270/288 | hb=12, stop=0.75, range=1.4, mom=0 | PF=1.79 | Net=54036.69 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 271/288 | hb=12, stop=1.0, range=0.4, mom=0 | PF=1.06 | Net=6585.38 | trades=83 | ACCEPT
+  Done 272/288 | hb=12, stop=1.0, range=0.6, mom=0 | PF=1.19 | Net=17304.38 | trades=73 | ACCEPT
+  Done 273/288 | hb=12, stop=1.0, range=0.8, mom=0 | PF=1.29 | Net=23917.00 | trades=68 | ACCEPT
+  Done 274/288 | hb=12, stop=1.0, range=1.0, mom=0 | PF=1.33 | Net=24906.13 | trades=63 | ACCEPT
+  Done 275/288 | hb=12, stop=1.0, range=1.2, mom=0 | PF=1.53 | Net=32974.88 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 276/288 | hb=12, stop=1.0, range=1.4, mom=0 | PF=1.78 | Net=40750.13 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 277/288 | hb=12, stop=1.25, range=0.4, mom=0 | PF=0.99 | Net=-902.81 | trades=83 | ACCEPT
+  Done 278/288 | hb=12, stop=1.25, range=0.6, mom=0 | PF=1.21 | Net=15117.47 | trades=73 | ACCEPT
+  Done 279/288 | hb=12, stop=1.25, range=0.8, mom=0 | PF=1.25 | Net=16997.78 | trades=68 | ACCEPT
+  Done 280/288 | hb=12, stop=1.25, range=1.0, mom=0 | PF=1.34 | Net=20621.22 | trades=63 | ACCEPT
+[2026-03-23 03:38:11] [MEA] [REFINEMENT] 280/288 (97.2%) — ETA 0.4 min
+  Done 281/288 | hb=12, stop=1.25, range=1.2, mom=0 | PF=1.68 | Net=31839.28 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 282/288 | hb=12, stop=1.25, range=1.4, mom=0 | PF=2.02 | Net=39687.94 | trades=49 | REJECT_LOW_TRADES(49<60)
+  Done 283/288 | hb=12, stop=1.5, range=0.4, mom=0 | PF=0.95 | Net=-4370.31 | trades=83 | ACCEPT
+  Done 284/288 | hb=12, stop=1.5, range=0.6, mom=0 | PF=1.09 | Net=5956.25 | trades=73 | ACCEPT
+  Done 285/288 | hb=12, stop=1.5, range=0.8, mom=0 | PF=1.14 | Net=8796.06 | trades=68 | ACCEPT
+  Done 286/288 | hb=12, stop=1.5, range=1.0, mom=0 | PF=1.22 | Net=12454.25 | trades=63 | ACCEPT
+  Done 287/288 | hb=12, stop=1.5, range=1.2, mom=0 | PF=1.53 | Net=22480.56 | trades=54 | REJECT_LOW_TRADES(54<60)
+  Done 288/288 | hb=12, stop=1.5, range=1.4, mom=0 | PF=1.79 | Net=28128.00 | trades=49 | REJECT_LOW_TRADES(49<60)
+[2026-03-23 03:38:31] [MEA] [REFINEMENT] 288/288 (100.0%) — ETA 0.0 min
+
+✅ Accepted refinement sets: 192
+❌ Rejected refinement sets: 96
+⏱ Refinement runtime: 920.96 seconds
+
+✅ Refinement successful for candidate #1. Storing 192 viable settings.
+[2026-03-23 03:38:31] [MEA] [REFINEMENT] Candidate 2/2: ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA
+
+==================================================
+🏆 Attempting Refinement on Promoted Candidate #2
+==================================================
+Strategy: ComboMR_DistanceBelowSMA_DownClose_ReversalUpBar_StretchFromLongTermSMA
+Filters:  DistanceBelowSMAFilter,DownCloseFilter,ReversalUpBarFilter,StretchFromLongTermSMAFilter
+
+🎯 Running top-combo parameter refinement...
+Total combinations: 288 | Years in sample: 18.20
+Trade filters: min_trades=60, min_trades_per_year=3.00
+  Done 1/288 | hb=2, stop=0.4, range=0.4, mom=0 | PF=0.73 | Net=-33157.25 | trades=87 | ACCEPT
+  Done 2/288 | hb=2, stop=0.4, range=0.6, mom=0 | PF=0.75 | Net=-27929.50 | trades=79 | ACCEPT
+  Done 3/288 | hb=2, stop=0.4, range=0.8, mom=0 | PF=0.76 | Net=-25157.25 | trades=75 | ACCEPT
+  Done 4/288 | hb=2, stop=0.4, range=1.0, mom=0 | PF=0.82 | Net=-17328.75 | trades=70 | ACCEPT
+  Done 5/288 | hb=2, stop=0.4, range=1.2, mom=0 | PF=0.83 | Net=-14734.00 | trades=61 | ACCEPT
+  Done 6/288 | hb=2, stop=0.4, range=1.4, mom=0 | PF=0.83 | Net=-14387.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 7/288 | hb=2, stop=0.5, range=0.4, mom=0 | PF=0.77 | Net=-22662.06 | trades=87 | ACCEPT
+  Done 8/288 | hb=2, stop=0.5, range=0.6, mom=0 | PF=0.78 | Net=-20552.50 | trades=79 | ACCEPT
+  Done 9/288 | hb=2, stop=0.5, range=0.8, mom=0 | PF=0.81 | Net=-16565.56 | trades=75 | ACCEPT
+  Done 10/288 | hb=2, stop=0.5, range=1.0, mom=0 | PF=0.84 | Net=-13394.25 | trades=70 | ACCEPT
+  Done 11/288 | hb=2, stop=0.5, range=1.2, mom=0 | PF=0.86 | Net=-10333.62 | trades=61 | ACCEPT
+  Done 12/288 | hb=2, stop=0.5, range=1.4, mom=0 | PF=0.86 | Net=-9473.94 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 13/288 | hb=2, stop=0.75, range=0.4, mom=0 | PF=0.79 | Net=-14626.75 | trades=87 | ACCEPT
+  Done 14/288 | hb=2, stop=0.75, range=0.6, mom=0 | PF=0.85 | Net=-9404.16 | trades=79 | ACCEPT
+  Done 15/288 | hb=2, stop=0.75, range=0.8, mom=0 | PF=0.90 | Net=-5894.09 | trades=75 | ACCEPT
+  Done 16/288 | hb=2, stop=0.75, range=1.0, mom=0 | PF=0.96 | Net=-2260.53 | trades=70 | ACCEPT
+  Done 17/288 | hb=2, stop=0.75, range=1.2, mom=0 | PF=0.97 | Net=-1496.47 | trades=61 | ACCEPT
+  Done 18/288 | hb=2, stop=0.75, range=1.4, mom=0 | PF=1.00 | Net=-55.59 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 19/288 | hb=2, stop=1.0, range=0.4, mom=0 | PF=0.80 | Net=-10385.25 | trades=87 | ACCEPT
+  Done 20/288 | hb=2, stop=1.0, range=0.6, mom=0 | PF=0.78 | Net=-10256.62 | trades=79 | ACCEPT
+  Done 21/288 | hb=2, stop=1.0, range=0.8, mom=0 | PF=0.84 | Net=-6929.12 | trades=75 | ACCEPT
+  Done 22/288 | hb=2, stop=1.0, range=1.0, mom=0 | PF=0.88 | Net=-4871.12 | trades=70 | ACCEPT
+  Done 23/288 | hb=2, stop=1.0, range=1.2, mom=0 | PF=0.89 | Net=-4111.12 | trades=61 | ACCEPT
+  Done 24/288 | hb=2, stop=1.0, range=1.4, mom=0 | PF=0.92 | Net=-2615.50 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 25/288 | hb=2, stop=1.25, range=0.4, mom=0 | PF=0.73 | Net=-11580.00 | trades=87 | ACCEPT
+  Done 26/288 | hb=2, stop=1.25, range=0.6, mom=0 | PF=0.74 | Net=-10453.38 | trades=79 | ACCEPT
+  Done 27/288 | hb=2, stop=1.25, range=0.8, mom=0 | PF=0.77 | Net=-8509.38 | trades=75 | ACCEPT
+  Done 28/288 | hb=2, stop=1.25, range=1.0, mom=0 | PF=0.82 | Net=-6196.38 | trades=70 | ACCEPT
+[2026-03-23 03:39:59] [MEA] [REFINEMENT] 28/288 (9.7%) — ETA 13.6 min
+  Done 29/288 | hb=2, stop=1.25, range=1.2, mom=0 | PF=0.82 | Net=-5514.25 | trades=61 | ACCEPT
+  Done 30/288 | hb=2, stop=1.25, range=1.4, mom=0 | PF=0.84 | Net=-4523.25 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 31/288 | hb=2, stop=1.5, range=0.4, mom=0 | PF=0.72 | Net=-10724.06 | trades=87 | ACCEPT
+  Done 32/288 | hb=2, stop=1.5, range=0.6, mom=0 | PF=0.70 | Net=-10876.75 | trades=79 | ACCEPT
+  Done 33/288 | hb=2, stop=1.5, range=0.8, mom=0 | PF=0.73 | Net=-8982.25 | trades=75 | ACCEPT
+  Done 34/288 | hb=2, stop=1.5, range=1.0, mom=0 | PF=0.77 | Net=-7102.25 | trades=70 | ACCEPT
+  Done 35/288 | hb=2, stop=1.5, range=1.2, mom=0 | PF=0.79 | Net=-5865.50 | trades=61 | ACCEPT
+  Done 36/288 | hb=2, stop=1.5, range=1.4, mom=0 | PF=0.81 | Net=-4582.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 37/288 | hb=3, stop=0.4, range=0.4, mom=0 | PF=0.78 | Net=-28901.00 | trades=87 | ACCEPT
+  Done 38/288 | hb=3, stop=0.4, range=0.6, mom=0 | PF=0.80 | Net=-23534.00 | trades=79 | ACCEPT
+  Done 39/288 | hb=3, stop=0.4, range=0.8, mom=0 | PF=0.86 | Net=-15153.75 | trades=75 | ACCEPT
+  Done 40/288 | hb=3, stop=0.4, range=1.0, mom=0 | PF=0.92 | Net=-8249.00 | trades=70 | ACCEPT
+  Done 41/288 | hb=3, stop=0.4, range=1.2, mom=0 | PF=0.92 | Net=-6879.00 | trades=61 | ACCEPT
+  Done 42/288 | hb=3, stop=0.4, range=1.4, mom=0 | PF=0.98 | Net=-2040.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 43/288 | hb=3, stop=0.5, range=0.4, mom=0 | PF=0.91 | Net=-9224.44 | trades=87 | ACCEPT
+  Done 44/288 | hb=3, stop=0.5, range=0.6, mom=0 | PF=0.93 | Net=-7141.94 | trades=79 | ACCEPT
+  Done 45/288 | hb=3, stop=0.5, range=0.8, mom=0 | PF=1.03 | Net=2737.75 | trades=75 | ACCEPT
+  Done 46/288 | hb=3, stop=0.5, range=1.0, mom=0 | PF=1.02 | Net=1710.31 | trades=70 | ACCEPT
+  Done 47/288 | hb=3, stop=0.5, range=1.2, mom=0 | PF=1.04 | Net=3018.13 | trades=61 | ACCEPT
+  Done 48/288 | hb=3, stop=0.5, range=1.4, mom=0 | PF=1.13 | Net=8851.19 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 49/288 | hb=3, stop=0.75, range=0.4, mom=0 | PF=0.96 | Net=-3404.31 | trades=87 | ACCEPT
+  Done 50/288 | hb=3, stop=0.75, range=0.6, mom=0 | PF=1.02 | Net=1114.03 | trades=79 | ACCEPT
+  Done 51/288 | hb=3, stop=0.75, range=0.8, mom=0 | PF=1.12 | Net=7663.69 | trades=75 | ACCEPT
+  Done 52/288 | hb=3, stop=0.75, range=1.0, mom=0 | PF=1.18 | Net=10196.06 | trades=70 | ACCEPT
+  Done 53/288 | hb=3, stop=0.75, range=1.2, mom=0 | PF=1.18 | Net=9403.81 | trades=61 | ACCEPT
+  Done 54/288 | hb=3, stop=0.75, range=1.4, mom=0 | PF=1.29 | Net=13376.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 55/288 | hb=3, stop=1.0, range=0.4, mom=0 | PF=0.96 | Net=-2420.62 | trades=87 | ACCEPT
+  Done 56/288 | hb=3, stop=1.0, range=0.6, mom=0 | PF=0.96 | Net=-2045.62 | trades=79 | ACCEPT
+[2026-03-23 03:41:27] [MEA] [REFINEMENT] 56/288 (19.4%) — ETA 12.1 min
+  Done 57/288 | hb=3, stop=1.0, range=0.8, mom=0 | PF=1.14 | Net=6071.88 | trades=75 | ACCEPT
+  Done 58/288 | hb=3, stop=1.0, range=1.0, mom=0 | PF=1.15 | Net=6160.25 | trades=70 | ACCEPT
+  Done 59/288 | hb=3, stop=1.0, range=1.2, mom=0 | PF=1.17 | Net=6403.25 | trades=61 | ACCEPT
+  Done 60/288 | hb=3, stop=1.0, range=1.4, mom=0 | PF=1.24 | Net=8545.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 61/288 | hb=3, stop=1.25, range=0.4, mom=0 | PF=0.90 | Net=-4323.25 | trades=87 | ACCEPT
+  Done 62/288 | hb=3, stop=1.25, range=0.6, mom=0 | PF=0.94 | Net=-2399.56 | trades=79 | ACCEPT
+  Done 63/288 | hb=3, stop=1.25, range=0.8, mom=0 | PF=1.05 | Net=1779.12 | trades=75 | ACCEPT
+  Done 64/288 | hb=3, stop=1.25, range=1.0, mom=0 | PF=1.07 | Net=2354.62 | trades=70 | ACCEPT
+  Done 65/288 | hb=3, stop=1.25, range=1.2, mom=0 | PF=1.06 | Net=1744.75 | trades=61 | ACCEPT
+  Done 66/288 | hb=3, stop=1.25, range=1.4, mom=0 | PF=1.21 | Net=5520.72 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 67/288 | hb=3, stop=1.5, range=0.4, mom=0 | PF=0.87 | Net=-5553.88 | trades=87 | ACCEPT
+  Done 68/288 | hb=3, stop=1.5, range=0.6, mom=0 | PF=0.91 | Net=-3262.94 | trades=79 | ACCEPT
+  Done 69/288 | hb=3, stop=1.5, range=0.8, mom=0 | PF=1.01 | Net=227.56 | trades=75 | ACCEPT
+  Done 70/288 | hb=3, stop=1.5, range=1.0, mom=0 | PF=1.02 | Net=503.56 | trades=70 | ACCEPT
+  Done 71/288 | hb=3, stop=1.5, range=1.2, mom=0 | PF=1.06 | Net=1535.81 | trades=61 | ACCEPT
+  Done 72/288 | hb=3, stop=1.5, range=1.4, mom=0 | PF=1.20 | Net=4816.62 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 73/288 | hb=4, stop=0.4, range=0.4, mom=0 | PF=0.85 | Net=-20683.00 | trades=87 | ACCEPT
+  Done 74/288 | hb=4, stop=0.4, range=0.6, mom=0 | PF=0.82 | Net=-22077.00 | trades=79 | ACCEPT
+  Done 75/288 | hb=4, stop=0.4, range=0.8, mom=0 | PF=0.89 | Net=-12518.00 | trades=75 | ACCEPT
+  Done 76/288 | hb=4, stop=0.4, range=1.0, mom=0 | PF=0.92 | Net=-8652.25 | trades=70 | ACCEPT
+  Done 77/288 | hb=4, stop=0.4, range=1.2, mom=0 | PF=0.92 | Net=-7816.25 | trades=61 | ACCEPT
+  Done 78/288 | hb=4, stop=0.4, range=1.4, mom=0 | PF=0.98 | Net=-1655.50 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 79/288 | hb=4, stop=0.5, range=0.4, mom=0 | PF=0.94 | Net=-6665.44 | trades=87 | ACCEPT
+  Done 80/288 | hb=4, stop=0.5, range=0.6, mom=0 | PF=0.94 | Net=-6255.50 | trades=79 | ACCEPT
+  Done 81/288 | hb=4, stop=0.5, range=0.8, mom=0 | PF=1.02 | Net=1857.19 | trades=75 | ACCEPT
+  Done 82/288 | hb=4, stop=0.5, range=1.0, mom=0 | PF=0.98 | Net=-1900.75 | trades=70 | ACCEPT
+  Done 83/288 | hb=4, stop=0.5, range=1.2, mom=0 | PF=1.00 | Net=-189.00 | trades=61 | ACCEPT
+  Done 84/288 | hb=4, stop=0.5, range=1.4, mom=0 | PF=1.06 | Net=4592.19 | trades=56 | REJECT_LOW_TRADES(56<60)
+[2026-03-23 03:42:52] [MEA] [REFINEMENT] 84/288 (29.2%) — ETA 10.5 min
+  Done 85/288 | hb=4, stop=0.75, range=0.4, mom=0 | PF=1.04 | Net=3279.28 | trades=87 | ACCEPT
+  Done 86/288 | hb=4, stop=0.75, range=0.6, mom=0 | PF=1.07 | Net=4779.22 | trades=79 | ACCEPT
+  Done 87/288 | hb=4, stop=0.75, range=0.8, mom=0 | PF=1.12 | Net=8003.56 | trades=75 | ACCEPT
+  Done 88/288 | hb=4, stop=0.75, range=1.0, mom=0 | PF=1.16 | Net=9483.62 | trades=70 | ACCEPT
+  Done 89/288 | hb=4, stop=0.75, range=1.2, mom=0 | PF=1.12 | Net=6833.37 | trades=61 | ACCEPT
+  Done 90/288 | hb=4, stop=0.75, range=1.4, mom=0 | PF=1.26 | Net=12978.87 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 91/288 | hb=4, stop=1.0, range=0.4, mom=0 | PF=0.96 | Net=-2648.50 | trades=87 | ACCEPT
+  Done 92/288 | hb=4, stop=1.0, range=0.6, mom=0 | PF=1.04 | Net=1826.25 | trades=79 | ACCEPT
+  Done 93/288 | hb=4, stop=1.0, range=0.8, mom=0 | PF=1.19 | Net=8821.00 | trades=75 | ACCEPT
+  Done 94/288 | hb=4, stop=1.0, range=1.0, mom=0 | PF=1.16 | Net=6792.38 | trades=70 | ACCEPT
+  Done 95/288 | hb=4, stop=1.0, range=1.2, mom=0 | PF=1.16 | Net=6273.38 | trades=61 | ACCEPT
+  Done 96/288 | hb=4, stop=1.0, range=1.4, mom=0 | PF=1.23 | Net=8335.63 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 97/288 | hb=4, stop=1.25, range=0.4, mom=0 | PF=0.88 | Net=-5984.00 | trades=87 | ACCEPT
+  Done 98/288 | hb=4, stop=1.25, range=0.6, mom=0 | PF=0.97 | Net=-1393.81 | trades=79 | ACCEPT
+  Done 99/288 | hb=4, stop=1.25, range=0.8, mom=0 | PF=1.07 | Net=2467.09 | trades=75 | ACCEPT
+  Done 100/288 | hb=4, stop=1.25, range=1.0, mom=0 | PF=1.03 | Net=1034.09 | trades=70 | ACCEPT
+  Done 101/288 | hb=4, stop=1.25, range=1.2, mom=0 | PF=1.03 | Net=1074.72 | trades=61 | ACCEPT
+  Done 102/288 | hb=4, stop=1.25, range=1.4, mom=0 | PF=1.19 | Net=5446.78 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 103/288 | hb=4, stop=1.5, range=0.4, mom=0 | PF=0.85 | Net=-6806.56 | trades=87 | ACCEPT
+  Done 104/288 | hb=4, stop=1.5, range=0.6, mom=0 | PF=0.92 | Net=-3037.75 | trades=79 | ACCEPT
+  Done 105/288 | hb=4, stop=1.5, range=0.8, mom=0 | PF=1.08 | Net=2752.56 | trades=75 | ACCEPT
+  Done 106/288 | hb=4, stop=1.5, range=1.0, mom=0 | PF=1.02 | Net=657.56 | trades=70 | ACCEPT
+  Done 107/288 | hb=4, stop=1.5, range=1.2, mom=0 | PF=1.05 | Net=1339.81 | trades=61 | ACCEPT
+  Done 108/288 | hb=4, stop=1.5, range=1.4, mom=0 | PF=1.21 | Net=5225.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 109/288 | hb=5, stop=0.4, range=0.4, mom=0 | PF=0.90 | Net=-14244.50 | trades=87 | ACCEPT
+  Done 110/288 | hb=5, stop=0.4, range=0.6, mom=0 | PF=0.90 | Net=-12906.50 | trades=79 | ACCEPT
+  Done 111/288 | hb=5, stop=0.4, range=0.8, mom=0 | PF=0.96 | Net=-4240.50 | trades=75 | ACCEPT
+  Done 112/288 | hb=5, stop=0.4, range=1.0, mom=0 | PF=0.98 | Net=-1725.50 | trades=70 | ACCEPT
+[2026-03-23 03:44:20] [MEA] [REFINEMENT] 112/288 (38.9%) — ETA 9.1 min
+  Done 113/288 | hb=5, stop=0.4, range=1.2, mom=0 | PF=1.01 | Net=1330.00 | trades=61 | ACCEPT
+  Done 114/288 | hb=5, stop=0.4, range=1.4, mom=0 | PF=1.06 | Net=5461.50 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 115/288 | hb=5, stop=0.5, range=0.4, mom=0 | PF=0.98 | Net=-2372.56 | trades=87 | ACCEPT
+  Done 116/288 | hb=5, stop=0.5, range=0.6, mom=0 | PF=1.01 | Net=1338.00 | trades=79 | ACCEPT
+  Done 117/288 | hb=5, stop=0.5, range=0.8, mom=0 | PF=1.11 | Net=10916.19 | trades=75 | ACCEPT
+  Done 118/288 | hb=5, stop=0.5, range=1.0, mom=0 | PF=1.03 | Net=2387.88 | trades=70 | ACCEPT
+  Done 119/288 | hb=5, stop=0.5, range=1.2, mom=0 | PF=1.10 | Net=8265.00 | trades=61 | ACCEPT
+  Done 120/288 | hb=5, stop=0.5, range=1.4, mom=0 | PF=1.17 | Net=12728.25 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 121/288 | hb=5, stop=0.75, range=0.4, mom=0 | PF=1.13 | Net=10776.12 | trades=87 | ACCEPT
+  Done 122/288 | hb=5, stop=0.75, range=0.6, mom=0 | PF=1.25 | Net=17302.56 | trades=79 | ACCEPT
+  Done 123/288 | hb=5, stop=0.75, range=0.8, mom=0 | PF=1.32 | Net=21164.06 | trades=75 | ACCEPT
+  Done 124/288 | hb=5, stop=0.75, range=1.0, mom=0 | PF=1.28 | Net=16974.81 | trades=70 | ACCEPT
+  Done 125/288 | hb=5, stop=0.75, range=1.2, mom=0 | PF=1.35 | Net=18864.37 | trades=61 | ACCEPT
+  Done 126/288 | hb=5, stop=0.75, range=1.4, mom=0 | PF=1.46 | Net=22724.56 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 127/288 | hb=5, stop=1.0, range=0.4, mom=0 | PF=1.04 | Net=2665.75 | trades=87 | ACCEPT
+  Done 128/288 | hb=5, stop=1.0, range=0.6, mom=0 | PF=1.15 | Net=8361.50 | trades=79 | ACCEPT
+  Done 129/288 | hb=5, stop=1.0, range=0.8, mom=0 | PF=1.24 | Net=12277.38 | trades=75 | ACCEPT
+  Done 130/288 | hb=5, stop=1.0, range=1.0, mom=0 | PF=1.22 | Net=10290.63 | trades=70 | ACCEPT
+  Done 131/288 | hb=5, stop=1.0, range=1.2, mom=0 | PF=1.29 | Net=11851.13 | trades=61 | ACCEPT
+  Done 132/288 | hb=5, stop=1.0, range=1.4, mom=0 | PF=1.38 | Net=14681.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 133/288 | hb=5, stop=1.25, range=0.4, mom=0 | PF=0.97 | Net=-1623.56 | trades=87 | ACCEPT
+  Done 134/288 | hb=5, stop=1.25, range=0.6, mom=0 | PF=1.08 | Net=3320.16 | trades=79 | ACCEPT
+  Done 135/288 | hb=5, stop=1.25, range=0.8, mom=0 | PF=1.18 | Net=7328.44 | trades=75 | ACCEPT
+  Done 136/288 | hb=5, stop=1.25, range=1.0, mom=0 | PF=1.16 | Net=6115.56 | trades=70 | ACCEPT
+  Done 137/288 | hb=5, stop=1.25, range=1.2, mom=0 | PF=1.23 | Net=7468.78 | trades=61 | ACCEPT
+  Done 138/288 | hb=5, stop=1.25, range=1.4, mom=0 | PF=1.38 | Net=11077.75 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 139/288 | hb=5, stop=1.5, range=0.4, mom=0 | PF=0.91 | Net=-4414.13 | trades=87 | ACCEPT
+  Done 140/288 | hb=5, stop=1.5, range=0.6, mom=0 | PF=1.06 | Net=2582.75 | trades=79 | ACCEPT
+[2026-03-23 03:45:46] [MEA] [REFINEMENT] 140/288 (48.6%) — ETA 7.7 min
+  Done 141/288 | hb=5, stop=1.5, range=0.8, mom=0 | PF=1.17 | Net=6101.56 | trades=75 | ACCEPT
+  Done 142/288 | hb=5, stop=1.5, range=1.0, mom=0 | PF=1.17 | Net=5499.56 | trades=70 | ACCEPT
+  Done 143/288 | hb=5, stop=1.5, range=1.2, mom=0 | PF=1.27 | Net=7469.31 | trades=61 | ACCEPT
+  Done 144/288 | hb=5, stop=1.5, range=1.4, mom=0 | PF=1.40 | Net=10021.12 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 145/288 | hb=6, stop=0.4, range=0.4, mom=0 | PF=0.97 | Net=-4749.75 | trades=87 | ACCEPT
+  Done 146/288 | hb=6, stop=0.4, range=0.6, mom=0 | PF=0.97 | Net=-4408.75 | trades=79 | ACCEPT
+  Done 147/288 | hb=6, stop=0.4, range=0.8, mom=0 | PF=1.03 | Net=4164.75 | trades=75 | ACCEPT
+  Done 148/288 | hb=6, stop=0.4, range=1.0, mom=0 | PF=1.04 | Net=4124.00 | trades=70 | ACCEPT
+  Done 149/288 | hb=6, stop=0.4, range=1.2, mom=0 | PF=1.08 | Net=7519.75 | trades=61 | ACCEPT
+  Done 150/288 | hb=6, stop=0.4, range=1.4, mom=0 | PF=1.10 | Net=9418.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 151/288 | hb=6, stop=0.5, range=0.4, mom=0 | PF=1.02 | Net=2421.75 | trades=87 | ACCEPT
+  Done 152/288 | hb=6, stop=0.5, range=0.6, mom=0 | PF=1.07 | Net=7474.63 | trades=79 | ACCEPT
+  Done 153/288 | hb=6, stop=0.5, range=0.8, mom=0 | PF=1.16 | Net=17288.50 | trades=75 | ACCEPT
+  Done 154/288 | hb=6, stop=0.5, range=1.0, mom=0 | PF=1.08 | Net=7918.88 | trades=70 | ACCEPT
+  Done 155/288 | hb=6, stop=0.5, range=1.2, mom=0 | PF=1.13 | Net=11575.94 | trades=61 | ACCEPT
+  Done 156/288 | hb=6, stop=0.5, range=1.4, mom=0 | PF=1.19 | Net=15189.81 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 157/288 | hb=6, stop=0.75, range=0.4, mom=0 | PF=1.14 | Net=12502.81 | trades=87 | ACCEPT
+  Done 158/288 | hb=6, stop=0.75, range=0.6, mom=0 | PF=1.22 | Net=16999.59 | trades=79 | ACCEPT
+  Done 159/288 | hb=6, stop=0.75, range=0.8, mom=0 | PF=1.29 | Net=21138.50 | trades=75 | ACCEPT
+  Done 160/288 | hb=6, stop=0.75, range=1.0, mom=0 | PF=1.25 | Net=17047.06 | trades=70 | ACCEPT
+  Done 161/288 | hb=6, stop=0.75, range=1.2, mom=0 | PF=1.23 | Net=14067.19 | trades=61 | ACCEPT
+  Done 162/288 | hb=6, stop=0.75, range=1.4, mom=0 | PF=1.37 | Net=20546.31 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 163/288 | hb=6, stop=1.0, range=0.4, mom=0 | PF=1.05 | Net=3243.50 | trades=87 | ACCEPT
+  Done 164/288 | hb=6, stop=1.0, range=0.6, mom=0 | PF=1.13 | Net=7959.75 | trades=79 | ACCEPT
+  Done 165/288 | hb=6, stop=1.0, range=0.8, mom=0 | PF=1.23 | Net=13221.63 | trades=75 | ACCEPT
+  Done 166/288 | hb=6, stop=1.0, range=1.0, mom=0 | PF=1.21 | Net=10894.00 | trades=70 | ACCEPT
+  Done 167/288 | hb=6, stop=1.0, range=1.2, mom=0 | PF=1.23 | Net=11004.00 | trades=61 | ACCEPT
+  Done 168/288 | hb=6, stop=1.0, range=1.4, mom=0 | PF=1.32 | Net=13862.13 | trades=56 | REJECT_LOW_TRADES(56<60)
+[2026-03-23 03:47:09] [MEA] [REFINEMENT] 168/288 (58.3%) — ETA 6.2 min
+  Done 169/288 | hb=6, stop=1.25, range=0.4, mom=0 | PF=0.97 | Net=-1438.00 | trades=87 | ACCEPT
+  Done 170/288 | hb=6, stop=1.25, range=0.6, mom=0 | PF=1.06 | Net=2793.41 | trades=79 | ACCEPT
+  Done 171/288 | hb=6, stop=1.25, range=0.8, mom=0 | PF=1.18 | Net=7939.19 | trades=75 | ACCEPT
+  Done 172/288 | hb=6, stop=1.25, range=1.0, mom=0 | PF=1.17 | Net=7095.94 | trades=70 | ACCEPT
+  Done 173/288 | hb=6, stop=1.25, range=1.2, mom=0 | PF=1.17 | Net=6262.53 | trades=61 | ACCEPT
+  Done 174/288 | hb=6, stop=1.25, range=1.4, mom=0 | PF=1.30 | Net=10034.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 175/288 | hb=6, stop=1.5, range=0.4, mom=0 | PF=0.89 | Net=-6117.06 | trades=87 | ACCEPT
+  Done 176/288 | hb=6, stop=1.5, range=0.6, mom=0 | PF=0.98 | Net=-867.56 | trades=79 | ACCEPT
+  Done 177/288 | hb=6, stop=1.5, range=0.8, mom=0 | PF=1.12 | Net=4769.12 | trades=75 | ACCEPT
+  Done 178/288 | hb=6, stop=1.5, range=1.0, mom=0 | PF=1.11 | Net=4150.12 | trades=70 | ACCEPT
+  Done 179/288 | hb=6, stop=1.5, range=1.2, mom=0 | PF=1.15 | Net=5103.37 | trades=61 | ACCEPT
+  Done 180/288 | hb=6, stop=1.5, range=1.4, mom=0 | PF=1.27 | Net=7975.69 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 181/288 | hb=8, stop=0.4, range=0.4, mom=0 | PF=1.15 | Net=26145.00 | trades=87 | ACCEPT
+  Done 182/288 | hb=8, stop=0.4, range=0.6, mom=0 | PF=1.08 | Net=12549.25 | trades=79 | ACCEPT
+  Done 183/288 | hb=8, stop=0.4, range=0.8, mom=0 | PF=1.17 | Net=24943.00 | trades=75 | ACCEPT
+  Done 184/288 | hb=8, stop=0.4, range=1.0, mom=0 | PF=1.16 | Net=21806.50 | trades=70 | ACCEPT
+  Done 185/288 | hb=8, stop=0.4, range=1.2, mom=0 | PF=1.29 | Net=34603.25 | trades=61 | ACCEPT
+  Done 186/288 | hb=8, stop=0.4, range=1.4, mom=0 | PF=1.45 | Net=49129.75 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 187/288 | hb=8, stop=0.5, range=0.4, mom=0 | PF=1.22 | Net=32120.25 | trades=87 | ACCEPT
+  Done 188/288 | hb=8, stop=0.5, range=0.6, mom=0 | PF=1.18 | Net=24033.44 | trades=79 | ACCEPT
+  Done 189/288 | hb=8, stop=0.5, range=0.8, mom=0 | PF=1.26 | Net=32729.00 | trades=75 | ACCEPT
+  Done 190/288 | hb=8, stop=0.5, range=1.0, mom=0 | PF=1.24 | Net=28096.50 | trades=70 | ACCEPT
+  Done 191/288 | hb=8, stop=0.5, range=1.2, mom=0 | PF=1.39 | Net=39050.25 | trades=61 | ACCEPT
+  Done 192/288 | hb=8, stop=0.5, range=1.4, mom=0 | PF=1.58 | Net=51891.44 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 193/288 | hb=8, stop=0.75, range=0.4, mom=0 | PF=1.27 | Net=27047.47 | trades=87 | ACCEPT
+  Done 194/288 | hb=8, stop=0.75, range=0.6, mom=0 | PF=1.28 | Net=24704.09 | trades=79 | ACCEPT
+  Done 195/288 | hb=8, stop=0.75, range=0.8, mom=0 | PF=1.38 | Net=31583.91 | trades=75 | ACCEPT
+  Done 196/288 | hb=8, stop=0.75, range=1.0, mom=0 | PF=1.38 | Net=29508.34 | trades=70 | ACCEPT
+[2026-03-23 03:48:36] [MEA] [REFINEMENT] 196/288 (68.1%) — ETA 4.7 min
+  Done 197/288 | hb=8, stop=0.75, range=1.2, mom=0 | PF=1.52 | Net=35084.28 | trades=61 | ACCEPT
+  Done 198/288 | hb=8, stop=0.75, range=1.4, mom=0 | PF=1.72 | Net=44403.09 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 199/288 | hb=8, stop=1.0, range=0.4, mom=0 | PF=1.18 | Net=14816.50 | trades=87 | ACCEPT
+  Done 200/288 | hb=8, stop=1.0, range=0.6, mom=0 | PF=1.22 | Net=15212.50 | trades=79 | ACCEPT
+  Done 201/288 | hb=8, stop=1.0, range=0.8, mom=0 | PF=1.30 | Net=19771.50 | trades=75 | ACCEPT
+  Done 202/288 | hb=8, stop=1.0, range=1.0, mom=0 | PF=1.31 | Net=18722.25 | trades=70 | ACCEPT
+  Done 203/288 | hb=8, stop=1.0, range=1.2, mom=0 | PF=1.50 | Net=25489.25 | trades=61 | ACCEPT
+  Done 204/288 | hb=8, stop=1.0, range=1.4, mom=0 | PF=1.61 | Net=28866.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 205/288 | hb=8, stop=1.25, range=0.4, mom=0 | PF=1.12 | Net=8247.91 | trades=87 | ACCEPT
+  Done 206/288 | hb=8, stop=1.25, range=0.6, mom=0 | PF=1.22 | Net=11928.03 | trades=79 | ACCEPT
+  Done 207/288 | hb=8, stop=1.25, range=0.8, mom=0 | PF=1.31 | Net=16411.03 | trades=75 | ACCEPT
+  Done 208/288 | hb=8, stop=1.25, range=1.0, mom=0 | PF=1.31 | Net=15277.84 | trades=70 | ACCEPT
+  Done 209/288 | hb=8, stop=1.25, range=1.2, mom=0 | PF=1.49 | Net=20132.81 | trades=61 | ACCEPT
+  Done 210/288 | hb=8, stop=1.25, range=1.4, mom=0 | PF=1.71 | Net=25350.28 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 211/288 | hb=8, stop=1.5, range=0.4, mom=0 | PF=1.08 | Net=4714.12 | trades=87 | ACCEPT
+  Done 212/288 | hb=8, stop=1.5, range=0.6, mom=0 | PF=1.16 | Net=7825.31 | trades=79 | ACCEPT
+  Done 213/288 | hb=8, stop=1.5, range=0.8, mom=0 | PF=1.25 | Net=11581.37 | trades=75 | ACCEPT
+  Done 214/288 | hb=8, stop=1.5, range=1.0, mom=0 | PF=1.27 | Net=11466.37 | trades=70 | ACCEPT
+  Done 215/288 | hb=8, stop=1.5, range=1.2, mom=0 | PF=1.45 | Net=16083.00 | trades=61 | ACCEPT
+  Done 216/288 | hb=8, stop=1.5, range=1.4, mom=0 | PF=1.70 | Net=21236.00 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 217/288 | hb=10, stop=0.4, range=0.4, mom=0 | PF=1.20 | Net=37416.25 | trades=87 | ACCEPT
+  Done 218/288 | hb=10, stop=0.4, range=0.6, mom=0 | PF=1.14 | Net=23481.00 | trades=79 | ACCEPT
+  Done 219/288 | hb=10, stop=0.4, range=0.8, mom=0 | PF=1.22 | Net=36147.00 | trades=75 | ACCEPT
+  Done 220/288 | hb=10, stop=0.4, range=1.0, mom=0 | PF=1.25 | Net=38082.75 | trades=70 | ACCEPT
+  Done 221/288 | hb=10, stop=0.4, range=1.2, mom=0 | PF=1.46 | Net=60474.50 | trades=61 | ACCEPT
+  Done 222/288 | hb=10, stop=0.4, range=1.4, mom=0 | PF=1.62 | Net=73459.75 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 223/288 | hb=10, stop=0.5, range=0.4, mom=0 | PF=1.28 | Net=47313.75 | trades=87 | ACCEPT
+  Done 224/288 | hb=10, stop=0.5, range=0.6, mom=0 | PF=1.26 | Net=38357.75 | trades=79 | ACCEPT
+[2026-03-23 03:50:01] [MEA] [REFINEMENT] 224/288 (77.8%) — ETA 3.3 min
+  Done 225/288 | hb=10, stop=0.5, range=0.8, mom=0 | PF=1.33 | Net=46952.88 | trades=75 | ACCEPT
+  Done 226/288 | hb=10, stop=0.5, range=1.0, mom=0 | PF=1.30 | Net=41333.25 | trades=70 | ACCEPT
+  Done 227/288 | hb=10, stop=0.5, range=1.2, mom=0 | PF=1.55 | Net=62687.50 | trades=61 | ACCEPT
+  Done 228/288 | hb=10, stop=0.5, range=1.4, mom=0 | PF=1.74 | Net=76099.50 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 229/288 | hb=10, stop=0.75, range=0.4, mom=0 | PF=1.37 | Net=42831.91 | trades=87 | ACCEPT
+  Done 230/288 | hb=10, stop=0.75, range=0.6, mom=0 | PF=1.34 | Net=35874.81 | trades=79 | ACCEPT
+  Done 231/288 | hb=10, stop=0.75, range=0.8, mom=0 | PF=1.49 | Net=47207.75 | trades=75 | ACCEPT
+  Done 232/288 | hb=10, stop=0.75, range=1.0, mom=0 | PF=1.50 | Net=45663.97 | trades=70 | ACCEPT
+  Done 233/288 | hb=10, stop=0.75, range=1.2, mom=0 | PF=1.57 | Net=45503.66 | trades=61 | ACCEPT
+  Done 234/288 | hb=10, stop=0.75, range=1.4, mom=0 | PF=1.64 | Net=48127.59 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 235/288 | hb=10, stop=1.0, range=0.4, mom=0 | PF=1.23 | Net=23118.75 | trades=87 | ACCEPT
+  Done 236/288 | hb=10, stop=1.0, range=0.6, mom=0 | PF=1.24 | Net=21168.00 | trades=79 | ACCEPT
+  Done 237/288 | hb=10, stop=1.0, range=0.8, mom=0 | PF=1.36 | Net=29434.25 | trades=75 | ACCEPT
+  Done 238/288 | hb=10, stop=1.0, range=1.0, mom=0 | PF=1.39 | Net=29653.38 | trades=70 | ACCEPT
+  Done 239/288 | hb=10, stop=1.0, range=1.2, mom=0 | PF=1.47 | Net=31161.75 | trades=61 | ACCEPT
+  Done 240/288 | hb=10, stop=1.0, range=1.4, mom=0 | PF=1.56 | Net=33981.50 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 241/288 | hb=10, stop=1.25, range=0.4, mom=0 | PF=1.11 | Net=8861.97 | trades=87 | ACCEPT
+  Done 242/288 | hb=10, stop=1.25, range=0.6, mom=0 | PF=1.14 | Net=10234.47 | trades=79 | ACCEPT
+  Done 243/288 | hb=10, stop=1.25, range=0.8, mom=0 | PF=1.29 | Net=19526.16 | trades=75 | ACCEPT
+  Done 244/288 | hb=10, stop=1.25, range=1.0, mom=0 | PF=1.31 | Net=19884.09 | trades=70 | ACCEPT
+  Done 245/288 | hb=10, stop=1.25, range=1.2, mom=0 | PF=1.42 | Net=22571.97 | trades=61 | ACCEPT
+  Done 246/288 | hb=10, stop=1.25, range=1.4, mom=0 | PF=1.54 | Net=26011.41 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 247/288 | hb=10, stop=1.5, range=0.4, mom=0 | PF=1.06 | Net=4482.94 | trades=87 | ACCEPT
+  Done 248/288 | hb=10, stop=1.5, range=0.6, mom=0 | PF=1.09 | Net=5885.62 | trades=79 | ACCEPT
+  Done 249/288 | hb=10, stop=1.5, range=0.8, mom=0 | PF=1.19 | Net=11597.00 | trades=75 | ACCEPT
+  Done 250/288 | hb=10, stop=1.5, range=1.0, mom=0 | PF=1.22 | Net=12678.00 | trades=70 | ACCEPT
+  Done 251/288 | hb=10, stop=1.5, range=1.2, mom=0 | PF=1.32 | Net=15309.62 | trades=61 | ACCEPT
+  Done 252/288 | hb=10, stop=1.5, range=1.4, mom=0 | PF=1.46 | Net=19486.31 | trades=56 | REJECT_LOW_TRADES(56<60)
+[2026-03-23 03:51:25] [MEA] [REFINEMENT] 252/288 (87.5%) — ETA 1.8 min
+  Done 253/288 | hb=12, stop=0.4, range=0.4, mom=0 | PF=1.20 | Net=39344.75 | trades=87 | ACCEPT
+  Done 254/288 | hb=12, stop=0.4, range=0.6, mom=0 | PF=1.12 | Net=20408.75 | trades=79 | ACCEPT
+  Done 255/288 | hb=12, stop=0.4, range=0.8, mom=0 | PF=1.20 | Net=33529.75 | trades=75 | ACCEPT
+  Done 256/288 | hb=12, stop=0.4, range=1.0, mom=0 | PF=1.27 | Net=43325.25 | trades=70 | ACCEPT
+  Done 257/288 | hb=12, stop=0.4, range=1.2, mom=0 | PF=1.56 | Net=76775.25 | trades=61 | ACCEPT
+  Done 258/288 | hb=12, stop=0.4, range=1.4, mom=0 | PF=1.69 | Net=86338.75 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 259/288 | hb=12, stop=0.5, range=0.4, mom=0 | PF=1.26 | Net=44656.94 | trades=87 | ACCEPT
+  Done 260/288 | hb=12, stop=0.5, range=0.6, mom=0 | PF=1.26 | Net=40220.81 | trades=79 | ACCEPT
+  Done 261/288 | hb=12, stop=0.5, range=0.8, mom=0 | PF=1.34 | Net=50738.69 | trades=75 | ACCEPT
+  Done 262/288 | hb=12, stop=0.5, range=1.0, mom=0 | PF=1.34 | Net=48427.63 | trades=70 | ACCEPT
+  Done 263/288 | hb=12, stop=0.5, range=1.2, mom=0 | PF=1.71 | Net=83878.44 | trades=61 | ACCEPT
+  Done 264/288 | hb=12, stop=0.5, range=1.4, mom=0 | PF=1.88 | Net=94778.69 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 265/288 | hb=12, stop=0.75, range=0.4, mom=0 | PF=1.32 | Net=40200.16 | trades=87 | ACCEPT
+  Done 266/288 | hb=12, stop=0.75, range=0.6, mom=0 | PF=1.30 | Net=33716.84 | trades=79 | ACCEPT
+  Done 267/288 | hb=12, stop=0.75, range=0.8, mom=0 | PF=1.46 | Net=47384.47 | trades=75 | ACCEPT
+  Done 268/288 | hb=12, stop=0.75, range=1.0, mom=0 | PF=1.52 | Net=50185.56 | trades=70 | ACCEPT
+  Done 269/288 | hb=12, stop=0.75, range=1.2, mom=0 | PF=1.63 | Net=54365.12 | trades=61 | ACCEPT
+  Done 270/288 | hb=12, stop=0.75, range=1.4, mom=0 | PF=1.79 | Net=62624.22 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 271/288 | hb=12, stop=1.0, range=0.4, mom=0 | PF=1.22 | Net=22583.00 | trades=87 | ACCEPT
+  Done 272/288 | hb=12, stop=1.0, range=0.6, mom=0 | PF=1.21 | Net=19943.88 | trades=79 | ACCEPT
+  Done 273/288 | hb=12, stop=1.0, range=0.8, mom=0 | PF=1.34 | Net=28742.13 | trades=75 | ACCEPT
+  Done 274/288 | hb=12, stop=1.0, range=1.0, mom=0 | PF=1.40 | Net=31952.13 | trades=70 | ACCEPT
+  Done 275/288 | hb=12, stop=1.0, range=1.2, mom=0 | PF=1.55 | Net=37899.75 | trades=61 | ACCEPT
+  Done 276/288 | hb=12, stop=1.0, range=1.4, mom=0 | PF=1.68 | Net=43259.75 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 277/288 | hb=12, stop=1.25, range=0.4, mom=0 | PF=1.12 | Net=10374.56 | trades=87 | ACCEPT
+  Done 278/288 | hb=12, stop=1.25, range=0.6, mom=0 | PF=1.14 | Net=10817.19 | trades=79 | ACCEPT
+  Done 279/288 | hb=12, stop=1.25, range=0.8, mom=0 | PF=1.31 | Net=21874.69 | trades=75 | ACCEPT
+  Done 280/288 | hb=12, stop=1.25, range=1.0, mom=0 | PF=1.41 | Net=26009.88 | trades=70 | ACCEPT
+[2026-03-23 03:52:54] [MEA] [REFINEMENT] 280/288 (97.2%) — ETA 0.4 min
+  Done 281/288 | hb=12, stop=1.25, range=1.2, mom=0 | PF=1.57 | Net=31083.50 | trades=61 | ACCEPT
+  Done 282/288 | hb=12, stop=1.25, range=1.4, mom=0 | PF=1.73 | Net=36097.66 | trades=56 | REJECT_LOW_TRADES(56<60)
+  Done 283/288 | hb=12, stop=1.5, range=0.4, mom=0 | PF=1.07 | Net=5748.19 | trades=87 | ACCEPT
+  Done 284/288 | hb=12, stop=1.5, range=0.6, mom=0 | PF=1.11 | Net=7254.62 | trades=79 | ACCEPT
+  Done 285/288 | hb=12, stop=1.5, range=0.8, mom=0 | PF=1.19 | Net=12253.75 | trades=75 | ACCEPT
+  Done 286/288 | hb=12, stop=1.5, range=1.0, mom=0 | PF=1.28 | Net=15990.81 | trades=70 | ACCEPT
+  Done 287/288 | hb=12, stop=1.5, range=1.2, mom=0 | PF=1.44 | Net=21730.94 | trades=61 | ACCEPT
+  Done 288/288 | hb=12, stop=1.5, range=1.4, mom=0 | PF=1.57 | Net=25521.69 | trades=56 | REJECT_LOW_TRADES(56<60)
+[2026-03-23 03:53:19] [MEA] [REFINEMENT] 288/288 (100.0%) — ETA 0.0 min
+
+✅ Accepted refinement sets: 240
+❌ Rejected refinement sets: 48
+⏱ Refinement runtime: 887.99 seconds
+
+✅ Refinement successful for candidate #2. Storing 240 viable settings.
+
+🧠 Pooling all refined results across 2 candidates and sorting for the absolute best edge...
+
+========================================================================
+🏁 FAMILY RUN SUMMARY
+========================================================================
+Strategy Type:            mean_reversion
+Dataset:                  ES_60m_2008_2026_tradestation.csv
+Rows:                     107,358
+Start:                    2008-01-02 06:00:00
+End:                      2026-03-17 22:00:00
+
+--- Combination Sweep ---
+Total Combinations:       792
+Promoted Candidates:      9
+
+--- Best Promoted Combo ---
+Strategy:                 ComboMR_DistanceBelowSMA_TwoBarDown_ReversalUpBar
+PF:                       1.51
+Net PnL:                  34448.62
+Total Trades:             68
+
+--- Best Refined Candidate ---
+Strategy:                 RefinedMR_HB12_ATR0.5_DIST1.2_MOM0
+Quality Flag:             ROBUST
+PF:                       1.71
+Net PnL:                  83878.44
+Total Trades:             61
+========================================================================
+[2026-03-23 03:53:19] [MEA] [DONE] Completed mean_reversion family
+
+🏆 LEADERBOARD — ES 60m (Saved to Outputs/ES_60m/family_leaderboard_results.csv)
+ strategy_type leader_source               leader_strategy_name  accepted_final quality_flag  is_trades  oos_trades  is_pf  oos_pf  recent_12m_trades  recent_12m_pf  leader_pf  leader_net_pnl
+mean_reversion       refined RefinedMR_HB12_ATR0.5_DIST1.2_MOM0            True       ROBUST         42          19   1.67     1.8                  5           3.38       1.71        83878.44
+
+========================================================================
+🔬 STARTING AUTOMATED PORTFOLIO EVALUATION
+========================================================================
+[2026-03-23 03:53:19] [PORTFOLIO] Evaluating 1 strategies...
+
+Loading market data from: Data/ES_60m_2008_2026_tradestation.csv for evaluation...
+
+[LOADER DEBUG] Columns: ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Up', 'Down']
+[LOADER DEBUG] Final rows after cleaning and filtering: 107,358
+
+Evaluating 1 final accepted strategies from Leaderboard...
+
+  Evaluating: mean_reversion -> RefinedMR_HB12_ATR0.5_DIST1.2_MOM0
+    Rebuilding mean_reversion with timeframe=60m
+
+✅ PORTFOLIO EVALUATION COMPLETE.
+
+[Final Strategy Review Table]
+strategy_family                      strategy_name  is_trades  oos_trades  is_pf_pre_2019  oos_pf_post_2019  mc_max_dd_99  shock_drop_10pct_pnl
+ mean_reversion RefinedMR_HB12_ATR0.5_DIST1.2_MOM0         30          24             1.5              1.24      79339.53              35270.25
+[2026-03-23 03:53:42] [DONE] Total runtime: 4459.0s
+
+ Total script runtime: 4458.97 seconds

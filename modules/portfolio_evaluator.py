@@ -7,6 +7,7 @@ runs slippage & trade drop robustness tests, and builds Combined Portfolio metri
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -208,15 +209,29 @@ def _rebuild_strategy_from_leaderboard_row(
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
 
     combo_row = _load_combo_reference_row(outputs_dir, strategy_type_name, combo_name)
-    if not combo_row:
-        return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
+    if combo_row:
+        combo_classes = _parse_filter_classes_from_combo_row(combo_row)
+    else:
+        # Fallback: parse filter classes directly from leaderboard row columns
+        # best_combo_filter_class_names or best_combo_filters contain the filter list
+        fallback_filters = str(row.get("best_combo_filter_class_names", "")).strip()
+        if not fallback_filters:
+            fallback_filters = str(row.get("best_combo_filters", "")).strip()
+        if fallback_filters:
+            print(f"      Combo not in promoted_candidates, using leaderboard filters: {fallback_filters}")
+            combo_classes = _parse_filter_classes_from_combo_row({"filters": fallback_filters})
+        else:
+            combo_classes = []
 
-    combo_classes = _parse_filter_classes_from_combo_row(combo_row)
     if not combo_classes:
+        print(f"      No filter classes resolved for {combo_name}")
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
 
     hold_bars = _safe_int(row.get("leader_hold_bars", 0), 0)
-    stop_distance_points = _safe_float(row.get("leader_stop_distance_points", 0.0), 0.0)
+    # Leaderboard uses leader_stop_distance_atr; older code used leader_stop_distance_points
+    stop_distance_points = _safe_float(
+        row.get("leader_stop_distance_points", row.get("leader_stop_distance_atr", 0.0)), 0.0
+    )
     min_avg_range = _safe_float(row.get("leader_min_avg_range", 0.0), 0.0)
     momentum_lookback = _safe_int(row.get("leader_momentum_lookback", 0), 0)
     exit_type = row.get("leader_exit_type", "time_stop")
@@ -271,7 +286,107 @@ def _rebuild_strategy_from_leaderboard_row(
     engine.run(strategy=strategy)
 
     trades_df = _normalize_trade_columns(engine.trades_dataframe())
-    return trades_df, str(combo_row.get("filters", "")), cfg
+    filters_str = str(combo_row.get("filters", "")) if combo_row else str(row.get("best_combo_filter_class_names", ""))
+    return trades_df, filters_str, cfg
+
+
+def _evaluate_single_strategy(
+    row: pd.Series,
+    data: pd.DataFrame,
+    outputs_dir: Path,
+    market_symbol: str,
+    timeframe: str,
+    oos_split_date: str,
+    run_id: str,
+) -> dict[str, Any] | None:
+    """Rebuild one strategy and compute all its metrics. Thread-safe.
+
+    Returns dict with results_entry, daily_returns, yearly_stats, trades_df,
+    or None on failure.
+    """
+    strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
+    if strategy_name in ["", "NONE"]:
+        return None
+
+    print(f"\n  Evaluating: {row['strategy_type']} -> {strategy_name}")
+
+    trades_df, filters_str, cfg = _rebuild_strategy_from_leaderboard_row(
+        row=row,
+        data=data,
+        outputs_dir=outputs_dir,
+        market_symbol=market_symbol,
+        timeframe=timeframe,
+    )
+
+    if trades_df.empty:
+        print(f"    [Warning] Skipping. Could not rebuild trades for {strategy_name}.")
+        return None
+
+    trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
+    trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
+
+    if len(trades_df) < 1:
+        print(f"    [Warning] Skipping. No reconstructed trades for {strategy_name}.")
+        return None
+
+    daily_returns = trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0)
+
+    stats = calculate_metrics_split(trades_df, oos_split_date=oos_split_date)
+    mc = run_monte_carlo_stats(trades_df, iterations=10000)
+    shock_pnl = calculate_slippage_shock(trades_df, tick_value=cfg.tick_value)
+
+    df_year = trades_df.copy()
+    df_year["year"] = df_year["exit_time"].dt.year
+
+    strat_yearly = []
+    for y, group in df_year.groupby("year"):
+        g_prof = group.loc[group["net_pnl"] > 0, "net_pnl"].sum()
+        g_loss = abs(group.loc[group["net_pnl"] < 0, "net_pnl"].sum())
+        pf = (g_prof / g_loss) if g_loss > 0 else (float(g_prof) if g_prof > 0 else 0.0)
+
+        strat_yearly.append(
+            {
+                "strategy_name": strategy_name,
+                "filters": filters_str,
+                "year": y,
+                "trades": len(group),
+                "net_pnl": round(float(group["net_pnl"].sum()), 2),
+                "profit_factor": round(float(pf), 2),
+            }
+        )
+
+    yearly_df = pd.DataFrame(strat_yearly).sort_values("year")
+    yearly_records: list[dict] = []
+    if not yearly_df.empty:
+        yearly_df["rolling_3y_pnl"] = yearly_df["net_pnl"].rolling(3).sum()
+        yearly_records = yearly_df.to_dict("records")
+
+    results_entry = {
+        "strategy_family": row["strategy_type"],
+        "strategy_name": strategy_name,
+        "quality_flag": row.get("quality_flag", "UNKNOWN"),
+        "total_trades": len(trades_df),
+        "is_trades": stats["is_trades"],
+        "oos_trades": stats["oos_trades"],
+        "full_pf": round(stats["full_pf"], 2),
+        "is_pf_pre_2019": round(stats["is_pf"], 2),
+        "oos_pf_post_2019": round(stats["oos_pf"], 2),
+        "recent_12m_pf": round(stats["recent_pf"], 2),
+        "net_pnl": round(stats["full_net"], 2),
+        "max_drawdown": round(stats["max_dd"], 2),
+        "mc_max_dd_99": round(mc["mc_dd_99"], 2),
+        "shock_drop_10pct_pnl": round(mc["shock_drop_10_pct_pnl"], 2),
+        "shock_extra_slip_pnl": round(shock_pnl, 2),
+    }
+
+    return {
+        "results_entry": results_entry,
+        "daily_returns_key": f"{run_id}_{strategy_name}",
+        "daily_returns": daily_returns,
+        "yearly_stats": yearly_records,
+        "trades_df": trades_df,
+        "cfg": cfg,
+    }
 
 
 def evaluate_portfolio(
@@ -303,10 +418,6 @@ def evaluate_portfolio(
 
     last_cfg = EngineConfig(symbol=market_name)
 
-    # -------------------------------------------------------------------------
-    # CRITICAL FIX:
-    # Only evaluate final accepted rows.
-    # -------------------------------------------------------------------------
     if "accepted_final" not in leaderboard_df.columns:
         print("\nLeaderboard has no accepted_final column. Nothing to evaluate.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -319,91 +430,30 @@ def evaluate_portfolio(
 
     print(f"\nEvaluating {len(leaderboard_df)} final accepted strategies from Leaderboard...")
 
-    for _, row in leaderboard_df.iterrows():
-        strategy_name = str(row.get("leader_strategy_name", "UNKNOWN")).strip()
-        if strategy_name in ["", "NONE"]:
-            continue
+    max_workers = min(len(leaderboard_df), 16)
+    rows = [row for _, row in leaderboard_df.iterrows()]
 
-        print(f"\n  Evaluating: {row['strategy_type']} -> {strategy_name}")
-
-        try:
-            trades_df, filters_str, cfg = _rebuild_strategy_from_leaderboard_row(
-                row=row,
-                data=data,
-                outputs_dir=leaderboard_csv.parent,
-                market_symbol=market_name,
-                timeframe=timeframe,
-            )
-
-            if trades_df.empty:
-                print(f"    [Warning] Skipping. Could not rebuild trades for {strategy_name}.")
-                continue
-
-            trades_df["exit_time"] = pd.to_datetime(trades_df["exit_time"])
-            trades_df["net_pnl"] = pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0)
-
-            if len(trades_df) < 1:
-                print(f"    [Warning] Skipping. No reconstructed trades for {strategy_name}.")
-                continue
-
-            last_cfg = cfg
-            all_trades_list.append(trades_df)
-
-            daily_returns_dict[f"{run_id}_{strategy_name}"] = (
-                trades_df.resample("D", on="exit_time")["net_pnl"].sum().fillna(0)
-            )
-
-            stats = calculate_metrics_split(trades_df, oos_split_date=oos_split_date)
-            mc = run_monte_carlo_stats(trades_df, iterations=10000)
-            shock_pnl = calculate_slippage_shock(trades_df, tick_value=cfg.tick_value)
-
-            df_year = trades_df.copy()
-            df_year["year"] = df_year["exit_time"].dt.year
-
-            strat_yearly = []
-            for y, group in df_year.groupby("year"):
-                g_prof = group.loc[group["net_pnl"] > 0, "net_pnl"].sum()
-                g_loss = abs(group.loc[group["net_pnl"] < 0, "net_pnl"].sum())
-                pf = (g_prof / g_loss) if g_loss > 0 else (float(g_prof) if g_prof > 0 else 0.0)
-
-                strat_yearly.append(
-                    {
-                        "strategy_name": strategy_name,
-                        "filters": filters_str,
-                        "year": y,
-                        "trades": len(group),
-                        "net_pnl": round(float(group["net_pnl"].sum()), 2),
-                        "profit_factor": round(float(pf), 2),
-                    }
-                )
-
-            yearly_df = pd.DataFrame(strat_yearly).sort_values("year")
-            if not yearly_df.empty:
-                yearly_df["rolling_3y_pnl"] = yearly_df["net_pnl"].rolling(3).sum()
-                yearly_stats_list.extend(yearly_df.to_dict("records"))
-
-            results_list.append(
-                {
-                    "strategy_family": row["strategy_type"],
-                    "strategy_name": strategy_name,
-                    "quality_flag": row.get("quality_flag", "UNKNOWN"),
-                    "total_trades": len(trades_df),
-                    "is_trades": stats["is_trades"],
-                    "oos_trades": stats["oos_trades"],
-                    "full_pf": round(stats["full_pf"], 2),
-                    "is_pf_pre_2019": round(stats["is_pf"], 2),
-                    "oos_pf_post_2019": round(stats["oos_pf"], 2),
-                    "recent_12m_pf": round(stats["recent_pf"], 2),
-                    "net_pnl": round(stats["full_net"], 2),
-                    "max_drawdown": round(stats["max_dd"], 2),
-                    "mc_max_dd_99": round(mc["mc_dd_99"], 2),
-                    "shock_drop_10pct_pnl": round(mc["shock_drop_10_pct_pnl"], 2),
-                    "shock_extra_slip_pnl": round(shock_pnl, 2),
-                }
-            )
-
-        except Exception as e:
-            print(f"    [Warning] Could not reconstruct trade history: {e}")
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(
+                _evaluate_single_strategy,
+                row, data, leaderboard_csv.parent,
+                market_name, timeframe, oos_split_date, run_id,
+            ): idx
+            for idx, row in enumerate(rows)
+        }
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                if result is None:
+                    continue
+                results_list.append(result["results_entry"])
+                daily_returns_dict[result["daily_returns_key"]] = result["daily_returns"]
+                yearly_stats_list.extend(result["yearly_stats"])
+                all_trades_list.append(result["trades_df"])
+                last_cfg = result["cfg"]
+            except Exception as e:
+                print(f"    [Warning] Could not reconstruct trade history: {e}")
 
     if len(all_trades_list) > 1:
         print("\n  Evaluating: COMBINED PORTFOLIO (All Final Accepted Strategies Merged)")

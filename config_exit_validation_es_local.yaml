@@ -1,0 +1,42 @@
+# Local reduced exit-validation config derived from config_exit_validation_es.yaml.
+# Used when full-history sequential sweeps are too slow on the laptop.
+
+datasets:
+  - path: "Data/ES_60m_exit_validation_sample.csv"
+    market: "ES"
+    timeframe: "60m"
+  - path: "Data/ES_30m_exit_validation_sample.csv"
+    market: "ES"
+    timeframe: "30m"
+
+strategy_types: "all"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 2.00
+  slippage_ticks: 4
+  tick_value: 12.50
+  dollars_per_point: 50.0
+
+pipeline:
+  max_workers_sweep: 2
+  max_workers_refinement: 2
+  max_candidates_to_refine: 1
+  oos_split_date: "2025-11-15"
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 8
+  min_trades_per_year: 2.0
+  max_promoted_candidates: 5
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 10
+
+output_dir: "Outputs_exit_validation_local"

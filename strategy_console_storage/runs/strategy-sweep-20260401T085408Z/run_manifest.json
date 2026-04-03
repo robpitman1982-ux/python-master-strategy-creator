@@ -1,0 +1,41 @@
+{
+  "run_id": "strategy-sweep-20260401T085408Z",
+  "created_utc": "2026-04-01T08:54:08+00:00",
+  "created_local": "2026-04-01 19:54:08 AUS Eastern Summer Time",
+  "run_label": "2026-04-01_19-54_YM_2tf",
+  "instance_name": "strategy-sweep",
+  "zone": "us-central1-f",
+  "machine_type": "n2-highcpu-96",
+  "provisioning_model": "STANDARD",
+  "boot_disk_size": "120GB",
+  "image_family": "ubuntu-2404-lts-amd64",
+  "config_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\cloud\\config_ym_daily_60m_ondemand.yaml",
+  "config_sha256": "5b142bedd2cc0ad8fc3393c7f17ed348dea3c065f11fb6e645a549ea248d920c",
+  "project_id": "project-813d2513-0ba3-4c51-8a1",
+  "datasets": [
+    {
+      "market": "YM",
+      "timeframe": "daily",
+      "local_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\Data\\YM_daily_2008_2026_tradestation.csv",
+      "file_name": "YM_daily_2008_2026_tradestation.csv",
+      "bundle_repo_path": "Data/YM_daily_2008_2026_tradestation.csv",
+      "size_bytes": 253523,
+      "sha256": "d4410abb297ae3a0f481c597c336df7b247b76f1184926b3c46de3c3fde55a03"
+    },
+    {
+      "market": "YM",
+      "timeframe": "60m",
+      "local_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\Data\\YM_60m_2008_2026_tradestation.csv",
+      "file_name": "YM_60m_2008_2026_tradestation.csv",
+      "bundle_repo_path": "Data/YM_60m_2008_2026_tradestation.csv",
+      "size_bytes": 5494905,
+      "sha256": "e392be2946aa69f55fb6b995ba078a3090cfc5263357df1a76c3949b65d00c89"
+    }
+  ],
+  "remote_run_root": "/tmp/strategy_engine_runs/strategy-sweep-20260401T085408Z",
+  "remote_bundle_path": "/tmp/strategy_engine_runs/strategy-sweep-20260401T085408Z/input_bundle.tar.gz",
+  "remote_runner_path": "/tmp/strategy_engine_runs/strategy-sweep-20260401T085408Z/remote_runner.sh",
+  "remote_status_path": "/tmp/strategy_engine_runs/strategy-sweep-20260401T085408Z/run_status.json",
+  "remote_artifact_tarball": "/tmp/strategy_engine_runs/strategy-sweep-20260401T085408Z/artifacts.tar.gz",
+  "local_results_dir": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\strategy_console_storage\\runs\\strategy-sweep-20260401T085408Z"
+}

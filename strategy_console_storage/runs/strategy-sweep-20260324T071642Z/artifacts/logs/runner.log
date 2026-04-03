@@ -1,0 +1,9 @@
+[env] system python:
+/usr/bin/python3
+Python 3.12.3
+[env] required python:
+/usr/bin/python3.12
+Python 3.12.3
+[env] venv python:
+Python 3.12.3
+pip 24.0 from /tmp/strategy_engine_runs/strategy-sweep-20260324T071642Z/venv/lib/python3.12/site-packages/pip (python 3.12)

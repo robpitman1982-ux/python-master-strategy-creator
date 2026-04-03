@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-03-24T07:12:07+00:00",
+  "dataset": "ES_60m",
+  "current_family": "mean_reversion",
+  "current_stage": "DONE",
+  "progress_pct": 100,
+  "items_done": 0,
+  "items_total": 0,
+  "elapsed_seconds": 57.1,
+  "eta_seconds": 0,
+  "families_completed": [
+    "mean_reversion"
+  ],
+  "families_remaining": [],
+  "last_event": "DONE",
+  "current_candidate": 0,
+  "total_candidates": 0,
+  "candidate_name": ""
+}

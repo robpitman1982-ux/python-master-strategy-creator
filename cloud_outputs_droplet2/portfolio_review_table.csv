@@ -1,0 +1,2 @@
+strategy_family,strategy_name,quality_flag,total_trades,is_trades,oos_trades,full_pf,is_pf_pre_2019,oos_pf_post_2019,recent_12m_pf,net_pnl,max_drawdown,mc_max_dd_99,shock_drop_10pct_pnl,shock_extra_slip_pnl
+mean_reversion,RefinedMR_HB12_ATR0.5_DIST1.2_MOM0,ROBUST,54,30,24,1.39,1.5,1.24,1.99,43092.81,44361.38,77927.43,34719.75,40392.81

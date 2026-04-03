@@ -1,0 +1,15 @@
+dataset,strategy_type,exit_type,rows,best_pf,median_pf,best_net_pnl,median_net_pnl,best_quality_flag,best_strategy_name,avg_trades,median_trades
+ES_30m,breakout,trailing_stop,54,1.23,0.39,829.5,-14576.25,REGIME_DEPENDENT,RefinedBreakout_HB6_ATR1.5_COMP0.8_MOM0,26.48148148148148,25.5
+ES_30m,breakout,time_stop,18,0.85,0.43,-820.5,-14409.0,REGIME_DEPENDENT,RefinedBreakout_HB6_ATR1.5_COMP0.8_MOM0,25.944444444444443,25.5
+ES_30m,mean_reversion,signal_exit,27,13335.0,6667.5,13335.0,6667.5,BROKEN_IN_OOS,RefinedMR_HB7_ATR0.5_DIST0.6_MOM0,1.0,1.0
+ES_30m,mean_reversion,time_stop,27,13335.0,6667.5,13335.0,6667.5,BROKEN_IN_OOS,RefinedMR_HB7_ATR0.5_DIST0.6_MOM0,1.0,1.0
+ES_30m,mean_reversion,profit_target,81,5960.0,2980.0,5960.0,2980.0,BROKEN_IN_OOS,RefinedMR_HB3_ATR0.5_DIST0.6_MOM0,1.0,1.0
+ES_30m,trend,time_stop,54,0.77,0.52,-3723.5,-10723.75,BROKEN_IN_OOS,RefinedTrend_HB6_ATR1.25_VOL1.1_MOM5,23.38888888888889,23.0
+ES_30m,trend,trailing_stop,162,0.7,0.33,-4578.0,-18891.75,BROKEN_IN_OOS,RefinedTrend_HB6_ATR1.25_VOL1.1_MOM5,23.5,23.0
+ES_60m,breakout,time_stop,18,1.15,0.5700000000000001,1892.38,-8496.0,REGIME_DEPENDENT,RefinedBreakout_HB6_ATR1.25_COMP0.8_MOM0,19.72222222222222,19.0
+ES_60m,breakout,trailing_stop,54,0.71,0.2,-1269.37,-16364.685,MARGINAL,RefinedBreakout_HB3_ATR1.5_COMP0.8_MOM0,21.425925925925927,21.0
+ES_60m,mean_reversion,profit_target,81,0.0,0.0,0.0,0.0,NO_TRADES,RefinedMR_HB3_ATR0.5_DIST0.6_MOM0,0.0,0.0
+ES_60m,mean_reversion,signal_exit,27,0.0,0.0,0.0,0.0,NO_TRADES,RefinedMR_HB3_ATR0.5_DIST0.6_MOM0,0.0,0.0
+ES_60m,mean_reversion,time_stop,27,0.0,0.0,0.0,0.0,NO_TRADES,RefinedMR_HB3_ATR0.5_DIST0.6_MOM0,0.0,0.0
+ES_60m,trend,time_stop,54,1.84,0.69,3498.75,-4534.995,ROBUST,RefinedTrend_HB4_ATR1.25_VOL1.1_MOM10,14.12962962962963,14.0
+ES_60m,trend,trailing_stop,162,1.82,0.41,2863.75,-8233.295,ROBUST,RefinedTrend_HB6_ATR1.25_VOL1.1_MOM10,14.376543209876543,14.0

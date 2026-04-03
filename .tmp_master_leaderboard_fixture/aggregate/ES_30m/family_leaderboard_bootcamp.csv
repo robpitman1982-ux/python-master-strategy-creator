@@ -1,0 +1,2 @@
+strategy_type,leader_strategy_name,accepted_final,quality_flag,leader_pf,leader_net_pnl,leader_trades,bootcamp_score,is_pf,oos_pf,recent_12m_pf
+breakout,BreakoutBootcamp,True,ROBUST,1.05,45000.0,90,71.0,1.0,1.05,1.02

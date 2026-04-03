@@ -122,16 +122,26 @@ div[data-testid="metric-container"] {
 }
 .dataset-title { font-size: 1.02rem; font-weight: 700; color: #10253b; }
 .dataset-meta { font-size: 0.78rem; color: #5f7286; }
-.family-list { display: flex; flex-direction: column; gap: 0.45rem; }
+.family-list { display: flex; flex-direction: column; gap: 0.35rem; }
 .family-pill {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-radius: 999px;
-    padding: 0.5rem 0.78rem;
-    font-size: 0.85rem;
+    border-radius: 10px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.95rem;
     font-weight: 600;
+    line-height: 1.4;
 }
+.family-pill .progress-bar-bg {
+    flex: 1; height: 6px; background: #e2e8ef; border-radius: 3px; margin: 0 0.6rem;
+}
+.family-pill .progress-bar-fill {
+    height: 100%; border-radius: 3px; transition: width 0.3s;
+}
+.family-pill.complete .progress-bar-fill { background: #0d6b35; }
+.family-pill.active .progress-bar-fill { background: #175ea6; }
+.family-pill.pending .progress-bar-fill { background: #758597; }
 .family-pill.complete { background: #e9f8ef; color: #0d6b35; border: 1px solid #c6ecd4; }
 .family-pill.active { background: #e7f1ff; color: #175ea6; border: 1px solid #c9dcff; }
 .family-pill.pending { background: #f2f5f8; color: #758597; border: 1px solid #e2e8ef; }
@@ -314,10 +324,19 @@ def render_monitor_progress(summary: dict[str, object]) -> None:
                 "pending": "○",
             }.get(item["status"], "○")
             detail = item["stage"] if item["status"] == "active" and item["stage"] else ""
+            # Build a mini progress bar for active families
+            progress_pct = item.get("progress_pct", 100 if item["status"] == "complete" else 0)
+            bar_html = (
+                f'<div class="progress-bar-bg">'
+                f'<div class="progress-bar-fill" style="width:{progress_pct}%"></div>'
+                f'</div>'
+            )
+            detail_text = f"{html.escape(detail)}" if detail else ""
             items_html.append(
                 f'<div class="family-pill {item["status"]}">'
                 f"<span>{icon} {html.escape(item['family_label'])}</span>"
-                f"<span>{html.escape(detail)}</span>"
+                f"{bar_html}"
+                f"<span>{detail_text}</span>"
                 f"</div>"
             )
         dataset_cards.append(
@@ -492,8 +511,10 @@ with tab_monitor:
         )
         progress_title = f"Dataset Progress — {ds_label}" if ds_label else "Dataset Progress"
         st.subheader(progress_title)
-        fam_emoji = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥"}
-        parent_families = ["mean_reversion", "trend", "breakout"]
+        fam_emoji = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥",
+                     "short_mean_reversion": "↩️", "short_trend": "📈", "short_breakout": "💥"}
+        parent_families = ["mean_reversion", "trend", "breakout",
+                           "short_mean_reversion", "short_trend", "short_breakout"]
 
         def _group_families(family_list: list[str]) -> dict[str, list[str]]:
             groups: dict[str, list[str]] = {p: [] for p in parent_families}
@@ -539,26 +560,39 @@ with tab_monitor:
                 icon = "✅" if is_done else ("🔵" if is_active else ("⏳" if is_waiting else "⏳"))
                 st.markdown(f"**{icon} {market} {timeframe}**")
                 st.progress(min(pct / 100.0, 1.0))
-                pill_html = ""
+                pill_html = '<div style="display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:4px">'
                 for p in parent_families:
+                    group_items = all_fams_for_ds.get(p, [])
+                    if not group_items:
+                        continue
                     e = fam_emoji.get(p, "•")
                     done_in_group  = len(completed_groups.get(p, []))
-                    total_in_group = max(len(all_fams_for_ds.get(p, [])), 1)
+                    total_in_group = max(len(group_items), 1)
                     is_cur = cur_fam == p or (cur_fam or "").startswith(p + "_")
                     is_fam_done = done_in_group >= total_in_group
+                    pct_done = int(done_in_group / total_in_group * 100) if total_in_group else 0
                     label = f"{done_in_group}/{total_in_group}" if total_in_group > 1 else ("✓" if is_fam_done else "")
+                    # Progress bar HTML
+                    bar_bg = "#c6ecd4" if is_fam_done else ("#c9dcff" if is_cur else "#e2e8ef")
+                    bar_fg = "#0d6b35" if is_fam_done else ("#175ea6" if is_cur else "#758597")
+                    bar_html = (
+                        f'<div style="height:4px;background:{bar_bg};border-radius:2px;margin-top:3px">'
+                        f'<div style="width:{pct_done}%;height:100%;background:{bar_fg};border-radius:2px"></div>'
+                        f'</div>'
+                    )
                     if is_fam_done:
-                        pill_html += (f'<span style="background:#1b5e20;color:#a5d6a7;'
-                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'{e} {p} {label}</span>')
+                        pill_html += (f'<div style="background:#e9f8ef;color:#0d6b35;border:1px solid #c6ecd4;'
+                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
+                                      f'{e} {p} {label}{bar_html}</div>')
                     elif is_cur and not is_done:
-                        pill_html += (f'<span style="background:#0d47a1;color:#90caf9;'
-                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'⚙️ {p} {label} ({cur_stage})</span>')
+                        pill_html += (f'<div style="background:#e7f1ff;color:#175ea6;border:1px solid #c9dcff;'
+                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
+                                      f'⚙️ {p} {label} ({cur_stage}){bar_html}</div>')
                     else:
-                        pill_html += (f'<span style="background:#1a2634;color:#546e7a;'
-                                      f'padding:2px 10px;border-radius:20px;font-size:0.78rem;margin-right:6px">'
-                                      f'{e} {p} {label}</span>')
+                        pill_html += (f'<div style="background:#f2f5f8;color:#758597;border:1px solid #e2e8ef;'
+                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
+                                      f'{e} {p} {label}{bar_html}</div>')
+                pill_html += '</div>'
                 st.markdown(pill_html, unsafe_allow_html=True)
             with col_b:
                 if is_done:
@@ -618,7 +652,10 @@ with tab_monitor:
         else:
             st.info("No promoted candidates file found for this run.")
     else:
-        st.info("Promoted candidates will appear here once the live run has written result files.")
+        if is_running:
+            st.info("Run is active but results not yet downloaded. Candidates appear after download or when run completes.")
+        else:
+            st.info("No outputs directory found. Download run results to see promoted candidates.")
 
     with st.expander("Engine log (last 30 lines)", expanded=False):
         log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
@@ -668,7 +705,7 @@ with tab_results:
                 "bootcamp_score": "Bootcamp",
                 "leader_trades_per_year": "Trades/Yr",
                 "calmar_ratio": "Calmar",
-                "is_oos_pf_ratio": "IS/OOS",
+                "oos_is_pf_ratio": "OOS/IS",
                 "leader_win_rate": "Win%",
                 "leader_max_drawdown": "Max DD",
                 "leader_pct_profitable_years": "Prof Yrs%",

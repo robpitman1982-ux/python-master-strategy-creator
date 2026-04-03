@@ -1,0 +1,3 @@
+dataset,strategy_type,exit_type,rows,best_pf,median_pf,best_net_pnl,median_net_pnl,best_quality_flag,best_strategy_name,avg_trades,median_trades
+ES_60m,trend,trailing_stop,1,1.3,1.3,1500.0,1500.0,ROBUST,B,90.0,90.0
+ES_60m,trend,time_stop,1,1.1,1.1,1000.0,1000.0,STABLE,A,100.0,100.0

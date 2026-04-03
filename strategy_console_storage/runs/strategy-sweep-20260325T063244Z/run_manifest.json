@@ -1,0 +1,30 @@
+{
+  "run_id": "strategy-sweep-20260325T063244Z",
+  "created_utc": "2026-03-25T06:32:44+00:00",
+  "instance_name": "strategy-sweep",
+  "zone": "us-central1-a",
+  "machine_type": "n2-highcpu-96",
+  "provisioning_model": "SPOT",
+  "boot_disk_size": "120GB",
+  "image_family": "ubuntu-2404-lts-amd64",
+  "config_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\cloud\\config_es_60m_full_sweep.yaml",
+  "config_sha256": "7cd43a7a992a85aa7feac750545f719ba8463c295b0deab86c8122839c5d0f9b",
+  "project_id": "project-813d2513-0ba3-4c51-8a1",
+  "datasets": [
+    {
+      "market": "ES",
+      "timeframe": "60m",
+      "local_path": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\Data\\ES_60m_2008_2026_tradestation.csv",
+      "file_name": "ES_60m_2008_2026_tradestation.csv",
+      "bundle_repo_path": "Data/ES_60m_2008_2026_tradestation.csv",
+      "size_bytes": 6561254,
+      "sha256": "3153d5514a494fc1cfa4aa4ff27d4b4073eb3ffceabf8492a130eb7f587cdc35"
+    }
+  ],
+  "remote_run_root": "/tmp/strategy_engine_runs/strategy-sweep-20260325T063244Z",
+  "remote_bundle_path": "/tmp/strategy_engine_runs/strategy-sweep-20260325T063244Z/input_bundle.tar.gz",
+  "remote_runner_path": "/tmp/strategy_engine_runs/strategy-sweep-20260325T063244Z/remote_runner.sh",
+  "remote_status_path": "/tmp/strategy_engine_runs/strategy-sweep-20260325T063244Z/run_status.json",
+  "remote_artifact_tarball": "/tmp/strategy_engine_runs/strategy-sweep-20260325T063244Z/artifacts.tar.gz",
+  "local_results_dir": "C:\\Users\\Rob\\Documents\\GIT Repos\\python-master-strategy-creator\\strategy_console_storage\\runs\\strategy-sweep-20260325T063244Z"
+}

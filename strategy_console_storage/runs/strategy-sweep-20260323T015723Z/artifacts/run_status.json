@@ -1,0 +1,10 @@
+{
+  "timestamp_utc": "2026-03-23T02:00:14+00:00",
+  "state": "failed",
+  "stage": "pip",
+  "message": "Dependency installation failed",
+  "exit_code": 1,
+  "artifact_tarball": "/tmp/strategy_engine_runs/strategy-sweep-20260323T015723Z/artifacts.tar.gz",
+  "engine_log": "/tmp/strategy_engine_runs/strategy-sweep-20260323T015723Z/logs/engine_run.log",
+  "run_root": "/tmp/strategy_engine_runs/strategy-sweep-20260323T015723Z"
+}

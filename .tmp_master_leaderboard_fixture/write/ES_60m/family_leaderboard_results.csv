@@ -1,0 +1,2 @@
+strategy_type,leader_strategy_name,accepted_final,quality_flag,leader_pf,leader_net_pnl,leader_trades,is_pf,oos_pf,recent_12m_pf
+mean_reversion,ClassicMR,True,ROBUST,1.4,60000.0,180,1.1,1.35,1.3

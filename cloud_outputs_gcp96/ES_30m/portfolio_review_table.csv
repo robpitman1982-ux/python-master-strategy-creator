@@ -1,0 +1,2 @@
+strategy_family,strategy_name,quality_flag,total_trades,is_trades,oos_trades,full_pf,is_pf_pre_2019,oos_pf_post_2019,recent_12m_pf,net_pnl,max_drawdown,mc_max_dd_99,shock_drop_10pct_pnl,shock_extra_slip_pnl
+trend,RefinedTrend_HB24_ATR1.25_VOL0.8_MOM20,REGIME_DEPENDENT,431,270,161,0.63,0.53,0.96,0.91,-149703.91,152698.5,238515.9,-134248.09,-171253.91

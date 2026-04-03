@@ -1,0 +1,19 @@
+{
+  "timestamp": "2026-03-29T05:17:20+00:00",
+  "dataset": "ES_daily",
+  "current_family": "mean_reversion",
+  "current_stage": "DONE",
+  "progress_pct": 100,
+  "items_done": 0,
+  "items_total": 0,
+  "elapsed_seconds": 211.7,
+  "eta_seconds": 0,
+  "families_completed": [
+    "mean_reversion"
+  ],
+  "families_remaining": [],
+  "last_event": "DONE",
+  "current_candidate": 2,
+  "total_candidates": 2,
+  "candidate_name": "ComboMR_BelowFastSMA_DownClose_LowVolatilityRegime"
+}

@@ -1,4 +1,4 @@
-# CL sweep — 5 timeframes × 3 families on GCP n2-highcpu-96 SPOT in us-central1-c
+# CL sweep — 5 timeframes × 3 families on GCP n2-highcpu-96 SPOT in us-central1-f
 # Datasets: daily, 60m, 30m, 15m, 5m
 # Estimated runtime: ~40 minutes (vectorised + initializer pattern)
 # Estimated cost: ~$0.45 USD SPOT (preemption possible — relaunch if needed)
@@ -55,7 +55,7 @@ leaderboard:
 output_dir: "Outputs"
 
 cloud:
-  zone: "us-central1-c"
+  zone: "us-central1-f"
   machine_type: "n2-highcpu-96"
   provisioning_model: "SPOT"
   boot_disk_size: "120GB"

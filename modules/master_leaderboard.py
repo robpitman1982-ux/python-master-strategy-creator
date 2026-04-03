@@ -113,7 +113,7 @@ def aggregate_master_leaderboard(
         "recent_12m_pf",
         "leader_max_drawdown",
         "calmar_ratio",
-        "is_oos_pf_ratio",
+        "oos_is_pf_ratio",
         "leader_pct_profitable_years",
         "leader_max_consecutive_losing_years",
         "leader_hold_bars",
