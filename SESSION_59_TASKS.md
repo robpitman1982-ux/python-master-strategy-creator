@@ -605,8 +605,8 @@ No greedy heuristics needed. Pure exhaustive search.
 ```yaml
 pipeline:
   portfolio_selector:
-    # Portfolio size range — UNCAPPED
-    n_min: 4
+    # Portfolio size range — UNCAPPED, let data decide
+    n_min: 3              # allow lean 3-strategy portfolios if they're best
     n_max: 10
     
     # Candidate pool — raise for 16 markets
