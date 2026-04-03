@@ -521,13 +521,30 @@ if [ ! -f "$BUNDLE_PATH" ]; then
 fi
 
 write_status "running" "python_bootstrap" "Installing python3.12 runtime and venv tooling"
-if ! sudo apt-get update -qq; then
+
+# Fresh Ubuntu VMs run unattended-upgrades on boot which holds the dpkg lock.
+# Wait for locks to be released before attempting apt operations.
+export DEBIAN_FRONTEND=noninteractive
+echo "[bootstrap] Waiting for apt locks to be released..."
+for _apt_wait in $(seq 1 60); do
+    if ! fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 && \
+       ! fuser /var/lib/apt/lists/lock >/dev/null 2>&1; then
+        echo "[bootstrap] Apt locks free after ${_apt_wait}s"
+        break
+    fi
+    if [ "$_apt_wait" -eq 60 ]; then
+        echo "[bootstrap] WARNING: Apt locks still held after 60 attempts, proceeding anyway..."
+    fi
+    sleep 5
+done
+
+if ! sudo -E apt-get -o DPkg::Lock::Timeout=120 update -qq; then
     write_status "failed" "python_bootstrap" "Failed updating apt metadata for python3.12 bootstrap" 1
     preserve_outputs
     exit 1
 fi
 
-if ! sudo apt-get install -y -qq python3.12 python3.12-venv python3.12-dev tar >/dev/null 2>&1; then
+if ! sudo -E apt-get -o DPkg::Lock::Timeout=120 install -y -qq python3.12 python3.12-venv python3.12-dev tar >/dev/null 2>&1; then
     write_status "failed" "python_bootstrap" "python3.12 not available on remote VM" 1
     preserve_outputs
     exit 1
@@ -628,6 +645,8 @@ if [ "$PIP_EXIT" -ne 0 ]; then
 fi
 
 write_status "running" "engine_start" "Starting master strategy engine"
+# Ensure Outputs directory exists (engine creates it too, but belt-and-suspenders)
+mkdir -p "$REPO_DIR/Outputs"
 ENGINE_EXIT=0
 (
     cd "$REPO_DIR" && \
@@ -2025,19 +2044,49 @@ set -euo pipefail
 RUN_ROOT="{run_root}"
 BUNDLE_URI="{bundle_staging_uri}"
 RUNNER_URI="{runner_staging_uri}"
+BOOTSTRAP_LOG="$RUN_ROOT/logs/startup_bootstrap.log"
 
 mkdir -p "$RUN_ROOT/logs"
+exec > >(tee -a "$BOOTSTRAP_LOG") 2>&1
+
+echo "[startup] $(date -u '+%Y-%m-%d %H:%M:%S') Bootstrap starting on $(hostname)"
+
+# Retry helper — GCS downloads can fail transiently on fresh VMs
+download_with_retry() {{
+    local src="$1" dst="$2"
+    for attempt in 1 2 3 4 5; do
+        if gcloud storage cp "$src" "$dst"; then
+            echo "[startup] Downloaded $dst (attempt $attempt)"
+            return 0
+        fi
+        echo "[startup] Download attempt $attempt failed for $dst, retrying in 10s..."
+        sleep 10
+    done
+    echo "[startup] FATAL: Failed to download $dst after 5 attempts"
+    return 1
+}}
 
 echo "[startup] Downloading input bundle from GCS..."
-gcloud storage cp "$BUNDLE_URI" "$RUN_ROOT/input_bundle.tar.gz"
+download_with_retry "$BUNDLE_URI" "$RUN_ROOT/input_bundle.tar.gz"
 
 echo "[startup] Downloading remote runner from GCS..."
-gcloud storage cp "$RUNNER_URI" "$RUN_ROOT/remote_runner.sh"
+download_with_retry "$RUNNER_URI" "$RUN_ROOT/remote_runner.sh"
 chmod +x "$RUN_ROOT/remote_runner.sh"
 
-echo "[startup] Launching remote runner..."
-nohup bash "$RUN_ROOT/remote_runner.sh" "$RUN_ROOT" > "$RUN_ROOT/logs/runner_stdout.log" 2>&1 &
-echo "[startup] Runner launched (PID=$!)."
+echo "[startup] Launching remote runner via setsid (detached from startup service)..."
+# Use setsid + disown to ensure the runner survives after google-startup-scripts.service exits.
+# Without this, systemd's KillMode=control-group kills the background process.
+( setsid nohup bash "$RUN_ROOT/remote_runner.sh" "$RUN_ROOT" \
+    > "$RUN_ROOT/logs/runner_stdout.log" 2>&1 < /dev/null & disown )
+sleep 2
+
+# Verify runner is actually alive
+if pgrep -f "remote_runner.sh" > /dev/null 2>&1; then
+    echo "[startup] Runner confirmed alive (PID=$(pgrep -f remote_runner.sh | head -1))"
+else
+    echo "[startup] WARNING: Runner process not found after launch!"
+fi
+echo "[startup] Bootstrap complete at $(date -u '+%Y-%m-%d %H:%M:%S')"
 """
     script_path = run_dir / "startup_bootstrap.sh"
     with script_path.open("w", encoding="utf-8", newline="\n") as handle:
