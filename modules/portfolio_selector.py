@@ -38,6 +38,7 @@ from modules.prop_firm_simulator import (
     The5ersProGrowthConfig,
     PropFirmConfig,
     simulate_challenge,
+    simulate_challenge_batch,
     _scale_trade_pnl,
 )
 

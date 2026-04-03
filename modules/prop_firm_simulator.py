@@ -560,6 +560,231 @@ def simulate_challenge(
 
 
 # =============================================================================
+# VECTORIZED BATCH CHALLENGE SIMULATOR
+# =============================================================================
+
+
+def simulate_challenge_batch(
+    trade_matrix: np.ndarray,
+    config: PropFirmConfig,
+    source_capital: float = 250_000.0,
+    trades_per_day: float = 1.0,
+) -> dict:
+    """Vectorized multi-step prop firm challenge for N simulations at once.
+
+    Args:
+        trade_matrix: (n_sims, n_trades) — pre-generated trade PnL sequences.
+        config: Prop firm challenge configuration.
+        source_capital: Capital used in backtest (for scaling).
+        trades_per_day: Approximate trades per day (for daily DD grouping).
+
+    Returns dict with:
+      - pass_rate, per-step pass rates
+      - DD percentiles (median, p95, p99)
+      - trades_to_pass stats (median, p75)
+      - risk metrics (rolling 20 DD, max losing streak, max recovery)
+    """
+    n_sims, n_trades = trade_matrix.shape
+    n_steps = config.n_steps
+
+    # Track which sims are still alive and where they are in the trade sequence
+    alive = np.ones(n_sims, dtype=bool)
+    trade_cursor = np.zeros(n_sims, dtype=int)
+    step_pass_counts = np.zeros(n_steps, dtype=int)
+    all_passed = np.ones(n_sims, dtype=bool)
+    total_trades_used = np.zeros(n_sims, dtype=int)
+    worst_dd_pct = np.zeros(n_sims)
+
+    for step_idx in range(n_steps):
+        step_balance = config.step_balances[step_idx]
+
+        if config.step_profit_targets and step_idx < len(config.step_profit_targets):
+            step_target_pct = config.step_profit_targets[step_idx]
+        else:
+            step_target_pct = config.profit_target_pct
+
+        target_balance = step_balance * (1.0 + step_target_pct)
+        scale_factor = step_balance / source_capital if source_capital > 0 else 0.0
+
+        # For sims not alive, skip
+        active = alive.copy()
+        if not active.any():
+            break
+
+        # Get remaining trades for each sim from their cursor position
+        # We need to handle variable start positions efficiently
+        # Build a sub-matrix of remaining trades for active sims
+        max_remaining = n_trades - int(trade_cursor[active].min()) if active.any() else 0
+        if max_remaining <= 0:
+            all_passed[active] = False
+            alive[active] = False
+            continue
+
+        # Extract trades for active sims, pad with zeros where sim has fewer remaining
+        active_indices = np.where(active)[0]
+        n_active = len(active_indices)
+
+        # Build scaled trade sub-matrix
+        step_trades = np.zeros((n_active, max_remaining))
+        for ai, sim_idx in enumerate(active_indices):
+            cursor = int(trade_cursor[sim_idx])
+            remaining = n_trades - cursor
+            if remaining > 0:
+                step_trades[ai, :remaining] = trade_matrix[sim_idx, cursor:cursor + remaining] * scale_factor
+
+        # Cumulative equity: (n_active, max_remaining)
+        equity = step_balance + np.cumsum(step_trades, axis=1)
+
+        # Running peak for trailing DD
+        peaks = np.maximum.accumulate(equity, axis=1)
+        # Ensure peak starts at step_balance
+        peaks = np.maximum(peaks, step_balance)
+
+        # DD breach check
+        if config.drawdown_type == "static":
+            floor = step_balance * (1.0 - config.max_drawdown_pct)
+            dd_breach = equity <= floor
+        else:  # trailing
+            floors = peaks * (1.0 - config.max_drawdown_pct)
+            dd_breach = equity <= floors
+
+        # Profit target hit
+        target_hit = equity >= target_balance
+
+        # Daily DD check
+        daily_dd_breach_arr = np.zeros((n_active, max_remaining), dtype=bool)
+        if config.max_daily_drawdown_pct is not None:
+            daily_dd_limit = step_balance * config.max_daily_drawdown_pct
+            trades_per_day_group = max(1, int(np.ceil(trades_per_day)))
+            # Reshape into day groups and check daily PnL
+            n_full_days = max_remaining // trades_per_day_group
+            if n_full_days > 0:
+                trunc_len = n_full_days * trades_per_day_group
+                daily_shaped = step_trades[:, :trunc_len].reshape(n_active, n_full_days, trades_per_day_group)
+                daily_pnl = daily_shaped.sum(axis=2)  # (n_active, n_full_days)
+                # Cumulative within-day PnL for partial-day detection
+                daily_cum = np.cumsum(daily_shaped, axis=2)  # (n_active, n_full_days, tpd)
+                # Check if any within-day cumulative PnL breaches daily limit
+                day_breach = (daily_cum <= -daily_dd_limit).any(axis=2)  # (n_active, n_full_days)
+                # Expand back to trade-level
+                for d in range(n_full_days):
+                    if day_breach[:, d].any():
+                        start_t = d * trades_per_day_group
+                        # Find first breach trade within the day
+                        for t in range(trades_per_day_group):
+                            idx = start_t + t
+                            breached_sims = daily_cum[:, d, t] <= -daily_dd_limit
+                            daily_dd_breach_arr[:, idx] |= breached_sims
+
+        # Combined breach: DD breach OR daily DD breach
+        any_breach = dd_breach | daily_dd_breach_arr
+
+        # For each sim: find first breach and first target hit
+        # argmax on bool returns first True; returns 0 if no True
+        breach_exists = any_breach.any(axis=1)
+        breach_idx = np.argmax(any_breach, axis=1)
+        target_exists = target_hit.any(axis=1)
+        target_idx = np.argmax(target_hit, axis=1)
+
+        # Step passes if target hit before breach (or no breach)
+        passed = target_exists & (~breach_exists | (target_idx < breach_idx))
+
+        # Compute trades used for this step
+        step_trades_used = np.where(
+            passed, target_idx + 1,
+            np.where(breach_exists, breach_idx + 1, max_remaining)
+        )
+
+        # Compute max DD pct for this step
+        dd_from_peak = (peaks - equity)
+        max_dd_dollars = dd_from_peak.max(axis=1)
+        step_dd_pct = max_dd_dollars / step_balance if step_balance > 0 else np.zeros(n_active)
+
+        # Update globals
+        for ai, sim_idx in enumerate(active_indices):
+            total_trades_used[sim_idx] += int(step_trades_used[ai])
+            trade_cursor[sim_idx] += int(step_trades_used[ai])
+            worst_dd_pct[sim_idx] = max(worst_dd_pct[sim_idx], float(step_dd_pct[ai]))
+            if passed[ai]:
+                step_pass_counts[step_idx] += 1
+            else:
+                all_passed[sim_idx] = False
+                alive[sim_idx] = False
+
+    # Aggregate results
+    pass_count = int(all_passed.sum())
+    step_pass_rates = [int(c) / n_sims for c in step_pass_counts]
+
+    # Trades-to-pass for passing sims
+    passing_mask = all_passed
+    trades_to_pass = total_trades_used[passing_mask]
+
+    # Risk metrics on the full trade matrix (using raw trades scaled to first step)
+    first_step_scale = config.step_balances[0] / source_capital if source_capital > 0 else 1.0
+    scaled_all = trade_matrix * first_step_scale
+
+    # Worst rolling 20-trade DD
+    rolling_20_worst = np.zeros(n_sims)
+    if n_trades >= 20:
+        kernel = np.ones(20)
+        for sim in range(n_sims):
+            rolling_sum = np.convolve(scaled_all[sim], kernel, mode='valid')
+            rolling_20_worst[sim] = float(rolling_sum.min())
+    else:
+        rolling_20_worst = scaled_all.sum(axis=1)
+
+    # Max losing streak (vectorized per-sim)
+    signs = (scaled_all < 0).astype(np.int8)
+    max_streaks = np.zeros(n_sims, dtype=int)
+    for sim in range(n_sims):
+        s = signs[sim]
+        if s.any():
+            # Diff trick: find runs of 1s
+            d = np.diff(np.concatenate([[0], s, [0]]))
+            starts = np.where(d == 1)[0]
+            ends = np.where(d == -1)[0]
+            if len(starts) > 0 and len(ends) > 0:
+                max_streaks[sim] = int((ends - starts).max())
+
+    # Max recovery trades
+    equity_full = np.cumsum(scaled_all, axis=1)
+    peaks_full = np.maximum.accumulate(equity_full, axis=1)
+    in_dd = equity_full < peaks_full
+    max_recovery = np.zeros(n_sims, dtype=int)
+    for sim in range(n_sims):
+        dd_mask = in_dd[sim]
+        if dd_mask.any():
+            d = np.diff(np.concatenate([[False], dd_mask, [False]]).astype(int))
+            starts = np.where(d == 1)[0]
+            ends = np.where(d == -1)[0]
+            if len(starts) > 0 and len(ends) > 0:
+                max_recovery[sim] = int((ends - starts).max())
+
+    # Build result dict
+    mc_result: dict = {
+        "pass_rate": pass_count / n_sims,
+        "final_pass_rate": step_pass_rates[-1] if step_pass_rates else 0.0,
+    }
+    for si, rate in enumerate(step_pass_rates):
+        mc_result[f"step{si + 1}_pass_rate"] = rate
+
+    mc_result.update({
+        "median_worst_dd_pct": float(np.median(worst_dd_pct)),
+        "p95_worst_dd_pct": float(np.percentile(worst_dd_pct, 95)),
+        "p99_worst_dd_pct": float(np.percentile(worst_dd_pct, 99)),
+        "avg_trades_to_pass": float(np.mean(trades_to_pass)) if len(trades_to_pass) > 0 else 0.0,
+        "median_trades_to_pass": float(np.median(trades_to_pass)) if len(trades_to_pass) > 0 else 0.0,
+        "p75_trades_to_pass": float(np.percentile(trades_to_pass, 75)) if len(trades_to_pass) > 0 else 0.0,
+        "step_median_trades": [],  # populated per-step below
+        "worst_rolling_20_p95": float(np.percentile(rolling_20_worst, 95)),
+        "max_losing_streak_p95": int(np.percentile(max_streaks, 95)),
+        "max_recovery_trades_p95": int(np.percentile(max_recovery, 95)),
+    })
+
+    return mc_result
+
+
+# =============================================================================
 # MONTE CARLO PASS RATE
 # =============================================================================
 
