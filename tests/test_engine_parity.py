@@ -516,3 +516,144 @@ def test_full_sweep_parity_es_daily():
     assert total_trades_checked > 50, (
         f"Expected 50+ trades across all combos, got {total_trades_checked}"
     )
+
+
+# ===================================================================
+# Task 8: Benchmark — measure vectorized speedup
+# ===================================================================
+
+def _benchmark_single_strategy(data, signals, hold_bars, stop_distance_atr,
+                                direction="long", n_runs=5):
+    """Time both engines on the same data/signals and return (orig_s, vec_s)."""
+    import time
+
+    config = EngineConfig(direction=direction)
+    ec = ExitConfig(exit_type=ExitType.TIME_STOP, hold_bars=hold_bars,
+                    stop_distance_points=10.0)
+    strategy = _ParityStrategy(exit_config=ec, hold_bars=hold_bars)
+
+    atr_arr = data["atr_20"].values if "atr_20" in data.columns else np.full(len(data), 10.0)
+    from modules.vectorized_trades import vectorized_backtest
+
+    # Warm-up
+    eng = MasterStrategyEngine(data, config)
+    eng.run(strategy, hold_bars=hold_bars, stop_distance_atr=stop_distance_atr,
+            precomputed_signals=signals)
+
+    # Original engine
+    t0 = time.perf_counter()
+    for _ in range(n_runs):
+        eng = MasterStrategyEngine(data, config)
+        eng.run(strategy, hold_bars=hold_bars, stop_distance_atr=stop_distance_atr,
+                precomputed_signals=signals)
+    orig_s = (time.perf_counter() - t0) / n_runs
+
+    # Vectorized engine
+    t0 = time.perf_counter()
+    for _ in range(n_runs):
+        vectorized_backtest(
+            signal_mask=signals,
+            close=data["close"].values,
+            high=data["high"].values,
+            low=data["low"].values,
+            atr=atr_arr,
+            timestamps=data.index,
+            hold_bars=hold_bars,
+            stop_distance_atr=stop_distance_atr,
+            direction=direction,
+            initial_capital=config.initial_capital,
+            risk_per_trade=config.risk_per_trade,
+            commission_per_contract=config.commission_per_contract,
+            slippage_ticks=config.slippage_ticks,
+            tick_value=config.tick_value,
+            dollars_per_point=config.dollars_per_point,
+        )
+    vec_s = (time.perf_counter() - t0) / n_runs
+
+    return orig_s, vec_s
+
+
+def test_vectorized_speedup_synthetic():
+    """Vectorized should be significantly faster on medium-sized data."""
+    data = make_test_data(10000, seed=42)
+    signals = make_signals(len(data), frequency=20, offset=50)
+    orig_s, vec_s = _benchmark_single_strategy(data, signals, hold_bars=5,
+                                                stop_distance_atr=2.0)
+    speedup = orig_s / vec_s if vec_s > 0 else float("inf")
+    print(f"\nBenchmark (10K bars synthetic):")
+    print(f"  Original:   {orig_s*1000:.1f} ms")
+    print(f"  Vectorized: {vec_s*1000:.1f} ms")
+    print(f"  Speedup:    {speedup:.1f}x")
+    assert speedup > 2, f"Expected at least 2x speedup, got {speedup:.1f}x"
+
+
+@pytest.mark.skipif(
+    not __import__("pathlib").Path(_ES_DAILY).exists(),
+    reason="ES daily data not available",
+)
+def test_vectorized_speedup_daily():
+    """Benchmark on real ES daily data (~2800 bars)."""
+    from modules.data_loader import load_tradestation_csv
+
+    data = load_tradestation_csv(_ES_DAILY, debug=False)
+    data = add_precomputed_features(data, sma_lengths=[10, 20, 50],
+                                     avg_range_lookbacks=[20])
+    signals = make_signals(len(data), frequency=15, offset=50)
+    orig_s, vec_s = _benchmark_single_strategy(data, signals, hold_bars=5,
+                                                stop_distance_atr=2.0, n_runs=10)
+    speedup = orig_s / vec_s if vec_s > 0 else float("inf")
+    print(f"\nBenchmark ES daily ({len(data)} bars):")
+    print(f"  Original:   {orig_s*1000:.1f} ms")
+    print(f"  Vectorized: {vec_s*1000:.1f} ms")
+    print(f"  Speedup:    {speedup:.1f}x")
+    assert speedup > 3, f"Expected at least 3x speedup on daily, got {speedup:.1f}x"
+
+
+_ES_60M = "Data/ES_60m_2008_2026_tradestation.csv"
+
+
+@pytest.mark.skipif(
+    not __import__("pathlib").Path(_ES_60M).exists(),
+    reason="ES 60m data not available",
+)
+def test_vectorized_speedup_60m():
+    """Benchmark on real ES 60m data (~53K bars)."""
+    from modules.data_loader import load_tradestation_csv
+
+    data = load_tradestation_csv(_ES_60M, debug=False)
+    data = add_precomputed_features(data, sma_lengths=[10, 20, 50],
+                                     avg_range_lookbacks=[20])
+    signals = make_signals(len(data), frequency=20, offset=50)
+    orig_s, vec_s = _benchmark_single_strategy(data, signals, hold_bars=5,
+                                                stop_distance_atr=2.0, n_runs=5)
+    speedup = orig_s / vec_s if vec_s > 0 else float("inf")
+    print(f"\nBenchmark ES 60m ({len(data)} bars):")
+    print(f"  Original:   {orig_s*1000:.1f} ms")
+    print(f"  Vectorized: {vec_s*1000:.1f} ms")
+    print(f"  Speedup:    {speedup:.1f}x")
+    assert speedup > 10, f"Expected at least 10x speedup on 60m, got {speedup:.1f}x"
+
+
+_ES_15M = "Data/ES_15m_2008_2026_tradestation.csv"
+
+
+@pytest.mark.skipif(
+    not __import__("pathlib").Path(_ES_15M).exists(),
+    reason="ES 15m data not available",
+)
+def test_vectorized_speedup_15m():
+    """Benchmark on real ES 15m data (~231K bars) — highest speedup expected."""
+    from modules.data_loader import load_tradestation_csv
+
+    data = load_tradestation_csv(_ES_15M, debug=False)
+    data = add_precomputed_features(data, sma_lengths=[10, 20, 50],
+                                     avg_range_lookbacks=[20])
+    signals = make_signals(len(data), frequency=20, offset=50)
+    orig_s, vec_s = _benchmark_single_strategy(data, signals, hold_bars=5,
+                                                stop_distance_atr=2.0, n_runs=3)
+    speedup = orig_s / vec_s if vec_s > 0 else float("inf")
+    print(f"\nBenchmark ES 15m ({len(data)} bars):")
+    print(f"  Original:   {orig_s*1000:.1f} ms")
+    print(f"  Vectorized: {vec_s*1000:.1f} ms")
+    print(f"  Speedup:    {speedup:.1f}x")
+    assert speedup > 20, f"Expected at least 20x speedup on 15m, got {speedup:.1f}x"
