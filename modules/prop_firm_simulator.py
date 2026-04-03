@@ -88,6 +88,10 @@ class PropFirmConfig:
     # If None, use profit_target_pct for all steps (backward compatible)
     # If set, use per-step targets: e.g. [0.08, 0.05] for High Stakes
 
+    # --- Daily DD behaviour ---
+    daily_dd_is_pause: bool = False       # True = skip rest of day, False = terminate step
+    daily_dd_recalculates: bool = False   # True = recalc daily limit from day-start equity
+
     # --- Instrument settings (for PnL scaling) ---
     dollars_per_point: float = 50.0  # ES = $50/pt
     contracts_per_trade: int = 1
