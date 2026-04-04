@@ -360,6 +360,13 @@ def simulate_single_step(
     daily_pnl_accumulator = 0.0
     paused_until_next_day = False  # True when daily DD pause is active
 
+    # Min profitable days tracking
+    min_prof_days = config.min_profitable_days or 0
+    profitable_day_count = 0
+    day_pnl_for_prof_days = 0.0  # accumulate PnL within current day
+    min_profit_threshold = step_balance * 0.005  # 0.5% of initial balance = "profitable day"
+    target_already_hit = False  # True once profit target reached, waiting for min days
+
     balance = step_balance
     peak = step_balance
     trough = step_balance
@@ -370,6 +377,10 @@ def simulate_single_step(
     for i, raw_pnl in enumerate(trade_pnls):
         # Day boundary reset (at start of each new day)
         if i > 0 and i % trades_per_day_group == 0:
+            # Count previous day as profitable if PnL >= 0.5% of step balance
+            if day_pnl_for_prof_days >= min_profit_threshold:
+                profitable_day_count += 1
+            day_pnl_for_prof_days = 0.0
             daily_pnl_accumulator = 0.0
             paused_until_next_day = False
             day_start_balance = balance
@@ -383,6 +394,7 @@ def simulate_single_step(
 
         scaled_pnl = _scale_trade_pnl(raw_pnl, source_capital, step_balance)
         balance += scaled_pnl
+        day_pnl_for_prof_days += scaled_pnl
         equity_curve.append(balance)
 
         if balance > peak:
@@ -463,25 +475,68 @@ def simulate_single_step(
 
         # Check profit target
         if balance >= target_balance:
-            target_hit_idx = i
-            return StepResult(
-                step_number=step_number,
-                starting_balance=step_balance,
-                ending_balance=balance,
-                profit_target=profit_target_dollars,
-                max_drawdown_limit=drawdown_floor,
-                peak_balance=peak,
-                trough_balance=trough,
-                max_drawdown_dollars=max_dd_dollars,
-                max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
-                trades_taken=i + 1,
-                passed=True,
-                failure_reason=None,
-                equity_curve=equity_curve,
-                target_hit_trade_idx=target_hit_idx,
-            )
+            if target_hit_idx is None:
+                target_hit_idx = i
+            target_already_hit = True
+
+            # Count current partial day toward profitable days
+            current_prof_days = profitable_day_count
+            if day_pnl_for_prof_days >= min_profit_threshold:
+                current_prof_days += 1
+
+            if current_prof_days >= min_prof_days:
+                return StepResult(
+                    step_number=step_number,
+                    starting_balance=step_balance,
+                    ending_balance=balance,
+                    profit_target=profit_target_dollars,
+                    max_drawdown_limit=drawdown_floor,
+                    peak_balance=peak,
+                    trough_balance=trough,
+                    max_drawdown_dollars=max_dd_dollars,
+                    max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
+                    trades_taken=i + 1,
+                    passed=True,
+                    failure_reason=None,
+                    equity_curve=equity_curve,
+                    target_hit_trade_idx=target_hit_idx,
+                )
+            # else: target hit but not enough profitable days — keep trading
+
+        # If target was previously hit and we're still trading for min profitable days,
+        # check if we now have enough
+        elif target_already_hit and balance >= target_balance * 0.99:
+            # Still roughly at target; count days at next boundary
+            pass
+
+    # Count final partial day toward profitable days
+    if day_pnl_for_prof_days >= min_profit_threshold:
+        profitable_day_count += 1
+
+    # If target was reached but min profitable days weren't met during loop,
+    # check once more with final count
+    if target_already_hit and balance >= target_balance and profitable_day_count >= min_prof_days:
+        return StepResult(
+            step_number=step_number,
+            starting_balance=step_balance,
+            ending_balance=balance,
+            profit_target=profit_target_dollars,
+            max_drawdown_limit=drawdown_floor,
+            peak_balance=peak,
+            trough_balance=trough,
+            max_drawdown_dollars=max_dd_dollars,
+            max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
+            trades_taken=len(trade_pnls),
+            passed=True,
+            failure_reason=None,
+            equity_curve=equity_curve,
+            target_hit_trade_idx=target_hit_idx,
+        )
 
     # Ran out of trades
+    reason = f"Ran out of trades ({len(trade_pnls)}) without hitting +{effective_target_pct*100:.0f}% target"
+    if target_already_hit:
+        reason = f"Profit target hit but only {profitable_day_count}/{min_prof_days} profitable days met"
     return StepResult(
         step_number=step_number,
         starting_balance=step_balance,
@@ -494,9 +549,9 @@ def simulate_single_step(
         max_drawdown_pct=max_dd_dollars / step_balance if step_balance > 0 else 0,
         trades_taken=len(trade_pnls),
         passed=False,
-        failure_reason=f"Ran out of trades ({len(trade_pnls)}) without hitting +{effective_target_pct*100:.0f}% target",
+        failure_reason=reason,
         equity_curve=equity_curve,
-        target_hit_trade_idx=None,
+        target_hit_trade_idx=target_hit_idx,
     )
 
 
