@@ -1,0 +1,39 @@
+datasets:
+- path: Data/US_30m_2008_2026_tradestation.csv
+  market: US
+  timeframe: 30m
+- path: Data/US_15m_2008_2026_tradestation.csv
+  market: US
+  timeframe: 15m
+strategy_types: all
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 2.0
+  slippage_ticks: 2
+  tick_value: 31.25
+  dollars_per_point: 1000.0
+  use_vectorized_trades: true
+pipeline:
+  skip_portfolio_evaluation: true
+  max_workers_sweep: 48
+  max_workers_refinement: 48
+  max_candidates_to_refine: 3
+  oos_split_date: '2019-01-01'
+promotion_gate:
+  min_profit_factor: 1.0
+  min_average_trade: 0.0
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.0
+  min_oos_pf: 1.0
+  min_total_trades: 60
+output_dir: Outputs
+cloud:
+  machine_type: n2-highcpu-96
+  zone: us-central1-f
+  provisioning_model: SPOT
