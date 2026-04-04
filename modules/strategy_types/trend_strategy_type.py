@@ -458,11 +458,8 @@ class TrendStrategyType(BaseStrategyType):
             try:
                 tasks = [(combo, cfg) for combo in combinations]
                 for idx, res in enumerate(_executor.map(_run_trend_combo_case, tasks), start=1):
-                    print(
-                        f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
-                        f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
-                        f"trades={res['total_trades']}"
-                    )
+                    if (idx) % max(1, len(combinations) // 10) == 0 or idx == len(combinations):
+                        print(f"  Progress: {idx}/{len(combinations)} ({100*idx/len(combinations):.0f}%)")
                     res["filter_classes"] = combinations[idx - 1]
                     results.append(res)
                     if progress_callback is not None:
@@ -475,11 +472,8 @@ class TrendStrategyType(BaseStrategyType):
             _trend_worker_init(data, cfg)
             for idx, combo_classes in enumerate(combinations, start=1):
                 res = _run_trend_combo_case((combo_classes, cfg))
-                print(
-                    f"  Combo {idx}/{len(combinations)} | {res['strategy_name']} | "
-                    f"PF={res['profit_factor']:.2f} | Net={res['net_pnl']:.2f} | "
-                    f"trades={res['total_trades']}"
-                )
+                if (idx) % max(1, len(combinations) // 10) == 0 or idx == len(combinations):
+                    print(f"  Progress: {idx}/{len(combinations)} ({100*idx/len(combinations):.0f}%)")
                 res["filter_classes"] = combinations[idx - 1]
                 results.append(res)
                 if progress_callback is not None:
