@@ -15,7 +15,7 @@ engine:
   dollars_per_point: 50.0
   use_vectorized_trades: true
 pipeline:
-  skip_portfolio_evaluation: false
+  skip_portfolio_evaluation: true
   skip_portfolio_selector: true
   max_workers_sweep: 48
   max_workers_refinement: 48
