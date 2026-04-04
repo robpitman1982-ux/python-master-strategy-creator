@@ -1865,7 +1865,7 @@ def portfolio_robustness_test(
     """
     config = prop_config or The5ersBootcampConfig()
     final_step_key = f"step{config.n_steps}_pass_rate"
-    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0]
 
     for portfolio in portfolios[:10]:
         names = portfolio["strategy_names"]
