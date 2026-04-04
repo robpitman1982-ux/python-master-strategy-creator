@@ -47,10 +47,14 @@ pipeline:
     # Multi-layer correlation thresholds (loosened — defaults were rejecting everything)
     active_corr_threshold: 0.60    # Active-day correlation max (was 0.50)
     dd_corr_threshold: 0.80       # DD-state correlation max (was 0.40 — way too tight)
-    tail_coloss_threshold: 1.01   # DISABLED — tail co-loss calc is broken (DD series always < 0, so P≈1.0 for all pairs)
+    tail_coloss_threshold: 1.01   # DISABLED — tail co-loss calc is broken
     use_ecd: false                # Disable ECD gate (also rejecting everything)
     use_multi_layer_correlation: true
     use_regime_gate: true
+    dd_p95_limit_pct: 0.90        # was 0.70 — too conservative, forced all weights to minimum
+    dd_p99_limit_pct: 0.95        # was 0.90
+    max_strategies_per_market: 3  # was 2 — allow more per market in larger portfolios
+    max_equity_index_strategies: 5  # was 3 — too tight for k=5+ portfolios
 
 # --- Promotion gate (global defaults, strategy types can override) ---
 promotion_gate:

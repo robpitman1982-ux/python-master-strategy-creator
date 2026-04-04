@@ -908,14 +908,23 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
     for combo in chunk:
         rejected = False
         pair_corrs: list[float] = []
+        pair_dd_corrs: list[float] = []
+        pair_tail_corrs: list[float] = []
 
-        # Correlation gate
+        # Correlation gate — mean+max approach (allows larger portfolios)
+        # Instead of rejecting if ANY pair exceeds threshold, we:
+        # 1. Hard-reject if any pair has active_corr > 0.85 (near-duplicate)
+        # 2. Reject if MEAN active_corr across pairs > active_thresh
+        # 3. Reject if MEAN dd_corr across pairs > dd_thresh
+        hard_ceiling = 0.85
         for i in range(len(combo)):
             for j in range(i + 1, len(combo)):
                 ci_idx = _sw_col_idx.get(combo[i])
                 cj_idx = _sw_col_idx.get(combo[j])
                 if ci_idx is None or cj_idx is None:
                     pair_corrs.append(0.0)
+                    pair_dd_corrs.append(0.0)
+                    pair_tail_corrs.append(0.0)
                     continue
 
                 if use_ml:
@@ -923,13 +932,16 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
                     dc = abs(float(_sw_ml_dd[ci_idx, cj_idx]))
                     tc = float(_sw_ml_tail[ci_idx, cj_idx])
                     pair_corrs.append(ac)
-                    if ac > active_thresh or dc > dd_thresh or tc > tail_thresh:
+                    pair_dd_corrs.append(dc)
+                    pair_tail_corrs.append(tc)
+                    # Hard ceiling: near-duplicate strategies
+                    if ac > hard_ceiling:
                         rejected = True
                         break
                 else:
                     val = float(_sw_abs_corr[ci_idx, cj_idx])
                     pair_corrs.append(val)
-                    if val > 0.4:
+                    if val > hard_ceiling:
                         rejected = True
                         break
             if rejected:
@@ -937,6 +949,20 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
 
         if rejected:
             continue
+
+        # Mean-based threshold check (scales properly with portfolio size)
+        if pair_corrs:
+            mean_ac = sum(pair_corrs) / len(pair_corrs)
+            if mean_ac > active_thresh:
+                continue
+            if use_ml and pair_dd_corrs:
+                mean_dc = sum(pair_dd_corrs) / len(pair_dd_corrs)
+                if mean_dc > dd_thresh:
+                    continue
+            if use_ml and pair_tail_corrs:
+                mean_tc = sum(pair_tail_corrs) / len(pair_tail_corrs)
+                if mean_tc > tail_thresh:
+                    continue
 
         # Market concentration check
         combo_cands = [_sw_cands[_sw_cand_idx[s]] for s in combo]
@@ -1660,10 +1686,10 @@ def optimise_sizing(
     If no weight combo passes DD constraints, falls back to lowest p95_dd combo.
     """
     config = prop_config or The5ersBootcampConfig()
-    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0]
+    weight_options = [0.1, 0.2, 0.3, 0.5, 0.7, 1.0, 1.5, 2.0, 3.0, 5.0]
     n_weight_opts = len(weight_options)
     results: list[dict] = []
-    max_weight_samples = 250
+    max_weight_samples = 500
 
     for i, portfolio in enumerate(top_portfolios[:10]):
         names = portfolio["strategy_names"]
@@ -2086,6 +2112,12 @@ def run_portfolio_selection(
         raw_trade_lists=raw_trades if raw_trades else None,
         prop_config=prop_config,
         n_sims=n_sims_sizing,
+    )
+
+    # Re-sort by post-sizing pass rate (sizing changes pass rates dramatically)
+    optimised.sort(
+        key=lambda p: p.get("opt_final_pass_rate", p.get("final_pass_rate", 0.0)),
+        reverse=True,
     )
 
     _write_report(optimised, output_dir, candidates, prop_config=prop_config)
