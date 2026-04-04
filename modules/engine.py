@@ -651,6 +651,13 @@ class MasterStrategyEngine:
                 mfe_points=0.0,
             ))
 
+        # Build equity curve from cumulative trade PnL (matches scalar path)
+        equity = float(self.initial_capital)
+        self.equity_curve.append({"datetime": self.data.index[0], "equity": equity})
+        for t in self.trades:
+            equity += t.pnl
+            self.equity_curve.append({"datetime": t.exit_time, "equity": equity})
+
     def trades_dataframe(self) -> pd.DataFrame:
         if not self.trades:
             return pd.DataFrame()
