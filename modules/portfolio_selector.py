@@ -2105,7 +2105,12 @@ def run_portfolio_selection(
         candidates_by_label=cand_by_label,
     )
 
-    # Write report (pass candidates for trade frequency estimation)
+    # Re-sort by post-sizing pass rate before robustness test
+    optimised.sort(
+        key=lambda p: p.get("opt_final_pass_rate", p.get("final_pass_rate", 0.0)),
+        reverse=True,
+    )
+
     # Stage 6b: Robustness test
     optimised = portfolio_robustness_test(
         optimised, return_matrix,
