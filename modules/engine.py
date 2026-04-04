@@ -42,7 +42,7 @@ class Trade:
 
 
 class MasterStrategyEngine:
-    def __init__(self, data: pd.DataFrame, config: Optional[EngineConfig] = None):
+    def __init__(self, data: pd.DataFrame, config: Optional[EngineConfig] = None, *, copy_data: bool = True):
         if data is None or data.empty:
             raise ValueError("Data is empty. Cannot initialize engine.")
 
@@ -51,7 +51,7 @@ class MasterStrategyEngine:
         if missing:
             raise ValueError(f"Engine data is missing required columns: {missing}")
 
-        self.data = data.copy()
+        self.data = data.copy() if copy_data else data
         self.config = config or EngineConfig()
 
         self.initial_capital = float(self.config.initial_capital)

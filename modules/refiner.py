@@ -83,7 +83,7 @@ def _run_refinement_case(task: dict[str, Any]) -> dict[str, Any]:
         }
     strategy = _WORKER_STRATEGY_FACTORY(**strategy_kwargs)
 
-    engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG)
+    engine = _WORKER_ENGINE_CLASS(data=_WORKER_DATA, config=_WORKER_CONFIG, copy_data=False)
     if getattr(_WORKER_CONFIG, "use_vectorized_trades", False):
         engine.run_vectorized(strategy=strategy, precomputed_signals=_WORKER_PRECOMPUTED_SIGNALS)
     else:

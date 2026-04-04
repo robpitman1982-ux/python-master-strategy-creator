@@ -106,7 +106,7 @@ def _run_mr_combo_case(args) -> dict[str, Any]:
     # Vectorized path: compute signal mask once, pass to engine
     signal_mask = compute_combined_signal_mask(filter_objects, data)
 
-    engine = MasterStrategyEngine(data=data, config=cfg)
+    engine = MasterStrategyEngine(data=data, config=cfg, copy_data=False)
     if cfg.use_vectorized_trades:
         engine.run_vectorized(strategy=strategy, precomputed_signals=signal_mask)
     else:
