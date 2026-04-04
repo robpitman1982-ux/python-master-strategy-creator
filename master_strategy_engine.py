@@ -5,6 +5,14 @@ Project: Python Master Strategy Creator
 
 from __future__ import annotations
 
+# Cap BLAS/OpenMP threads BEFORE any numpy/pandas import —
+# prevents 90+ workers each spawning their own thread pool.
+import os
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+
 import argparse
 import time
 from pathlib import Path

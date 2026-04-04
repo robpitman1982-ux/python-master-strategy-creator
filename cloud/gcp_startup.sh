@@ -109,6 +109,12 @@ echo "RUNNING" > /tmp/engine_status
 # Clear any old log
 rm -f /tmp/engine_run.log
 
+# Cap BLAS/OpenMP threads — prevents worker thread explosion on multi-core VMs
+export OMP_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
 python master_strategy_engine.py > /tmp/engine_run.log 2>&1
 EXIT_CODE=$?
 
