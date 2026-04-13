@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-13 (Session: Infrastructure Hardening + Hardware Shopping)
+# Last updated: 2026-04-14 (Session: Cluster Storage & Data Pipeline Setup)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -22,6 +22,8 @@
 - Rob's primary laptop for scripting, development, and project building
 - Used at home AND in the field — this is where Rob works day-to-day
 - OpenSSH Server installed, key auth working, firewall port 22 open
+- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder ✅
+- **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.) ✅
 
 #### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON NETWORK HUB
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
@@ -34,24 +36,39 @@
 #### Gen 9 (DL360, dl360g9) — ALWAYS-ON DATA HUB + COMPUTE
 - Ubuntu 24.04, IP 192.168.68.69, Tailscale 100.121.107.49, iLO 192.168.68.75
 - MAC: ec:eb:b8:97:83:00
-- **ALWAYS ON — do NOT auto-shutdown.** ~$15-20/mo power. Remove auto-shutdown cron.
+- **ALWAYS ON.** ~$15-20/mo power. Auto-shutdown cron REMOVED ✅
 - SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
+- ssh-recover.service (25s delayed restart) ✅, root crontab SSH fallback (45s) ✅
 - ARP flush on boot (cron)
 - iLO power restore: Always Power On ✅ (set via iLO web UI AND ipmitool)
 - ipmitool installed
-- Samba share working: \\192.168.68.69\photos (3TB LVM volume)
+- **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs — all survived ✅
+- **Data hub directories on root SSD:**
+  - `/data/leaderboards/` — ultimate_leaderboard.csv + bootcamp (760KB)
+  - `/data/sweep_results/runs/` — all sweep output runs (2.1GB)
+  - `/data/market_data/` — 81 TradeStation CSVs (2.2GB)
+  - `/data/configs/` — 64 cloud config YAMLs + post_sweep.sh
+- **Samba shares** (user: rob, password: Ubuntu123.):
+  - `\\192.168.68.69\data` — parent share (all strategy data)
+  - `\\192.168.68.69\leaderboards`, `\\192.168.68.69\sweep_results`, `\\192.168.68.69\market_data`, `\\192.168.68.69\configs`
+  - `\\192.168.68.69\photos` — 3TB LVM volume
+  - Latitude mapped as Z: drive ✅
+- **rclone** v1.60.1 installed, nightly backup cron at 2am (NOT YET AUTHORIZED — needs OAuth)
+- rclone backup script: `/usr/local/bin/rclone_backup.sh`
 - SSH config has alias to gen8
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
 - SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
+- ssh-recover.service (25s delayed restart) ✅, root crontab SSH fallback (45s) ✅
 - Auto-shutdown 30min idle (cron), ARP flush on boot (cron)
 - iLO power restore: Always Power On ✅ (set via ipmitool chassis policy always-on)
 - iLO was on wrong subnet (192.168.20.233), FIXED to 192.168.68.76
 - Duplicate netplan FIXED (removed 50-cloud-init.yaml DHCP conflict)
+- **rsync to Gen 9 TESTED AND WORKING** ✅
+- **post_sweep.sh deployed** at `/usr/local/bin/post_sweep.sh` ✅
 - **ISSUE: SSH may take 5+ min to come up after reboot (slow BIOS POST). Not a config problem.**
-- **ISSUE: SSH failed to auto-start on one reboot test — needs further investigation. May need ssh-recover service fallback.**
 - SSH config has alias to gen9
 
 #### Dell R630 — ARRIVING / NOT YET SET UP (COMPUTE WORKER, SLEEPS WHEN IDLE)
@@ -84,8 +101,8 @@
 
 ## Open Issues (Priority Order)
 
-1. **Gen 8 SSH boot reliability** — failed to auto-start on one reboot test despite `systemctl enable ssh`. May need the ssh-recover.service fallback (25s delayed restart after multi-user.target). Critical before going under house.
-2. **Gen 9 reboot test NOT YET DONE** — needs clean reboot verification before going under house.
+1. **rclone Google Drive auth on Gen 9** — rclone installed, backup script + cron ready, but needs one-time OAuth. SSH to Gen 9, run `rclone config`, create remote named `gdrive`, type `drive`, follow headless OAuth flow. Test with `rclone lsd gdrive:`.
+2. **X1 Carbon offline** — could not reach via Tailscale or LAN (2026-04-14). Needs: Google Drive for Desktop installed (sync "Google Drive - Master Strat Creator" folder only, desktop shortcut), and `\\192.168.68.69\data` mapped as network drive.
 3. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
 4. **MT5 Netting vs Hedge mode on Contabo VPS.** Support email sent to The5ers.
 5. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
@@ -127,38 +144,44 @@ Latitude (main control, home + field, SSH via Tailscale)
 
 ## On The Horizon
 
-- **Remove auto-shutdown cron from Gen 9** (should be always-on)
-- Fix Gen 8 SSH boot reliability (ssh-recover.service)
-- Complete Gen 9 reboot test
-- Set up Google Drive for Desktop on Latitude + X1 Carbon, rclone on Gen 9
-- Build sweep results pipeline: Gen 8/R630 → rsync → Gen 9 → leaderboard update → rclone backup
+- **rclone OAuth authorization** on Gen 9 (one-time manual step, ~2 min)
+- **X1 Carbon setup**: Google Drive for Desktop + Samba drive mapping (machine currently offline)
 - Implement CFD swap/overnight cost modeling in MC simulator
-- Set up Gen 9 as data hub (leaderboards, market data, Samba shares)
-- Dell R630 full setup when it arrives
+- Dell R630 full setup when it arrives (deploy post_sweep.sh, SSH keys, same creds)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Vectorize trade simulation loop
 - Strategy templates to reduce search space
 - Static IP port forwarding setup once new ISP connected
+- 15m/30m sweeps for FX markets (JY, EC, BP, AD) to exploit near-zero swap costs
 
 ---
 
 ## Connection Quick Reference
 
 ```
-# SSH aliases (from X1 Carbon — Latitude needs same config set up)
-ssh gen9          # Gen 9 local (192.168.68.69)
-ssh gen9-ts       # Gen 9 Tailscale (100.121.107.49)
-ssh gen8          # Gen 8 local (192.168.68.71)
-ssh gen8-ts       # Gen 8 Tailscale (100.76.227.12)
-ssh homepc        # Latitude Tailscale (100.79.72.125)
+# SSH aliases (from Latitude or X1 Carbon)
+ssh gen9          # Gen 9 Tailscale (100.121.107.49)
+ssh gen8          # Gen 8 Tailscale (100.76.227.12)
+ssh x1            # X1 Carbon Tailscale (100.86.154.65)
+
+# Samba shares (user: rob, password: Ubuntu123.)
+\\192.168.68.69\data           # All strategy data (Z: on Latitude)
+\\192.168.68.69\leaderboards   # Ultimate leaderboards
+\\192.168.68.69\sweep_results  # Sweep output runs
+\\192.168.68.69\market_data    # TradeStation CSVs (81 files, 2.2GB)
+\\192.168.68.69\configs        # Cloud configs + post_sweep.sh
+\\192.168.68.69\photos         # 3TB photo archive
 
 # WOL (from X1 Carbon or Latitude)
 C:\Users\rob_p\wake-gen9.bat    # MAC ec:eb:b8:97:83:00 (only if Gen 9 is ever manually shut down)
 C:\Users\rob_p\wake-gen8.bat    # MAC ac:16:2d:6e:74:2c
-C:\Users\rob_p\wake-all.bat    # Both servers
+C:\Users\rob_p\wake-all.bat     # Both servers
 
 # Server creds: rob / Ubuntu123. (all servers, including future Dell R630)
 # GCP SSH: ssh -i C:\Users\Rob\.ssh\google_compute_engine pitman_nikola@35.223.104.173
+
+# Sweep results pipeline (run on worker after sweep):
+# post_sweep.sh <sweep_output_dir>   # rsync to Gen 9, trigger leaderboard update
 
 # iLO access
 Gen 9 iLO: https://192.168.68.75 (Administrator / PVPT6M5H)
