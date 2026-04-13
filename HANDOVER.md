@@ -17,24 +17,32 @@
 
 ### Home Lab Infrastructure
 
-#### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON CLAUDE HUB
+#### Lenovo Latitude (desktop-k2u9o61) — MAIN CONTROL & DEVELOPMENT MACHINE
+- Windows 10 Pro, Tailscale 100.79.72.125
+- Rob's primary laptop for scripting, development, and project building
+- Used at home AND in the field — this is where Rob works day-to-day
+- OpenSSH Server installed, key auth working, firewall port 22 open
+
+#### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON NETWORK HUB
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
-- Lid down, permanently connected to home LAN, Claude.ai + Desktop Commander
+- In a drawer, lid down, permanently connected to home LAN
+- Always-on Claude.ai + Desktop Commander endpoint
 - SSH config at C:\Users\rob_p\.ssh\config with aliases: gen9, gen9-ts, gen8, gen8-ts, homepc, contabo
 - WOL scripts: wake-gen9.bat, wake-gen8.bat, wake-all.bat in C:\Users\rob_p\
 - Port 22 firewall opened for inbound SSH
 
-#### Gen 9 (DL360, dl360g9) — COMPUTE + DATA HUB
+#### Gen 9 (DL360, dl360g9) — ALWAYS-ON DATA HUB + COMPUTE
 - Ubuntu 24.04, IP 192.168.68.69, Tailscale 100.121.107.49, iLO 192.168.68.75
 - MAC: ec:eb:b8:97:83:00
+- **ALWAYS ON — do NOT auto-shutdown.** ~$15-20/mo power. Remove auto-shutdown cron.
 - SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
-- Auto-shutdown 30min idle (cron), ARP flush on boot (cron)
+- ARP flush on boot (cron)
 - iLO power restore: Always Power On ✅ (set via iLO web UI AND ipmitool)
 - ipmitool installed
 - Samba share working: \\192.168.68.69\photos (3TB LVM volume)
 - SSH config has alias to gen8
 
-#### Gen 8 (DL380p, dl380p) — COMPUTE WORKER
+#### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
 - SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
@@ -46,12 +54,7 @@
 - **ISSUE: SSH failed to auto-start on one reboot test — needs further investigation. May need ssh-recover service fallback.**
 - SSH config has alias to gen9
 
-#### Home Desktop (desktop-k2u9o61) — SECONDARY
-- Windows 10 Pro, Tailscale 100.79.72.125
-- OpenSSH Server installed, key auth working, firewall port 22 open
-- SSH alias: homepc
-
-#### Dell R630 — ARRIVING / NOT YET SET UP
+#### Dell R630 — ARRIVING / NOT YET SET UP (COMPUTE WORKER, SLEEPS WHEN IDLE)
 - Will use Ubuntu 24.04, same creds (rob/Ubuntu123.)
 - Plan: compute worker alongside Gen 9
 
@@ -92,37 +95,46 @@
 ## Architecture Decision: Compute Cluster
 
 ```
-Phone / Latitude (field, SSH via Tailscale)
+Latitude (main control, home + field, SSH via Tailscale)
     │
-    └──► X1 Carbon (always-on hub, Claude + Desktop Commander)
-            │── dispatches sweeps to servers via SSH
-            │── Claude reads/analyzes results via SSH
-            │
-            ├──► Gen 9 (data hub + compute, 80 threads)
-            │     ├── holds master/ultimate leaderboards
-            │     ├── holds market data
-            │     ├── Samba share to X1 Carbon
-            │     └── rclone → Google Drive (future)
-            │
-            ├──► R630 (compute worker, 88 threads)
-            └──► Gen 8 (secondary compute / backup)
+    ├──► X1 Carbon (always-on, in drawer, Claude + Desktop Commander)
+    │        └── SSH relay to all servers
+    │
+    ├──► Gen 9 (ALWAYS ON — data hub + compute, 80 threads)
+    │     ├── holds master/ultimate leaderboards (local SSD)
+    │     ├── holds market data (local SSD)
+    │     ├── Samba share to X1 Carbon + Latitude
+    │     ├── rclone → Google Drive (backup copies only, NOT for compute reads)
+    │     ├── receives sweep results from Gen 8 / R630 via rsync
+    │     ├── runs leaderboard updater + portfolio selector
+    │     └── wakes Gen 8 / R630 via WOL when compute needed
+    │
+    ├──► Gen 8 (SLEEPS WHEN IDLE — compute worker)
+    │     └── woken by Latitude / X1 Carbon / Gen 9 via WOL
+    │
+    └──► R630 (SLEEPS WHEN IDLE — compute worker, 88 threads)
+          └── woken by Latitude / X1 Carbon / Gen 9 via WOL
 ```
 
-- Workers crunch sweeps, push results to Gen 9
-- X1 Carbon maps Gen 9 shares via Explorer
-- Portfolio selector runs on fastest available (Gen 9 or R630)
+- **Google Drive is backup/remote viewing ONLY — never used for compute reads**
+- Market data + leaderboards stay on local SSD for speed
+- Workers crunch sweeps, rsync results to Gen 9 over LAN
+- Portfolio selector runs on Gen 9 (or R630), reads from local SSD
+- Gen 9 NEVER sleeps (~$15-20/mo power). Workers sleep when idle.
 - RAM split (96GB DDR4 total): 56GB Gen 9 / 40GB R630 (or 64/32 depending on DIMM sizes)
 
 ---
 
 ## On The Horizon
 
+- **Remove auto-shutdown cron from Gen 9** (should be always-on)
 - Fix Gen 8 SSH boot reliability (ssh-recover.service)
 - Complete Gen 9 reboot test
+- Set up Google Drive for Desktop on Latitude + X1 Carbon, rclone on Gen 9
+- Build sweep results pipeline: Gen 8/R630 → rsync → Gen 9 → leaderboard update → rclone backup
 - Implement CFD swap/overnight cost modeling in MC simulator
 - Set up Gen 9 as data hub (leaderboards, market data, Samba shares)
 - Dell R630 full setup when it arrives
-- Google Drive backup via rclone on Gen 9
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Vectorize trade simulation loop
 - Strategy templates to reduce search space
@@ -133,15 +145,15 @@ Phone / Latitude (field, SSH via Tailscale)
 ## Connection Quick Reference
 
 ```
-# SSH aliases (from X1 Carbon)
+# SSH aliases (from X1 Carbon — Latitude needs same config set up)
 ssh gen9          # Gen 9 local (192.168.68.69)
 ssh gen9-ts       # Gen 9 Tailscale (100.121.107.49)
 ssh gen8          # Gen 8 local (192.168.68.71)
 ssh gen8-ts       # Gen 8 Tailscale (100.76.227.12)
-ssh homepc        # Home Desktop Tailscale (100.79.72.125)
+ssh homepc        # Latitude Tailscale (100.79.72.125)
 
-# WOL (from X1 Carbon)
-C:\Users\rob_p\wake-gen9.bat    # MAC ec:eb:b8:97:83:00
+# WOL (from X1 Carbon or Latitude)
+C:\Users\rob_p\wake-gen9.bat    # MAC ec:eb:b8:97:83:00 (only if Gen 9 is ever manually shut down)
 C:\Users\rob_p\wake-gen8.bat    # MAC ac:16:2d:6e:74:2c
 C:\Users\rob_p\wake-all.bat    # Both servers
 
