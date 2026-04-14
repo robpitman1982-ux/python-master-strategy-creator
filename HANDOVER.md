@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-14 (Session: rclone OAuth + X1 Carbon Recovery)
+# Last updated: 2026-04-10 (Session: Repo cleanup + handover consolidation)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -22,9 +22,9 @@
 - Rob's primary laptop for scripting, development, and project building
 - Used at home AND in the field — this is where Rob works day-to-day
 - OpenSSH Server installed, key auth working, firewall port 22 open
-- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder ✅
-- **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.) ✅ (reconnects on home LAN)
-- **rclone** installed via winget (used for headless OAuth token generation) ✅
+- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder
+- **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.)
+- **rclone** installed via winget (used for headless OAuth token generation)
 
 #### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON NETWORK HUB
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
@@ -33,48 +33,47 @@
 - SSH config at C:\Users\rob_p\.ssh\config with aliases: gen9, gen9-ts, gen8, gen8-ts, homepc, contabo
 - WOL scripts: wake-gen9.bat, wake-gen8.bat, wake-all.bat in C:\Users\rob_p\
 - Port 22 firewall opened for inbound SSH
-- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder ✅
-- **Samba drive** mapped to `\\192.168.68.69\data` ✅
-- **Back online** (2026-04-14) — power supply had died, replaced ✅
+- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder
+- **Samba drive** mapped to `\\192.168.68.69\data`
+- **Back online** (2026-04-14) — power supply had died, replaced
 
 #### Gen 9 (DL360, dl360g9) — ALWAYS-ON DATA HUB + COMPUTE
 - Ubuntu 24.04, IP 192.168.68.69, Tailscale 100.121.107.49, iLO 192.168.68.75
 - MAC: ec:eb:b8:97:83:00
-- **ALWAYS ON.** ~$15-20/mo power. Auto-shutdown cron REMOVED ✅
-- SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
-- ssh-recover.service (25s delayed restart) ✅, root crontab SSH fallback (45s) ✅
+- **ALWAYS ON.** ~$15-20/mo power. Auto-shutdown cron REMOVED
+- SSH enabled at boot, key auth, WOL persistent via netplan
+- ssh-recover.service (25s delayed restart), root crontab SSH fallback (45s)
 - ARP flush on boot (cron)
-- iLO power restore: Always Power On ✅ (set via iLO web UI AND ipmitool)
+- iLO power restore: Always Power On (set via iLO web UI AND ipmitool)
 - ipmitool installed
-- **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs — all survived ✅
+- **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs survived
 - **Data hub directories on root SSD:**
   - `/data/leaderboards/` — ultimate_leaderboard.csv + bootcamp (760KB)
   - `/data/sweep_results/runs/` — all sweep output runs (2.1GB)
   - `/data/market_data/` — 81 TradeStation CSVs (2.2GB)
   - `/data/configs/` — 64 cloud config YAMLs + post_sweep.sh
-  - `/data/portfolio_outputs/` — portfolio selector outputs (new, empty) ✅
+  - `/data/portfolio_outputs/` — portfolio selector outputs
 - **Samba shares** (user: rob, password: Ubuntu123.):
   - `\\192.168.68.69\data` — parent share (all strategy data)
   - `\\192.168.68.69\leaderboards`, `\\192.168.68.69\sweep_results`, `\\192.168.68.69\market_data`, `\\192.168.68.69\configs`
   - `\\192.168.68.69\photos` — 3TB LVM volume
-  - Latitude mapped as Z: drive ✅, X1 Carbon mapped ✅
-- **rclone** v1.60.1 installed, **OAuth authorized** ✅, remote name: `gdrive`
+  - Latitude mapped as Z: drive, X1 Carbon mapped
+- **rclone** v1.60.1 installed, **OAuth authorized**, remote name: `gdrive`
 - rclone backup script: `/usr/local/bin/rclone_backup.sh` — syncs leaderboards + sweep_results + portfolio_outputs
-- rclone nightly cron: `0 2 * * *` in rob's crontab ✅
-- **Manual backup test PASSED** (2026-04-14): leaderboards pushed to `gdrive:strategy-data-backup/leaderboards/` ✅
+- rclone nightly cron: `0 2 * * *` in rob's crontab
 - SSH config has alias to gen8
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
-- SSH enabled at boot ✅, key auth ✅, WOL persistent via netplan ✅
-- ssh-recover.service (25s delayed restart) ✅, root crontab SSH fallback (45s) ✅
+- SSH enabled at boot, key auth, WOL persistent via netplan
+- ssh-recover.service (25s delayed restart), root crontab SSH fallback (45s)
 - Auto-shutdown 30min idle (cron), ARP flush on boot (cron)
-- iLO power restore: Always Power On ✅ (set via ipmitool chassis policy always-on)
+- iLO power restore: Always Power On (set via ipmitool chassis policy always-on)
 - iLO was on wrong subnet (192.168.20.233), FIXED to 192.168.68.76
 - Duplicate netplan FIXED (removed 50-cloud-init.yaml DHCP conflict)
-- **rsync to Gen 9 TESTED AND WORKING** ✅
-- **post_sweep.sh deployed** at `/usr/local/bin/post_sweep.sh` ✅
+- **rsync to Gen 9 TESTED AND WORKING**
+- **post_sweep.sh deployed** at `/usr/local/bin/post_sweep.sh`
 - **ISSUE: SSH may take 5+ min to come up after reboot (slow BIOS POST). Not a config problem.**
 - SSH config has alias to gen9
 
@@ -97,12 +96,18 @@
 - **GCP (Nikola's account):** project-c6c16a27-e123-459c-b7a, console IP 35.223.104.173
   - n2-highcpu-96, 100 vCPU quota cap (upgrade denied)
   - Bucket: gs://strategy-artifacts-nikolapitman/
+  - Migrated from old GCP account (project-813d2513) in Session 56 after $424 credit exhausted
 - To be decommissioned once local lab stable
 
 ### Strategy Engine Status
-- **Ultimate leaderboard:** ~454 strategies (414 bootcamp-accepted)
-- **Vectorized engine:** Confirmed working. All 52 cloud config YAMLs updated
+- **Ultimate leaderboard:** ~454 strategies (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
+- **Vectorized engine:** 14-23x speedup, zero-tolerance parity confirmed. All cloud configs updated with `use_vectorized_trades: true`
+- **12 strategy families:** 3 long (trend, MR, breakout) + 3 short + 9 subtypes (3 per family)
+- **Portfolio selector:** 6-stage pipeline with 3-layer correlation, block bootstrap MC, regime survival gate
+- **Prop firm system:** Bootcamp, High Stakes, Pro Growth, Hyper Growth — all with daily DD enforcement
 - **CFD swap rates gathered:** CL=$0.70/micro/night (10x Fri!), SI=$4.05, GC=$2.20, indices near-zero, FX $0.10-0.26
+- **9 new markets** (EC, JY, BP, AD, NG, US, TY, W, BTC) — configs ready, AD 30m+15m sweep completed
+- **SPOT runner bug:** VMs launched from Claude sessions used on-demand instead of SPOT. Fixed by deleting VM. Must use `run_spot_resilient.py` from strategy-console for proper SPOT provisioning.
 
 ---
 
@@ -111,6 +116,75 @@
 1. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
 2. **MT5 Netting vs Hedge mode on Contabo VPS.** Support email sent to The5ers.
 3. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+4. **SPOT runner needs restart.** AD daily failed after 5 preemption attempts. Remaining markets (BP, EC, JY, NG, US, TY, W, BTC) not yet started.
+5. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
+6. **Provisioning model override bug** in `launch_gcp_run.py` line 2324 — YAML `STANDARD` can override CLI `SPOT` default. Not triggered by `run_spot_resilient.py` (which generates correct configs), but manual launches may be affected.
+
+---
+
+## Project History (Sessions 0-62)
+
+### Phase 1: Foundation (Sessions 0-5, Mar 16-18 2026)
+- **Session 0:** Project review, first ES 60m run analyzed (trend REGIME_DEPENDENT, MR STABLE, breakout BROKEN_IN_OOS), created CLAUDE.md
+- **Session 1:** Quality scoring (0-1 continuous), BORDERLINE detection, promotion gate capped at 20, compute budget estimator, candidate dedup
+- **Session 2:** Config.yaml (single source of truth), yearly consistency analysis, multi-dataset loop support, OOS split date configurable
+- **Session 3:** Cloud deployment prep — Dockerfile, requirements.txt, DigitalOcean run scripts, Sydney region
+- **Session 4:** Structured logging (ProgressTracker + status.json), cloud launcher timeout fix
+- **Session 5:** 11 smoke tests, master leaderboard aggregator, timeframe-aware refinement grids (hold_bars auto-scales)
+
+### Phase 2: Cloud Infrastructure (Sessions 6-14, Mar 18-21 2026)
+- **Session 6:** Hybrid filter parameter scaling (SMA/ATR/momentum scale per timeframe), 48-core cloud config, memory estimation
+- **Session 7:** Prop firm challenge simulator — The5ers Bootcamp/HighStakes/HyperGrowth configs, Monte Carlo pass rate
+- **Session 8:** CRITICAL BUG FIX — portfolio evaluator now passes timeframe to feature builders. GCP automation scripts created.
+- **Session 9:** 10 GCP automation bugs fixed (SCP paths, race conditions, username detection). Streamlit dashboard created.
+- **Session 10:** GCP download reliability — dynamic username via `whoami`, tar fallback, safety gate (refuse destroy if 0 files)
+- **Session 11:** Windows-first GCP launcher redesign (`cloud/launch_gcp_run.py`) — manifest, bundle, deterministic paths, tarball retrieval
+- **Session 13:** Dashboard upgrade — VM cost visibility, dataset progress, best candidates panel, result source grouping
+- **Session 14:** One-click `run_cloud_sweep.py` wrapper, `LATEST_RUN.txt` pointer
+
+### Phase 3: Multi-Timeframe & Quality (Sessions 21-34, Mar 23-26 2026)
+- **Session 21:** Migrated from Australia to US regions (better SPOT pricing), zone/machine configurable via YAML `cloud:` section
+- **Session 22:** Fixed remote Python bootstrap (python3.12 explicit for venv creation)
+- **Session 24:** Dashboard overhaul — 3-tab layout (Control Panel, Results Explorer, System), plotly charts
+- **Session 33:** Pre-flight validation, vectorized filter status check (not yet implemented)
+- **Session 34:** CRITICAL FIX — GCS bundle staging for fire-and-forget mode (43MB SCP was hitting SPOT preemption window)
+- **Session 35:** Multi-VM split (VM-A + VM-B), `download_run.py` with merge and ultimate leaderboard
+
+### Phase 4: Strategy Expansion (Sessions 37-45, Mar 26-29 2026)
+- **Session 37:** 9 strategy subtypes (3 per family), leaderboard enriched with calmar/win_rate/trades_per_year
+- **Session 38:** Cross-dataset portfolio evaluation — all accepted strategies evaluated together, cross-TF correlation matrix
+- **Session 39:** Short-side strategies (15 new filters, 3 short families), direction wired through engine
+- **Session 40:** Per-timeframe dataset caching, concurrent small-family execution, exit types verified active in refinement
+- **Session 41:** Widened exit grids — trend trailing_stop_atr up to 7.0, breakout up to 5.0, MR profit_target up to 3.0
+- **Session 42:** 7 universal filters (InsideBar, OutsideBar, GapUp/Down, ATRPercentile, HigherHigh, LowerLow), dropped 5m (zero accepted)
+- **Session 43:** Shared ProcessPoolExecutor across families, optional portfolio evaluation, granular status stages
+- **Session 44:** Refinement as_completed() (30%→80%+ CPU), task dedup before dispatch
+- **Session 45:** CRITICAL BUG FIX — position sizing used current_capital (compounding) instead of initial_capital. All dollar figures were wrong.
+
+### Phase 5: Portfolio Selection (Sessions 47-53, Mar 31 2026)
+- **Session 47:** Portfolio selector module — 6-stage pipeline with C(n,k) sweep, Pearson correlation gate, MC pass rate, sizing optimizer
+- **Session 48:** Rebuild fix (fallback to filter_class_names), parallelized evaluator, MC step rate bug fix
+- **Session 49:** Rebuild 0-trade root cause (min_avg_range misused as filter param), all 20/20 market/TF combos verified
+- **Session 50:** Portfolio MC fixes — step rate mixing, daily-resampled trades, correlation dedup, micro contract sizing, time-to-fund
+- **Session 51:** Portfolio overhaul — OOS PF threshold lowered, sizing optimizer minimizes time-to-fund, strategy_trades.csv
+- **Session 52:** Multi-program prop firm (per-step targets, daily DD enforcement, Pro Growth config, configurable program selector)
+- **Session 53:** Parallelized generate_returns.py with ThreadPoolExecutor + data file caching
+
+### Phase 6: Cloud Migration & Advanced MC (Sessions 56-62, Apr 2-4 2026)
+- **Session 56:** Migrated to new GCP account (Nikola), new console VM, bucket, SSH keys
+- **Session 58:** Portfolio selector upgrades — 3-layer correlation, Expected Conditional Drawdown, block bootstrap MC, regime survival gate
+- **Session 59:** Bulletproof SPOT runner (`run_spot_resilient.py`), 9 new market configs (EC, JY, BP, AD, NG, US, TY, W, BTC)
+- **Session 60:** Vectorized portfolio MC (numpy 2D arrays), parallel combinatorial sweep, multi-program runner
+- **Session 61:** Vectorized trade simulation loop (14-23x speedup, zero-tolerance parity), prop firm config fixes (daily DD pause vs terminate)
+- **Session 62:** Repo reorganization for Claude Desktop compatibility, archived 93 session files + 60 temp dirs, fixed .gitignore
+
+### Key Architectural Decisions Made Along the Way
+- **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
+- **Dropped 5m timeframe** (Session 42): zero accepted strategies, ~50% of compute cost
+- **Fire-and-forget via GCS** (Session 34): bundle staged to GCS before VM creation, eliminates SCP preemption window
+- **Vectorized trades** (Session 61): numpy 2D arrays replace per-bar Python loop, 14-23x faster
+- **Block bootstrap MC** (Session 58): preserves crisis clustering vs naive shuffle
+- **3-layer correlation** (Session 58): active-day + DD-state + tail co-loss replaces simple Pearson
 
 ---
 
@@ -152,10 +226,11 @@ Latitude (main control, home + field, SSH via Tailscale)
 - Implement CFD swap/overnight cost modeling in MC simulator
 - Dell R630 full setup when it arrives (deploy post_sweep.sh, SSH keys, same creds)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
-- Vectorize trade simulation loop
 - Strategy templates to reduce search space
 - Static IP port forwarding setup once new ISP connected
-- 15m/30m sweeps for FX markets (JY, EC, BP, AD) to exploit near-zero swap costs
+- Complete 9-market SPOT sweep (BP, EC, JY, NG, US, TY, W, BTC remaining)
+- Walk-forward validation as alternative to fixed IS/OOS split
+- Bayesian/Optuna optimization for refinement grid
 
 ---
 
@@ -201,3 +276,4 @@ Gen 8 iLO: https://192.168.68.76 (old SSL - use Firefox, creds unknown)
 - Drawdown is the binding constraint on The5ers
 - Skip DDR3 servers (R710, R610) — only R630/R730 and above
 - SPOT zone: us-central1-f; on-demand fallback: us-central1-c
+- Always use `run_spot_resilient.py` from strategy-console for SPOT sweeps — never launch manually
