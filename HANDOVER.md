@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-14 (Session: Cluster Storage & Data Pipeline Setup)
+# Last updated: 2026-04-14 (Session: rclone OAuth + X1 Carbon Recovery)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -23,7 +23,8 @@
 - Used at home AND in the field — this is where Rob works day-to-day
 - OpenSSH Server installed, key auth working, firewall port 22 open
 - **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder ✅
-- **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.) ✅
+- **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.) ✅ (reconnects on home LAN)
+- **rclone** installed via winget (used for headless OAuth token generation) ✅
 
 #### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON NETWORK HUB
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
@@ -32,6 +33,9 @@
 - SSH config at C:\Users\rob_p\.ssh\config with aliases: gen9, gen9-ts, gen8, gen8-ts, homepc, contabo
 - WOL scripts: wake-gen9.bat, wake-gen8.bat, wake-all.bat in C:\Users\rob_p\
 - Port 22 firewall opened for inbound SSH
+- **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder ✅
+- **Samba drive** mapped to `\\192.168.68.69\data` ✅
+- **Back online** (2026-04-14) — power supply had died, replaced ✅
 
 #### Gen 9 (DL360, dl360g9) — ALWAYS-ON DATA HUB + COMPUTE
 - Ubuntu 24.04, IP 192.168.68.69, Tailscale 100.121.107.49, iLO 192.168.68.75
@@ -48,13 +52,16 @@
   - `/data/sweep_results/runs/` — all sweep output runs (2.1GB)
   - `/data/market_data/` — 81 TradeStation CSVs (2.2GB)
   - `/data/configs/` — 64 cloud config YAMLs + post_sweep.sh
+  - `/data/portfolio_outputs/` — portfolio selector outputs (new, empty) ✅
 - **Samba shares** (user: rob, password: Ubuntu123.):
   - `\\192.168.68.69\data` — parent share (all strategy data)
   - `\\192.168.68.69\leaderboards`, `\\192.168.68.69\sweep_results`, `\\192.168.68.69\market_data`, `\\192.168.68.69\configs`
   - `\\192.168.68.69\photos` — 3TB LVM volume
-  - Latitude mapped as Z: drive ✅
-- **rclone** v1.60.1 installed, nightly backup cron at 2am (NOT YET AUTHORIZED — needs OAuth)
-- rclone backup script: `/usr/local/bin/rclone_backup.sh`
+  - Latitude mapped as Z: drive ✅, X1 Carbon mapped ✅
+- **rclone** v1.60.1 installed, **OAuth authorized** ✅, remote name: `gdrive`
+- rclone backup script: `/usr/local/bin/rclone_backup.sh` — syncs leaderboards + sweep_results + portfolio_outputs
+- rclone nightly cron: `0 2 * * *` in rob's crontab ✅
+- **Manual backup test PASSED** (2026-04-14): leaderboards pushed to `gdrive:strategy-data-backup/leaderboards/` ✅
 - SSH config has alias to gen8
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
@@ -101,11 +108,9 @@
 
 ## Open Issues (Priority Order)
 
-1. **rclone Google Drive auth on Gen 9** — rclone installed, backup script + cron ready, but needs one-time OAuth. SSH to Gen 9, run `rclone config`, create remote named `gdrive`, type `drive`, follow headless OAuth flow. Test with `rclone lsd gdrive:`.
-2. **X1 Carbon offline** — could not reach via Tailscale or LAN (2026-04-14). Needs: Google Drive for Desktop installed (sync "Google Drive - Master Strat Creator" folder only, desktop shortcut), and `\\192.168.68.69\data` mapped as network drive.
-3. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
-4. **MT5 Netting vs Hedge mode on Contabo VPS.** Support email sent to The5ers.
-5. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+1. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
+2. **MT5 Netting vs Hedge mode on Contabo VPS.** Support email sent to The5ers.
+3. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 
 ---
 
@@ -144,8 +149,6 @@ Latitude (main control, home + field, SSH via Tailscale)
 
 ## On The Horizon
 
-- **rclone OAuth authorization** on Gen 9 (one-time manual step, ~2 min)
-- **X1 Carbon setup**: Google Drive for Desktop + Samba drive mapping (machine currently offline)
 - Implement CFD swap/overnight cost modeling in MC simulator
 - Dell R630 full setup when it arrives (deploy post_sweep.sh, SSH keys, same creds)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
@@ -182,6 +185,10 @@ C:\Users\rob_p\wake-all.bat     # Both servers
 
 # Sweep results pipeline (run on worker after sweep):
 # post_sweep.sh <sweep_output_dir>   # rsync to Gen 9, trigger leaderboard update
+
+# rclone backup (runs nightly at 2am from Gen 9, rob's crontab)
+# Manual: rclone copy /data/leaderboards gdrive:strategy-data-backup/leaderboards/ --progress
+# Backup script: /usr/local/bin/rclone_backup.sh
 
 # iLO access
 Gen 9 iLO: https://192.168.68.75 (Administrator / PVPT6M5H)
