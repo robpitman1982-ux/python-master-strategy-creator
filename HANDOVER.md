@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-10 (Session: Repo cleanup + handover consolidation)
+# Last updated: 2026-04-15 (Session: CFD tick data pipeline + CPU/RAM planning)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -13,7 +13,22 @@
   - Projected: 99.6% pass rate, 6.9% DD, ~13.4 months to fund
 - **Portfolio #1 EA** also live on same VPS
 - **The5ers** account 26213568 on FivePercentOnline-Real (MT5), $5K High Stakes
-- **Contabo VPS blocker:** MT5 Netting vs Hedge mode — CFD symbols unavailable. Support email sent to The5ers.
+- **MT5 on Contabo:** Hedge mode working ✅, CFD symbols available, portfolio running
+
+### CFD Tick Data Pipeline
+- **Architecture decision:** Dukascopy tick data for strategy discovery (deep history, 2003+), The5ers tick data for execution validation (real spreads)
+- **Dukascopy strategies are portable** across all CFD prop firms, not just The5ers
+- **Pipeline:** Dukascopy ticks → tick-to-bar converter (with spread stats) → engine OHLC CSVs → sweep → MT5 Strategy Tester validation
+- **dukascopy-python** v4.0.1 installed on Gen 9 ✅
+- **Dukascopy symbol mapping (confirmed):** EUR/USD, USD/JPY, GBP/USD, AUD/USD, XAU/USD, XAG/USD, BTC/USD, ETH/USD, E_NQ-100, E_DAAX, E_Futsee-100, E_N225Jap
+- **Dukascopy symbol mapping (MISSING — need investigation):** SP500 (ES), US30 (YM), WTI crude (CL)
+- **Gen 9 storage ready:** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` created, 437 GB free
+- **The5ers MT5 tick exports** (manual via Ctrl+U → Ticks → Export, saved to `Z:\market_data\mt5_ticks\`):
+  - SP500: ✅ 3.1 GB, 76.5M ticks from 2022-05-23
+  - NAS100: ✅ 10.6 GB, 245.8M ticks from 2022-05-23
+  - US30 through UK100: in progress (manual export)
+  - XAUUSD: only 5 days of data on The5ers — useless for backtesting, need Dukascopy
+- **The5ers tick data depth varies wildly:** indices have ~4 years, XAUUSD has 5 days, FX unknown
 
 ### Home Lab Infrastructure
 
@@ -25,6 +40,7 @@
 - **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder
 - **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.)
 - **rclone** installed via winget (used for headless OAuth token generation)
+- **MT5** installed, connected to The5ers (Hedge mode) — used for manual tick data exports
 
 #### X1 Carbon (desktop-2kc70vg) — ALWAYS-ON NETWORK HUB
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
@@ -46,11 +62,16 @@
 - ARP flush on boot (cron)
 - iLO power restore: Always Power On (set via iLO web UI AND ipmitool)
 - ipmitool installed
+- **CPU:** Currently 1× E5-2603 v4 (6C/6T @ 1.7GHz). Second socket empty. **Upgrade: 2× E5-2673 v4 (40C/80T @ 2.3GHz, turbo 3.5GHz, 135W TDP each) arriving 2026-04-15**
+- **RAM:** 1× 32GB DDR4-2400 ECC RDIMM 2Rx4 (HP 809083-091) in PROC 1 DIMM 12. **23 of 24 slots empty.** PROC 2 slots only available once second CPU installed.
+- **Storage:** 7.3 TB disk, root LV extended to 500 GB (437 GB free), photos LV 3.0 TB, VG has 3.79 TiB free
 - **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs survived
 - **Data hub directories on root SSD:**
   - `/data/leaderboards/` — ultimate_leaderboard.csv + bootcamp (760KB)
   - `/data/sweep_results/runs/` — all sweep output runs (2.1GB)
-  - `/data/market_data/` — 81 TradeStation CSVs (2.2GB)
+  - `/data/market_data/` — 81 TradeStation CSVs (2.2GB) + mt5_ticks/ (The5ers exports)
+  - `/data/dukascopy/raw_ticks/` — Dukascopy tick data (empty, ready for download)
+  - `/data/dukascopy/ohlc_bars/` — converted OHLC bars for engine (empty, ready)
   - `/data/configs/` — 64 cloud config YAMLs + post_sweep.sh
   - `/data/portfolio_outputs/` — portfolio selector outputs
 - **Samba shares** (user: rob, password: Ubuntu123.):
@@ -61,11 +82,14 @@
 - **rclone** v1.60.1 installed, **OAuth authorized**, remote name: `gdrive`
 - rclone backup script: `/usr/local/bin/rclone_backup.sh` — syncs leaderboards + sweep_results + portfolio_outputs
 - rclone nightly cron: `0 2 * * *` in rob's crontab
+- **dukascopy-python** v4.0.1 installed (pip3, --break-system-packages)
 - SSH config has alias to gen8
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
+- **CPU upgrade: 2× E5-2697 v2 (24C/48T @ 2.7GHz, turbo 3.5GHz, 130W TDP each) arriving 2026-04-15**
+- **RAM: DDR3 ECC RDIMM** — NOT DDR4! Cannot share DIMMs with Gen 9 or R630.
 - SSH enabled at boot, key auth, WOL persistent via netplan
 - ssh-recover.service (25s delayed restart), root crontab SSH fallback (45s)
 - Auto-shutdown 30min idle (cron), ARP flush on boot (cron)
@@ -83,8 +107,8 @@
 
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
-- **RAM needed:** DDR4 ECC RDIMM 32GB sticks, ~$15-25 each on eBay. Check what's in Gen 9/R630 first to match speed/rank.
-- **Skip:** Anything DDR3 (R710, R610, R620, R720). Only R630/R730 and above.
+- **RAM needed:** DDR4 ECC RDIMM 32GB sticks for Gen 9 (match 2Rx4 DDR4-2400 or faster). DDR3 for Gen 8.
+- **Skip:** Anything DDR3 for Gen 9/R630. Only DDR4 ECC RDIMM.
 
 ### Network
 - **New ISP:** Carbon Comms, 500/50 Mbps NBN, **static IP** (being connected)
@@ -114,11 +138,13 @@
 ## Open Issues (Priority Order)
 
 1. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
-2. **MT5 Netting vs Hedge mode on Contabo VPS.** Support email sent to The5ers.
+2. **Dukascopy symbol mapping incomplete.** SP500 (ES), US30 (YM), WTI crude (CL) not found in dukascopy-python constants — need to investigate raw API instrument names.
 3. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 4. **SPOT runner needs restart.** AD daily failed after 5 preemption attempts. Remaining markets (BP, EC, JY, NG, US, TY, W, BTC) not yet started.
 5. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
-6. **Provisioning model override bug** in `launch_gcp_run.py` line 2324 — YAML `STANDARD` can override CLI `SPOT` default. Not triggered by `run_spot_resilient.py` (which generates correct configs), but manual launches may be affected.
+6. **Provisioning model override bug** in `launch_gcp_run.py` line 2324 — YAML `STANDARD` can override CLI `SPOT` default.
+7. **Gen 9 CPU install pending.** 2× E5-2673 v4 arriving 2026-04-15. Need to swap out E5-2603 v4, install both CPUs, verify 80 threads visible.
+8. **Gen 8 CPU install pending.** 2× E5-2697 v2 arriving 2026-04-15.
 
 ---
 
@@ -185,6 +211,7 @@
 - **Vectorized trades** (Session 61): numpy 2D arrays replace per-bar Python loop, 14-23x faster
 - **Block bootstrap MC** (Session 58): preserves crisis clustering vs naive shuffle
 - **3-layer correlation** (Session 58): active-day + DD-state + tail co-loss replaces simple Pearson
+- **Dukascopy for discovery, The5ers for validation** (Session 63): tick data architecture separates strategy discovery (deep Dukascopy history) from execution validation (The5ers real spreads)
 
 ---
 
@@ -196,16 +223,16 @@ Latitude (main control, home + field, SSH via Tailscale)
     ├──► X1 Carbon (always-on, in drawer, Claude + Desktop Commander)
     │        └── SSH relay to all servers
     │
-    ├──► Gen 9 (ALWAYS ON — data hub + compute, 80 threads)
+    ├──► Gen 9 (ALWAYS ON — data hub + compute, 80 threads after CPU upgrade)
     │     ├── holds master/ultimate leaderboards (local SSD)
-    │     ├── holds market data (local SSD)
+    │     ├── holds market data — TradeStation, MT5 ticks, Dukascopy ticks (local SSD)
     │     ├── Samba share to X1 Carbon + Latitude
     │     ├── rclone → Google Drive (backup copies only, NOT for compute reads)
     │     ├── receives sweep results from Gen 8 / R630 via rsync
     │     ├── runs leaderboard updater + portfolio selector
     │     └── wakes Gen 8 / R630 via WOL when compute needed
     │
-    ├──► Gen 8 (SLEEPS WHEN IDLE — compute worker)
+    ├──► Gen 8 (SLEEPS WHEN IDLE — compute worker, 48 threads after CPU upgrade)
     │     └── woken by Latitude / X1 Carbon / Gen 9 via WOL
     │
     └──► R630 (SLEEPS WHEN IDLE — compute worker, 88 threads)
@@ -217,20 +244,21 @@ Latitude (main control, home + field, SSH via Tailscale)
 - Workers crunch sweeps, rsync results to Gen 9 over LAN
 - Portfolio selector runs on Gen 9 (or R630), reads from local SSD
 - Gen 9 NEVER sleeps (~$15-20/mo power). Workers sleep when idle.
-- RAM split (96GB DDR4 total): 56GB Gen 9 / 40GB R630 (or 64/32 depending on DIMM sizes)
 
 ---
 
 ## On The Horizon
 
+- **Dukascopy tick data download** — resolve missing symbol names (SP500, US30, CL), write download script, run overnight on Gen 9
+- **Tick-to-bar converter** — aggregate Dukascopy ticks into OHLC bars with spread stats, output TradeStation-compatible CSVs
+- **Gen 9 CPU install** — swap E5-2603 v4 for 2× E5-2673 v4, verify 80 threads, populate PROC 2 DIMM slots with RAM
+- **Gen 8 CPU install** — install 2× E5-2697 v2, verify 48 threads
 - Implement CFD swap/overnight cost modeling in MC simulator
 - Dell R630 full setup when it arrives (deploy post_sweep.sh, SSH keys, same creds)
+- Complete MT5 manual tick exports for remaining symbols (US30, XAGUSD, XTIUSD, EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, DAX40, JPN225, UK100)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
 - Static IP port forwarding setup once new ISP connected
-- Complete 9-market SPOT sweep (BP, EC, JY, NG, US, TY, W, BTC remaining)
-- Walk-forward validation as alternative to fixed IS/OOS split
-- Bayesian/Optuna optimization for refinement grid
 
 ---
 
@@ -246,7 +274,7 @@ ssh x1            # X1 Carbon Tailscale (100.86.154.65)
 \\192.168.68.69\data           # All strategy data (Z: on Latitude)
 \\192.168.68.69\leaderboards   # Ultimate leaderboards
 \\192.168.68.69\sweep_results  # Sweep output runs
-\\192.168.68.69\market_data    # TradeStation CSVs (81 files, 2.2GB)
+\\192.168.68.69\market_data    # TradeStation CSVs + mt5_ticks/
 \\192.168.68.69\configs        # Cloud configs + post_sweep.sh
 \\192.168.68.69\photos         # 3TB photo archive
 
@@ -275,5 +303,7 @@ Gen 8 iLO: https://192.168.68.76 (old SSL - use Firefox, creds unknown)
 - Full fixes only — no patches
 - Drawdown is the binding constraint on The5ers
 - Skip DDR3 servers (R710, R610) — only R630/R730 and above
+- Gen 8 uses DDR3 RAM, Gen 9 and R630 use DDR4 — do NOT mix
 - SPOT zone: us-central1-f; on-demand fallback: us-central1-c
 - Always use `run_spot_resilient.py` from strategy-console for SPOT sweeps — never launch manually
+- Dukascopy for strategy discovery, The5ers tick data for execution cost validation
