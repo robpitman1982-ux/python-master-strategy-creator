@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-16 (Session: Dell R630 Ubuntu install + full configuration)
+# Last updated: 2026-04-16 (Session: Dell R630 fully configured + c240 pending)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -114,6 +114,11 @@
 - `post_sweep.sh` deployed at `/usr/local/bin/post_sweep.sh`
 - Gen 9 SSH alias `r630` pointing to 192.168.68.78, Gen 9 key authorised on r630 ✅
 - **FULLY CONFIGURED** — ready to run sweeps
+
+#### HP ProLiant c240 (Hermes) — PENDING SETUP (COMPUTE WORKER)
+- Ubuntu 24.04 install planned — same process as R630
+- Will use same creds (rob / Ubuntu123), same SSH/Tailscale/WOL/post_sweep pattern
+- Setup deferred to next session when Rob returns home
 
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
@@ -264,7 +269,8 @@ Latitude (main control, home + field, SSH via Tailscale)
 - **Gen 9 CPU install** — swap E5-2603 v4 for 2× E5-2673 v4, verify 80 threads, populate PROC 2 DIMM slots with RAM
 - **Gen 8 CPU install** — install 2× E5-2697 v2, verify 48 threads
 - Implement CFD swap/overnight cost modeling in MC simulator
-- ~~Dell R630 full setup~~ ✅ Fully configured — Ubuntu 24.04, Tailscale 100.85.102.4, 823GB storage, post_sweep.sh, WOL, ssh-recover.service, Gen 9 SSH trust
+- **HP c240 (Hermes) Ubuntu setup** — install Ubuntu 24.04, same config as R630 (SSH, Tailscale, WOL, post_sweep.sh, auto-shutdown)
+- ~~Dell R630 full setup~~ ✅
 - Complete MT5 manual tick exports for remaining symbols (US30, XAGUSD, XTIUSD, EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, DAX40, JPN225, UK100)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
