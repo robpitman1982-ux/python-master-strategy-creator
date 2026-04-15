@@ -109,7 +109,11 @@
 - System updated, packages: htop, iotop, net-tools, curl, wget, git, python3-pip, Tailscale installed
 - SSH service configured (socket disabled, service enabled) — same pattern as Gen 8/Gen 9
 - NOPASSWD sudoers set for rob
-- **TODO:** post_sweep.sh deploy, WOL setup, SSH alias on Gen 9, auto-shutdown cron, SSH recover service
+- `ssh-recover.service` enabled, auto-shutdown cron (30 min idle), ARP flush + SSH fallback @reboot crons
+- WOL: MAC **ec:f4:bb:ed:bf:00** (eno1), netplan wakeonlan set, `wake-r630.bat` on Latitude
+- `post_sweep.sh` deployed at `/usr/local/bin/post_sweep.sh`
+- Gen 9 SSH alias `r630` pointing to 192.168.68.78, Gen 9 key authorised on r630 ✅
+- **FULLY CONFIGURED** — ready to run sweeps
 
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
@@ -260,7 +264,7 @@ Latitude (main control, home + field, SSH via Tailscale)
 - **Gen 9 CPU install** — swap E5-2603 v4 for 2× E5-2673 v4, verify 80 threads, populate PROC 2 DIMM slots with RAM
 - **Gen 8 CPU install** — install 2× E5-2697 v2, verify 48 threads
 - Implement CFD swap/overnight cost modeling in MC simulator
-- ~~Dell R630 full setup when it arrives~~ ✅ Ubuntu installed, configured, on Tailscale (100.85.102.4) — pending: post_sweep.sh, WOL, auto-shutdown
+- ~~Dell R630 full setup~~ ✅ Fully configured — Ubuntu 24.04, Tailscale 100.85.102.4, 823GB storage, post_sweep.sh, WOL, ssh-recover.service, Gen 9 SSH trust
 - Complete MT5 manual tick exports for remaining symbols (US30, XAGUSD, XTIUSD, EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, DAX40, JPN225, UK100)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
@@ -285,10 +289,9 @@ ssh x1            # X1 Carbon Tailscale (100.86.154.65)
 \\192.168.68.69\configs        # Cloud configs + post_sweep.sh
 \\192.168.68.69\photos         # 3TB photo archive
 
-# WOL (from X1 Carbon or Latitude)
-C:\Users\rob_p\wake-gen9.bat    # MAC ec:eb:b8:97:83:00 (only if Gen 9 is ever manually shut down)
-C:\Users\rob_p\wake-gen8.bat    # MAC ac:16:2d:6e:74:2c
-C:\Users\rob_p\wake-all.bat     # Both servers
+# WOL (from Latitude)
+C:\Users\Rob\wake-r630.bat      # MAC ec:f4:bb:ed:bf:00
+C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c (on X1 Carbon)
 
 # Server creds: rob / Ubuntu123. (all servers, including future Dell R630)
 # GCP SSH: ssh -i C:\Users\Rob\.ssh\google_compute_engine pitman_nikola@35.223.104.173
@@ -303,6 +306,7 @@ C:\Users\rob_p\wake-all.bat     # Both servers
 # iLO access
 Gen 9 iLO: https://192.168.68.75 (Administrator / PVPT6M5H)
 Gen 8 iLO: https://192.168.68.76 (old SSL - use Firefox, creds unknown)
+R630 LAN:  192.168.68.78, Tailscale 100.85.102.4, MAC ec:f4:bb:ed:bf:00
 ```
 
 ## Key Principles
