@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-15 (Session: CFD tick data pipeline + CPU/RAM planning)
+# Last updated: 2026-04-16 (Session: Dell R630 Ubuntu install + full configuration)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -101,9 +101,15 @@
 - **ISSUE: SSH may take 5+ min to come up after reboot (slow BIOS POST). Not a config problem.**
 - SSH config has alias to gen9
 
-#### Dell R630 — ARRIVING / NOT YET SET UP (COMPUTE WORKER, SLEEPS WHEN IDLE)
-- Will use Ubuntu 24.04, same creds (rob/Ubuntu123.)
-- Plan: compute worker alongside Gen 9
+#### Dell R630 — COMPUTE WORKER (SLEEPS WHEN IDLE)
+- Ubuntu 24.04.4 LTS, hostname: r630, IP 192.168.68.78, Tailscale 100.85.102.4
+- Credentials: rob / Ubuntu123 (same as cluster)
+- SSH key auth working (Latitude key), SSH alias: `r630`
+- **Storage:** 838 GB SSD, LVM expanded to 823 GB root volume (778 GB free)
+- System updated, packages: htop, iotop, net-tools, curl, wget, git, python3-pip, Tailscale installed
+- SSH service configured (socket disabled, service enabled) — same pattern as Gen 8/Gen 9
+- NOPASSWD sudoers set for rob
+- **TODO:** post_sweep.sh deploy, WOL setup, SSH alias on Gen 9, auto-shutdown cron, SSH recover service
 
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
@@ -254,7 +260,7 @@ Latitude (main control, home + field, SSH via Tailscale)
 - **Gen 9 CPU install** — swap E5-2603 v4 for 2× E5-2673 v4, verify 80 threads, populate PROC 2 DIMM slots with RAM
 - **Gen 8 CPU install** — install 2× E5-2697 v2, verify 48 threads
 - Implement CFD swap/overnight cost modeling in MC simulator
-- Dell R630 full setup when it arrives (deploy post_sweep.sh, SSH keys, same creds)
+- ~~Dell R630 full setup when it arrives~~ ✅ Ubuntu installed, configured, on Tailscale (100.85.102.4) — pending: post_sweep.sh, WOL, auto-shutdown
 - Complete MT5 manual tick exports for remaining symbols (US30, XAGUSD, XTIUSD, EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, DAX40, JPN225, UK100)
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
@@ -268,6 +274,7 @@ Latitude (main control, home + field, SSH via Tailscale)
 # SSH aliases (from Latitude or X1 Carbon)
 ssh gen9          # Gen 9 Tailscale (100.121.107.49)
 ssh gen8          # Gen 8 Tailscale (100.76.227.12)
+ssh r630          # Dell R630 Tailscale (100.85.102.4)
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
 
 # Samba shares (user: rob, password: Ubuntu123.)
