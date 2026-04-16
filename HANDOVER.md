@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-16 (Session: R630 fully configured, c240 Ubuntu install, Gen9 CPU arrival, SP500 Dukascopy complete)
+# Last updated: 2026-04-16 (Session: R630 complete, c240 autonomous agent server configured, CPU arrival, SP500 Dukascopy complete)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -118,12 +118,19 @@
 - Gen 9 SSH alias `r630` pointing to 192.168.68.78, Gen 9 key authorised on r630 ✅
 - **FULLY CONFIGURED** — ready to run sweeps
 
-#### Cisco C240 M4 — IN PROGRESS (COMPUTE WORKER)
-- Ubuntu 24.04 install in progress (garage, April 16)
-- Samsung SSD 118GB — MegaRAID 12G SAS controller requires virtual drive creation (RAID 0 single disk) + Fast Initialization before Ubuntu installer can see disk
-- Hostname: c240, credentials: rob / Ubuntu123
-- **TODO:** Complete Ubuntu install, SSH key push, full config (same as R630 process)
-- MegaRAID note: always create virtual drive in BIOS before attempting Ubuntu install
+#### Cisco C240 M4 — AUTONOMOUS AGENT SERVER (ALWAYS ON)
+- Ubuntu 24.04, hostname: c240, LAN 192.168.68.79, Tailscale 100.104.66.48
+- Credentials: rob / Ubuntu123, SSH alias: `c240`
+- **Purpose: Standalone autonomous agent/Hermes server — NOT part of backtest cluster**
+- Runs 24/7 on passive income projects: Amazon affiliate, AI agents, autonomous workflows
+- **Storage:** 118GB SSD, LVM expanded to 115GB root (97GB free)
+- System updated, packages: htop, curl, wget, git, python3 3.12, pip, venv, nodejs 18, npm, Docker 29.1.3
+- Docker enabled and running, rob added to docker group
+- SSH service configured (socket off, service on), ssh-recover.service enabled
+- NOPASSWD sudoers set, WOL via netplan (eno1)
+- Tailscale operator set for rob (no sudo needed for tailscale)
+- **FULLY CONFIGURED ✅**
+- MegaRAID note: required virtual drive creation (RAID 0) + Fast Initialization in BIOS before Ubuntu could see disk
 
 #### HP ProLiant c240 (Hermes) — PENDING SETUP (COMPUTE WORKER)
 - Ubuntu 24.04 install planned — same process as R630
@@ -318,7 +325,8 @@ Latitude (main control, home + field, SSH via Tailscale)
 # SSH aliases (from Latitude or X1 Carbon)
 ssh gen9          # Gen 9 Tailscale (100.121.107.49)
 ssh gen8          # Gen 8 Tailscale (100.76.227.12)
-ssh r630          # Dell R630 Tailscale (100.85.102.4)
+ssh r630          # Dell R630 Tailscale (100.85.102.4) — backtest cluster
+ssh c240          # Cisco C240 Tailscale (100.104.66.48) — autonomous agent server
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
 
 # Samba shares (user: rob, password: Ubuntu123.)
