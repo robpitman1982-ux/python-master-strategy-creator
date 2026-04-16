@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-16 (Session: Dell R630 fully configured + c240 pending)
+# Last updated: 2026-04-16 (Session: R630 fully configured, c240 Ubuntu install, Gen9 CPU arrival, SP500 Dukascopy complete)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -21,7 +21,8 @@
 - **Pipeline:** Dukascopy ticks → tick-to-bar converter (with spread stats) → engine OHLC CSVs → sweep → MT5 Strategy Tester validation
 - **dukascopy-python** v4.0.1 installed on Gen 9 ✅
 - **Dukascopy symbol mapping (confirmed):** EUR/USD, USD/JPY, GBP/USD, AUD/USD, XAU/USD, XAG/USD, BTC/USD, ETH/USD, E_NQ-100, E_DAAX, E_Futsee-100, E_N225Jap
-- **Dukascopy symbol mapping (MISSING — need investigation):** SP500 (ES), US30 (YM), WTI crude (CL)
+- **Dukascopy symbol mapping (MISSING — need investigation):** US30 (YM), WTI crude (CL)
+- **SP500 Dukascopy download COMPLETE ✅** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), stored at `/data/dukascopy/raw_ticks/sp500/` on Gen 9
 - **Gen 9 storage ready:** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` created, 437 GB free
 - **The5ers MT5 tick exports** (manual via Ctrl+U → Ticks → Export, saved to `Z:\market_data\mt5_ticks\`):
   - SP500: ✅ 3.1 GB, 76.5M ticks from 2022-05-23
@@ -62,7 +63,8 @@
 - ARP flush on boot (cron)
 - iLO power restore: Always Power On (set via iLO web UI AND ipmitool)
 - ipmitool installed
-- **CPU:** Currently 1× E5-2603 v4 (6C/6T @ 1.7GHz). Second socket empty. **Upgrade: 2× E5-2673 v4 (40C/80T @ 2.3GHz, turbo 3.5GHz, 135W TDP each) arriving 2026-04-15**
+- **CPU:** 2× E5-2673 v4 **ARRIVED** ✅ (20C/40T each @ 2.3GHz, turbo 3.5GHz). **Install tomorrow (under house).** Currently still running 1× E5-2603 v4.
+- BIOS: HP P89 (Oct 2017) — supports E5-2673 v4 ✅, no update needed
 - **RAM:** 1× 32GB DDR4-2400 ECC RDIMM 2Rx4 (HP 809083-091) in PROC 1 DIMM 12. **23 of 24 slots empty.** PROC 2 slots only available once second CPU installed.
 - **Storage:** 7.3 TB disk, root LV extended to 500 GB (437 GB free), photos LV 3.0 TB, VG has 3.79 TiB free
 - **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs survived
@@ -88,7 +90,8 @@
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
-- **CPU upgrade: 2× E5-2697 v2 (24C/48T @ 2.7GHz, turbo 3.5GHz, 130W TDP each) arriving 2026-04-15**
+- **CPU upgrade: 2× E5-2697 v2 **ARRIVED** ✅ (12C/24T each @ 2.7GHz, turbo 3.5GHz). **Install tomorrow (under house).** 
+- BIOS: HP P70 (Feb 2014) — supports E5-2697 v2 ✅, no update needed
 - **RAM: DDR3 ECC RDIMM** — NOT DDR4! Cannot share DIMMs with Gen 9 or R630.
 - SSH enabled at boot, key auth, WOL persistent via netplan
 - ssh-recover.service (25s delayed restart), root crontab SSH fallback (45s)
@@ -114,6 +117,13 @@
 - `post_sweep.sh` deployed at `/usr/local/bin/post_sweep.sh`
 - Gen 9 SSH alias `r630` pointing to 192.168.68.78, Gen 9 key authorised on r630 ✅
 - **FULLY CONFIGURED** — ready to run sweeps
+
+#### Cisco C240 M4 — IN PROGRESS (COMPUTE WORKER)
+- Ubuntu 24.04 install in progress (garage, April 16)
+- Samsung SSD 118GB — MegaRAID 12G SAS controller requires virtual drive creation (RAID 0 single disk) + Fast Initialization before Ubuntu installer can see disk
+- Hostname: c240, credentials: rob / Ubuntu123
+- **TODO:** Complete Ubuntu install, SSH key push, full config (same as R630 process)
+- MegaRAID note: always create virtual drive in BIOS before attempting Ubuntu install
 
 #### HP ProLiant c240 (Hermes) — PENDING SETUP (COMPUTE WORKER)
 - Ubuntu 24.04 install planned — same process as R630
@@ -262,12 +272,36 @@ Latitude (main control, home + field, SSH via Tailscale)
 
 ---
 
-## On The Horizon
+## Compute Rental Side Hustle (Future — Post Trading Stable)
 
-- **Dukascopy tick data download** — resolve missing symbol names (SP500, US30, CL), write download script, run overnight on Gen 9
-- **Tick-to-bar converter** — aggregate Dukascopy ticks into OHLC bars with spread stats, output TradeStation-compatible CSVs
-- **Gen 9 CPU install** — swap E5-2603 v4 for 2× E5-2673 v4, verify 80 threads, populate PROC 2 DIMM slots with RAM
-- **Gen 8 CPU install** — install 2× E5-2697 v2, verify 48 threads
+**Concept:** Rent idle cluster compute to retail quants, ML students, researchers.
+
+**Two tiers:**
+- Tier 1: Raw CPU rental ($0.04 AUD/thread-hour), fully automated, no support
+- Tier 2: Managed QuantSweep Service — customer uploads strategy, gets results in 24hrs, higher margin
+
+**Economics:** 240 threads, $3.20 AUD/day electricity, ~$2K AUD/month net at 30-40% utilisation. Scalable — each $350 server adds ~60 threads, pays for itself in 6 weeks. Tax deductible capex.
+
+**Implementation order:**
+1. VLAN isolation — rental network must be completely separate from MT5/trading network (security critical)
+2. Docker containerisation — customer code can't break out to host
+3. Best-effort SLA (no liability for interruptions)
+4. Python job queue + Stripe payments + AI chatbot support
+5. Beta: 3 customers at discount, 3 months, then go public
+
+**Positioning:** "Quant Sweep Infrastructure as a Service" — not generic compute rental
+**Timeline:** Start after trading stable and generating. ~2 weeks setup, month 3 launch.
+
+---
+
+
+
+- ~~**Dukascopy SP500 download**~~ ✅ COMPLETE — 3.4GB, 2012-2026 on Gen 9
+- **Tick-to-bar converter** — aggregate SP500 Dukascopy parquets into OHLC bars, output TradeStation-compatible CSVs (next priority)
+- **Gen 9 CPU install** — 2× E5-2673 v4 arrived, install tomorrow under house, verify 40 threads per socket (80 total)
+- **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install same session, verify 48 threads
+- **Cisco C240 Ubuntu** — complete install (in progress), then full config same as R630
+- **Thermal paste** — clean heatsinks with ethyl sanitiser, apply fresh paste before CPU install
 - Implement CFD swap/overnight cost modeling in MC simulator
 - **HP c240 (Hermes) Ubuntu setup** — install Ubuntu 24.04, same config as R630 (SSH, Tailscale, WOL, post_sweep.sh, auto-shutdown)
 - ~~Dell R630 full setup~~ ✅
