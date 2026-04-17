@@ -61,6 +61,8 @@ def load_tradestation_csv(filepath: str | Path, debug: bool = True) -> pd.DataFr
 
     if "Volume" in df.columns:
         vol = num(df["Volume"]).fillna(0)
+    elif "Vol" in df.columns:
+        vol = num(df["Vol"]).fillna(0)
     elif "Up" in df.columns and "Down" in df.columns:
         vol = (num(df["Up"]).fillna(0) + num(df["Down"]).fillna(0))
     else:
