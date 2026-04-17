@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-16 (Session: R630 complete, c240 autonomous agent server configured, CPU arrival, SP500 Dukascopy complete)
+# Last updated: 2026-04-17 (Session 65: CFD data pipeline + local sweep infrastructure)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -15,18 +15,24 @@
 - **The5ers** account 26213568 on FivePercentOnline-Real (MT5), $5K High Stakes
 - **MT5 on Contabo:** Hedge mode working ✅, CFD symbols available, portfolio running
 
-### CFD Tick Data Pipeline
+### CFD Data Pipeline (Session 65 — NEW)
 - **Architecture decision:** Dukascopy tick data for strategy discovery (deep history, 2003+), The5ers tick data for execution validation (real spreads)
 - **Dukascopy strategies are portable** across all CFD prop firms, not just The5ers
-- **Pipeline:** Dukascopy ticks → tick-to-bar converter (with spread stats) → engine OHLC CSVs → sweep → MT5 Strategy Tester validation
-- **dukascopy-python** v4.0.1 installed on Gen 9 ✅
-- **Dukascopy symbol mapping (confirmed):** EUR/USD, USD/JPY, GBP/USD, AUD/USD, XAU/USD, XAG/USD, BTC/USD, ETH/USD, E_NQ-100, E_DAAX, E_Futsee-100, E_N225Jap
-- **Dukascopy symbol mapping (MISSING — need investigation):** US30 (YM), WTI crude (CL)
-- **SP500 Dukascopy download COMPLETE ✅** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), stored at `/data/dukascopy/raw_ticks/sp500/` on Gen 9
+- **Pipeline:** TDS Metatrader exports (Dukascopy via Tick Data Suite) -> `scripts/convert_tds_to_engine.py` -> TradeStation-format CSVs -> engine sweep -> MT5 Strategy Tester validation
+- **Format converter built (Session 65):** `scripts/convert_tds_to_engine.py` handles 24 markets, 5 timeframe codes, verified with OHLC exact match. 26 tests passing.
+- **Engine loader updated:** `load_tradestation_csv()` now recognizes "Vol" column header from converted Dukascopy files
+- **24 CFD market configs:** `configs/cfd_markets.yaml` with engine params, cost profiles, OOS split dates
+- **Local sweep infrastructure:** `run_local_sweep.py` (single market) + `run_cluster_sweep.py` (batch orchestrator with resume) + `scripts/generate_sweep_configs.py` (24 configs generated in `configs/local_sweeps/`)
+- **TDS export location (Latitude):** `C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy\`
+- **TDS symbol naming:** `{SYMBOL}_GMT+0_NO-DST_{TIMEFRAME}.csv` (e.g., `USA_500_Index_GMT+0_NO-DST_H1.csv`)
+- **Converted data files:** 15 files available for ES (5 TFs), AD (2 TFs), NZDUSD (5 TFs) — rest pending TDS export
+- **dukascopy-python** v4.0.1 installed on Gen 9 (for raw tick downloads, separate from TDS path)
+- **SP500 Dukascopy download COMPLETE** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), stored at `/data/dukascopy/raw_ticks/sp500/` on Gen 9
 - **Gen 9 storage ready:** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` created, 437 GB free
-- **The5ers MT5 tick exports** (manual via Ctrl+U → Ticks → Export, saved to `Z:\market_data\mt5_ticks\`):
-  - SP500: ✅ 3.1 GB, 76.5M ticks from 2022-05-23
-  - NAS100: ✅ 10.6 GB, 245.8M ticks from 2022-05-23
+- **Gen 9 new data target:** `/data/market_data/dukascopy/` for converted CSVs
+- **The5ers MT5 tick exports** (manual via Ctrl+U -> Ticks -> Export, saved to `Z:\market_data\mt5_ticks\`):
+  - SP500: 3.1 GB, 76.5M ticks from 2022-05-23
+  - NAS100: 10.6 GB, 245.8M ticks from 2022-05-23
   - US30 through UK100: in progress (manual export)
   - XAUUSD: only 5 days of data on The5ers — useless for backtesting, need Dukascopy
 - **The5ers tick data depth varies wildly:** indices have ~4 years, XAUUSD has 5 days, FX unknown
@@ -37,6 +43,7 @@
 - Windows 10 Pro, Tailscale 100.79.72.125
 - Rob's primary laptop for scripting, development, and project building
 - Used at home AND in the field — this is where Rob works day-to-day
+- **Modern Standby disabled** (registry: PlatformAoAcOverride=0) — prevents random wake/sleep issues
 - OpenSSH Server installed, key auth working, firewall port 22 open
 - **Google Drive for Desktop** installed, syncing "Google Drive - Master Strat Creator" folder
 - **Z: drive** mapped to `\\192.168.68.69\data` (Gen 9 Samba, creds: rob/Ubuntu123.)
@@ -119,7 +126,7 @@
 - **FULLY CONFIGURED** — ready to run sweeps
 
 #### Cisco C240 M4 — AUTONOMOUS AGENT SERVER (ALWAYS ON)
-- Ubuntu 24.04, hostname: c240, LAN 192.168.68.79, Tailscale 100.104.66.48
+- Ubuntu 24.04, hostname: c240, **static IP 192.168.68.79** (netplan configured), Tailscale 100.104.66.48
 - Credentials: rob / Ubuntu123, SSH alias: `c240`
 - **Purpose: Standalone autonomous agent/Hermes server — NOT part of backtest cluster**
 - Runs 24/7 on passive income projects: Amazon affiliate, AI agents, autonomous workflows
@@ -148,35 +155,43 @@
 - Static IP enables: direct SSH from field, Hermes webhooks, dashboard access, Contabo push-to-home
 - Recommendation: Keep Tailscale as primary remote access. Use static IP for specific services only.
 
-### Cloud Infrastructure
+### Cloud Infrastructure (DEPRECATED — migrating to local cluster)
 - **GCP (Nikola's account):** project-c6c16a27-e123-459c-b7a, console IP 35.223.104.173
   - n2-highcpu-96, 100 vCPU quota cap (upgrade denied)
   - Bucket: gs://strategy-artifacts-nikolapitman/
   - Migrated from old GCP account (project-813d2513) in Session 56 after $424 credit exhausted
-- To be decommissioned once local lab stable
+- **Status: DEPRECATED.** Local sweep infrastructure built in Session 65. Cloud files (`cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`) pending manual deletion once local sweeps proven.
+- **Strategy console** (strategy-console-2, 35.223.104.173) can be decommissioned after dashboard migrated to local
 
 ### Strategy Engine Status
 - **Ultimate leaderboard:** ~454 strategies (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
-- **Vectorized engine:** 14-23x speedup, zero-tolerance parity confirmed. All cloud configs updated with `use_vectorized_trades: true`
+- **Vectorized engine:** 14-23x speedup, zero-tolerance parity confirmed. All configs use `use_vectorized_trades: true`
 - **12 strategy families:** 3 long (trend, MR, breakout) + 3 short + 9 subtypes (3 per family)
 - **Portfolio selector:** 6-stage pipeline with 3-layer correlation, block bootstrap MC, regime survival gate
 - **Prop firm system:** Bootcamp, High Stakes, Pro Growth, Hyper Growth — all with daily DD enforcement
+- **CFD sweep infrastructure (Session 65):**
+  - `run_local_sweep.py` — single-market local sweep runner (replaces GCP cloud runners)
+  - `run_cluster_sweep.py` — batch orchestrator with manifest tracking + resume support
+  - `configs/cfd_markets.yaml` — 24 CFD market configs with engine params + cost profiles
+  - `configs/local_sweeps/` — 24 generated per-market sweep configs (all 5 timeframes each)
+  - `scripts/convert_tds_to_engine.py` — TDS Metatrader CSV -> TradeStation format converter
+  - `scripts/generate_sweep_configs.py` — generates sweep configs from market master config
 - **CFD swap rates gathered:** CL=$0.70/micro/night (10x Fri!), SI=$4.05, GC=$2.20, indices near-zero, FX $0.10-0.26
-- **9 new markets** (EC, JY, BP, AD, NG, US, TY, W, BTC) — configs ready, AD 30m+15m sweep completed
-- **SPOT runner bug:** VMs launched from Claude sessions used on-demand instead of SPOT. Fixed by deleting VM. Must use `run_spot_resilient.py` from strategy-console for proper SPOT provisioning.
+- **Cloud services deprecated:** GCP SPOT runner (`run_spot_resilient.py`), GCP launcher (`launch_gcp_run.py`), cloud configs (`cloud/`) — all pending deletion once local sweeps proven. Do NOT delete yet.
+- **SPOT runner bug (legacy):** VMs launched from Claude sessions used on-demand instead of SPOT. No longer relevant — sweeps moving to local cluster.
 
 ---
 
 ## Open Issues (Priority Order)
 
-1. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines.
-2. **Dukascopy symbol mapping incomplete.** SP500 (ES), US30 (YM), WTI crude (CL) not found in dukascopy-python constants — need to investigate raw API instrument names.
-3. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
-4. **SPOT runner needs restart.** AD daily failed after 5 preemption attempts. Remaining markets (BP, EC, JY, NG, US, TY, W, BTC) not yet started.
-5. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
-6. **Provisioning model override bug** in `launch_gcp_run.py` line 2324 — YAML `STANDARD` can override CLI `SPOT` default.
-7. **Gen 9 CPU install pending.** 2× E5-2673 v4 arriving 2026-04-15. Need to swap out E5-2603 v4, install both CPUs, verify 80 threads visible.
-8. **Gen 8 CPU install pending.** 2× E5-2697 v2 arriving 2026-04-15.
+1. **Export remaining TDS data.** Only ES, AD, NZDUSD exported via Tick Data Suite. Need to export all 24 markets x 5 timeframes. Some markets (BTCUSD, LIGHTCMDUSD, etc.) have subdirectories but no exported CSVs yet.
+2. **Gen 9 CPU install pending.** 2x E5-2673 v4 arrived. Need to swap out E5-2603 v4, install both CPUs, verify 80 threads visible. Thermal paste needed.
+3. **Gen 8 CPU install pending.** 2x E5-2697 v2 arrived. Install same session as Gen 9, verify 48 threads.
+4. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
+5. **First local sweep validation.** Run `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate the full pipeline end-to-end.
+6. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
+7. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+8. **Cloud decommission.** Once local sweeps proven: delete `cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM. Keep `download_run.py` for existing results access.
 
 ---
 
@@ -236,6 +251,10 @@
 - **Session 61:** Vectorized trade simulation loop (14-23x speedup, zero-tolerance parity), prop firm config fixes (daily DD pause vs terminate)
 - **Session 62:** Repo reorganization for Claude Desktop compatibility, archived 93 session files + 60 temp dirs, fixed .gitignore
 
+### Phase 7: Local Cluster & CFD Pipeline (Sessions 63-65, Apr 14-17 2026)
+- **Session 63:** Dukascopy architecture decision, SP500 tick download, The5ers MT5 exports, home lab network setup
+- **Session 65:** CFD data pipeline built end-to-end: TDS format converter (24 markets), engine loader "Vol" support, 24 CFD market configs, local sweep runner, batch cluster sweep launcher with resume, config generator (24 sweep YAMLs). Cloud infrastructure deprecated.
+
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
 - **Dropped 5m timeframe** (Session 42): zero accepted strategies, ~50% of compute cost
@@ -244,6 +263,7 @@
 - **Block bootstrap MC** (Session 58): preserves crisis clustering vs naive shuffle
 - **3-layer correlation** (Session 58): active-day + DD-state + tail co-loss replaces simple Pearson
 - **Dukascopy for discovery, The5ers for validation** (Session 63): tick data architecture separates strategy discovery (deep Dukascopy history) from execution validation (The5ers real spreads)
+- **Local cluster replaces cloud** (Session 65): `run_local_sweep.py` + `run_cluster_sweep.py` replace GCP SPOT runners. Zero cloud dependencies. ~216 threads available locally (Gen 9: 80, Gen 8: 48, R630: 88).
 
 ---
 
@@ -303,19 +323,21 @@ Latitude (main control, home + field, SSH via Tailscale)
 
 
 
-- ~~**Dukascopy SP500 download**~~ ✅ COMPLETE — 3.4GB, 2012-2026 on Gen 9
-- **Tick-to-bar converter** — aggregate SP500 Dukascopy parquets into OHLC bars, output TradeStation-compatible CSVs (next priority)
-- **Gen 9 CPU install** — 2× E5-2673 v4 arrived, install tomorrow under house, verify 40 threads per socket (80 total)
-- **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install same session, verify 48 threads
-- **Cisco C240 Ubuntu** — complete install (in progress), then full config same as R630
-- **Thermal paste** — clean heatsinks with ethyl sanitiser, apply fresh paste before CPU install
-- Implement CFD swap/overnight cost modeling in MC simulator
-- **HP c240 (Hermes) Ubuntu setup** — install Ubuntu 24.04, same config as R630 (SSH, Tailscale, WOL, post_sweep.sh, auto-shutdown)
-- ~~Dell R630 full setup~~ ✅
-- Complete MT5 manual tick exports for remaining symbols (US30, XAGUSD, XTIUSD, EURUSD, USDJPY, GBPUSD, AUDUSD, BTCUSD, ETHUSD, DAX40, JPN225, UK100)
+## On the Horizon
+
+- **Export all TDS data** — run Tick Data Suite exports for remaining 21 markets (24 total - 3 done). Each market needs 5 timeframes (D1, H1, M30, M15, M5). Then run converter: `python scripts/convert_tds_to_engine.py --input-dir "C:/path/to/exports/" --output-dir Data/`
+- **Gen 9 CPU install** — 2x E5-2673 v4 arrived, install under house, thermal paste, verify 80 threads
+- **Gen 8 CPU install** — 2x E5-2697 v2 arrived, install same session, verify 48 threads
+- **First local sweep** — `python run_cluster_sweep.py --markets ES --timeframes daily` to validate full pipeline
+- **Copy converted CSVs to Gen 9** — `scp Data/*_dukascopy.csv gen9:/data/market_data/dukascopy/`
+- **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on Gen 9 after CPU upgrade
+- Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`)
+- **Challenge vs Funded mode** — implement spec in `CHALLENGE_VS_FUNDED_SPEC.md` (recency weighting, cost profiles, mode-specific scoring)
+- **HP c240 (Hermes) Ubuntu setup** — install Ubuntu 24.04, same config as R630
+- **Cloud decommission** — delete cloud/ directory, run_spot_resilient.py, run_cloud_sweep.py, strategy-console VM
+- Static IP port forwarding setup once new ISP connected
 - Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
-- Static IP port forwarding setup once new ISP connected
 
 ---
 
