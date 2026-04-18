@@ -242,3 +242,43 @@ The 36 TradeStation CSVs in repo Data/ (AD, BP, BTC, EC, JY, NG, TY, US, W x 4 T
 4. **Excluded from The5ers but useful:** NG, HG, RTY (3 markets x 5 TF = 15 files)
 
 Total: 120 conversions needed
+
+---
+
+## 6. Tests
+
+### Summary
+
+| Metric | Count |
+|--------|-------|
+| Test files | 20 |
+| Tests passed | 313 |
+| Tests failed | 11 |
+| Tests skipped | 4 |
+| Runtime | 162.57s (2m42s) |
+
+### Failing tests
+
+| Test | File | Failure | Root Cause | Priority |
+|------|------|---------|------------|----------|
+| test_daily_dd_breach | test_smoke.py | Expected 'Daily DD breach' in failure_reason, got 'Ran out of trades' | Known debt from Session 61 (pause-vs-terminate logic changed) | Medium |
+| test_merge_runs_produces_merged_leaderboard | test_parallel_vm.py | FileNotFoundError: gcloud not installed | Deprecated cloud test — needs gcloud SDK | Delete |
+| test_merge_runs_assigns_source_run_id | test_parallel_vm.py | Same: gcloud missing | Deprecated cloud test | Delete |
+| test_merge_runs_writes_merge_manifest | test_parallel_vm.py | Same: gcloud missing | Deprecated cloud test | Delete |
+| test_merge_runs_ranks_rows_by_quality_then_pnl | test_parallel_vm.py | Same | Deprecated cloud test | Delete |
+| test_aggregate_ultimate_leaderboard_* (3 tests) | test_parallel_vm.py | Same | Deprecated cloud test | Delete |
+| test_get_instance_prefix | test_parallel_vm.py | Same | Deprecated cloud test | Delete |
+| test_find_latest_pair_* (2 tests) | test_parallel_vm.py | Same | Deprecated cloud test | Delete |
+
+### Analysis
+
+- **10 of 11 failures** are in test_parallel_vm.py which tests deprecated cloud functionality (requires gcloud SDK). Will be deleted with cloud/ in Session 69.
+- **1 real failure** (test_daily_dd_breach) is known technical debt from Session 61.
+- **4 skipped tests**: need investigation but not blocking.
+- **313 passing tests**: core engine, strategies, portfolio selector, prop firm simulator, vectorized code all healthy.
+
+### Recommendation
+
+- Delete test_parallel_vm.py and test_cloud_launcher.py in Session 69 (cloud cleanup)
+- Fix test_daily_dd_breach in Session 69 (update assertion for new behavior)
+- After cleanup: expected test count ~265 passing, 0 failing

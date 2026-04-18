@@ -1,0 +1,455 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0 -- /home/rob/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/rob/python-master-strategy-creator
+collecting ... collected 328 items
+
+tests/test_bootcamp_report.py::test_load_bootcamp_leaderboard_prefers_master_file PASSED [  0%]
+tests/test_bootcamp_report.py::test_build_and_format_bootcamp_report PASSED [  0%]
+tests/test_bootcamp_scoring.py::test_robust_strategy_scores_higher PASSED [  0%]
+tests/test_bootcamp_scoring.py::test_high_drawdown_is_penalized PASSED   [  1%]
+tests/test_bootcamp_scoring.py::test_weak_oos_is_penalized PASSED        [  1%]
+tests/test_bootcamp_scoring.py::test_low_trade_count_is_penalized PASSED [  1%]
+tests/test_cloud_launcher.py::test_resolve_required_datasets_only_uses_config_entries PASSED [  2%]
+tests/test_cloud_launcher.py::test_resolve_dataset_path_prefers_console_uploads_over_repo_data PASSED [  2%]
+tests/test_cloud_launcher.py::test_create_input_bundle_includes_only_selected_datasets PASSED [  2%]
+tests/test_cloud_launcher.py::test_create_input_bundle_excludes_local_temp_and_junk_dirs PASSED [  3%]
+tests/test_cloud_launcher.py::test_status_helpers_parse_and_summarize_dataset_progress PASSED [  3%]
+tests/test_cloud_launcher.py::test_verify_preserved_results_accepts_meaningful_completed_outputs PASSED [  3%]
+tests/test_cloud_launcher.py::test_verify_preserved_results_rejects_completed_outputs_without_meaningful_files PASSED [  3%]
+tests/test_cloud_launcher.py::test_inspect_preserved_artifacts_infers_completed_state_from_preserved_run_status PASSED [  4%]
+tests/test_cloud_launcher.py::test_verify_preserved_results_requires_metadata_for_failed_runs PASSED [  4%]
+tests/test_cloud_launcher.py::test_launch_remote_runner_does_not_raise_on_nonzero_ssh_exit PASSED [  4%]
+tests/test_cloud_launcher.py::test_run_preflight_validates_config_gcloud_project_and_datasets PASSED [  5%]
+tests/test_cloud_launcher.py::test_run_preflight_rejects_empty_dataset PASSED [  5%]
+tests/test_cloud_launcher.py::test_launcher_status_store_writes_stable_top_level_fields PASSED [  5%]
+tests/test_cloud_launcher.py::test_launcher_status_store_preserves_existing_non_none_fields PASSED [  6%]
+tests/test_cloud_launcher.py::test_create_remote_runner_file_uses_unix_lf_only PASSED [  6%]
+tests/test_cloud_launcher.py::test_create_remote_runner_file_is_fail_fast_and_unbuffered PASSED [  6%]
+tests/test_cloud_launcher.py::test_create_remote_runner_file_bootstraps_python312_and_logs_environment PASSED [  7%]
+tests/test_cloud_launcher.py::test_launch_remote_runner_creates_log_dir_before_nohup PASSED [  7%]
+tests/test_cloud_launcher.py::test_write_latest_run_pointer_records_latest_run PASSED [  7%]
+tests/test_cloud_launcher.py::test_run_id_and_remote_paths_strip_hidden_carriage_returns PASSED [  7%]
+tests/test_cloud_launcher.py::test_run_cloud_sweep_defaults_to_gcp96_config PASSED [  8%]
+tests/test_cloud_launcher.py::test_run_cloud_sweep_forwards_wrapper_flags PASSED [  8%]
+tests/test_cloud_launcher.py::test_should_restart_remote_orchestration_only_when_needed PASSED [  8%]
+tests/test_cloud_launcher.py::test_verify_remote_runner_started_requires_more_than_process_only PASSED [  9%]
+tests/test_cloud_launcher.py::test_download_and_extract_artifacts_requires_local_tarball PASSED [  9%]
+tests/test_cloud_launcher.py::test_download_and_extract_artifacts_rejects_empty_tarball PASSED [  9%]
+tests/test_cloud_launcher.py::test_mirror_artifacts_to_exports_creates_latest_and_flat_master PASSED [ 10%]
+tests/test_cloud_launcher.py::test_should_sync_results_to_strategy_console_only_when_not_already_on_console PASSED [ 10%]
+tests/test_cloud_launcher.py::test_sync_run_to_strategy_console_storage_copies_run_and_exports PASSED [ 10%]
+tests/test_cloud_launcher.py::test_build_destroy_recovery_commands_include_launcher_recover_flow PASSED [ 10%]
+tests/test_cloud_launcher.py::test_recover_existing_run_uses_verified_local_artifacts_without_remote_calls PASSED [ 11%]
+tests/test_cloud_launcher.py::test_can_auto_destroy_rejects_null_run_outcome PASSED [ 11%]
+tests/test_cloud_launcher.py::test_can_auto_destroy_rejects_missing_artifacts PASSED [ 11%]
+tests/test_cloud_launcher.py::test_inspect_preserved_artifacts_rejects_extraction_missing_expected_outputs PASSED [ 12%]
+tests/test_cloud_launcher.py::test_monitor_run_timeout_returns_non_success_and_never_implies_destroy PASSED [ 12%]
+tests/test_cloud_launcher.py::test_can_auto_destroy_allows_only_verified_success PASSED [ 12%]
+tests/test_cloud_launcher.py::test_can_auto_destroy_keep_vm_still_wins PASSED [ 13%]
+tests/test_cloud_launcher.py::test_build_destroy_decision_allows_verified_success PASSED [ 13%]
+tests/test_cloud_launcher.py::test_build_destroy_decision_preserves_when_keep_vm_requested PASSED [ 13%]
+tests/test_cloud_launcher.py::test_remote_runner_script_contains_bucket_upload PASSED [ 14%]
+tests/test_cloud_launcher.py::test_remote_runner_script_contains_self_delete PASSED [ 14%]
+tests/test_cloud_launcher.py::test_remote_runner_script_preserves_vm_on_upload_failure PASSED [ 14%]
+tests/test_cloud_launcher.py::test_fire_and_forget_flag_recognized PASSED [ 14%]
+tests/test_cloud_launcher.py::test_remote_runner_injects_bucket_and_compute_zone PASSED [ 15%]
+tests/test_cloud_launcher.py::test_build_destroy_decision_handles_instance_already_gone PASSED [ 15%]
+tests/test_cloud_launcher.py::test_build_destroy_decision_includes_recovery_commands_for_preserved_vm PASSED [ 15%]
+tests/test_cloud_launcher.py::test_terminal_failure_status_fields_can_be_persisted PASSED [ 16%]
+tests/test_cloud_launcher.py::test_main_dry_run_stops_before_vm_creation PASSED [ 16%]
+tests/test_cloud_launcher.py::test_remote_runner_script_uses_gcloud_storage_for_bucket_upload PASSED [ 16%]
+tests/test_cloud_launcher.py::test_remote_runner_script_uses_status_path_for_bucket_status_upload PASSED [ 17%]
+tests/test_cloud_launcher.py::test_remote_runner_script_disables_interactive_prompts PASSED [ 17%]
+tests/test_cloud_launcher.py::test_remote_runner_script_verifies_bucket_upload_before_self_delete PASSED [ 17%]
+tests/test_cloud_launcher.py::test_remote_runner_script_reports_bucket_upload_failure PASSED [ 17%]
+tests/test_cloud_launcher.py::test_remote_runner_script_uploads_artifacts_and_status_to_bucket PASSED [ 18%]
+tests/test_cloud_launcher.py::test_remote_runner_script_self_delete_targets_instance_hostname PASSED [ 18%]
+tests/test_cloud_launcher.py::test_remote_runner_script_bucket_upload_happens_before_delete PASSED [ 18%]
+tests/test_cloud_launcher.py::test_remote_runner_script_downloads_bundle_from_gcs_staging PASSED [ 19%]
+tests/test_cloud_launcher.py::test_remote_runner_script_no_staging_uri_by_default PASSED [ 19%]
+tests/test_cross_dataset_evaluator.py::test_evaluate_cross_dataset_empty_returns_gracefully PASSED [ 19%]
+tests/test_cross_dataset_evaluator.py::test_evaluate_cross_dataset_single_strategy_skips_correlation PASSED [ 20%]
+tests/test_cross_dataset_evaluator.py::test_evaluate_cross_dataset_produces_output_files PASSED [ 20%]
+tests/test_dashboard_utils.py::test_resolve_console_storage_paths_uses_expected_layout PASSED [ 20%]
+tests/test_dashboard_utils.py::test_canonical_runs_root_points_to_storage_runs PASSED [ 21%]
+tests/test_dashboard_utils.py::test_discover_launcher_run_dirs_newest_first PASSED [ 21%]
+tests/test_dashboard_utils.py::test_discover_storage_run_dirs_sorts_newest_first PASSED [ 21%]
+tests/test_dashboard_utils.py::test_list_uploaded_datasets_returns_expected_files PASSED [ 21%]
+tests/test_dashboard_utils.py::test_parse_dataset_filename_extracts_market_and_timeframe PASSED [ 22%]
+tests/test_dashboard_utils.py::test_list_export_files_returns_expected_files PASSED [ 22%]
+tests/test_dashboard_utils.py::test_collect_console_run_records_prefers_storage_runs PASSED [ 22%]
+tests/test_dashboard_utils.py::test_collect_console_run_records_can_disable_legacy_fallback PASSED [ 23%]
+tests/test_dashboard_utils.py::test_collect_result_sources_prefers_cloud_runs_with_artifacts PASSED [ 23%]
+tests/test_dashboard_utils.py::test_pick_best_candidate_file_prefers_master_leaderboard PASSED [ 23%]
+tests/test_dashboard_utils.py::test_estimate_run_cost_uses_local_price_map PASSED [ 24%]
+tests/test_dashboard_utils.py::test_badges_and_run_classification_are_readable PASSED [ 24%]
+tests/test_dashboard_utils.py::test_billing_status_for_launcher_distinguishes_preserved_and_stopped PASSED [ 24%]
+tests/test_dashboard_utils.py::test_operator_action_summary_prefers_persisted_action PASSED [ 25%]
+tests/test_dashboard_utils.py::test_build_test_run_readiness_reports_ready_when_storage_and_dataset_exist PASSED [ 25%]
+tests/test_dashboard_utils.py::test_load_promoted_candidates_missing PASSED [ 25%]
+tests/test_dashboard_utils.py::test_fetch_live_dataset_statuses_fallback PASSED [ 25%]
+tests/test_dashboard_utils.py::test_fetch_live_dataset_statuses_completed_uses_local PASSED [ 26%]
+tests/test_data_converter.py::TestDateConversion::test_basic_date PASSED [ 26%]
+tests/test_data_converter.py::TestDateConversion::test_end_of_year PASSED [ 26%]
+tests/test_data_converter.py::TestDateConversion::test_leading_zeros PASSED [ 27%]
+tests/test_data_converter.py::TestDateConversion::test_first_day PASSED  [ 27%]
+tests/test_data_converter.py::TestTimeConversion::test_strips_seconds PASSED [ 27%]
+tests/test_data_converter.py::TestTimeConversion::test_preserves_hours_minutes PASSED [ 28%]
+tests/test_data_converter.py::TestTimeConversion::test_midnight PASSED   [ 28%]
+tests/test_data_converter.py::TestTimeConversion::test_end_of_day PASSED [ 28%]
+tests/test_data_converter.py::TestHeaderFormat::test_output_headers_match_tradestation PASSED [ 28%]
+tests/test_data_converter.py::TestHeaderFormat::test_oi_column_is_zero PASSED [ 29%]
+tests/test_data_converter.py::TestVolumeHandling::test_missing_volume_defaults_zero PASSED [ 29%]
+tests/test_data_converter.py::TestVolumeHandling::test_empty_file_skipped PASSED [ 29%]
+tests/test_data_converter.py::TestRoundTrip::test_converted_file_loads_in_engine PASSED [ 30%]
+tests/test_data_converter.py::TestRoundTrip::test_ohlc_values_preserved PASSED [ 30%]
+tests/test_data_converter.py::TestSymbolExtraction::test_simple_symbol PASSED [ 30%]
+tests/test_data_converter.py::TestSymbolExtraction::test_multi_word_symbol PASSED [ 31%]
+tests/test_data_converter.py::TestSymbolExtraction::test_all_symbols_mapped PASSED [ 31%]
+tests/test_data_converter.py::TestSymbolExtraction::test_unknown_symbol_raises PASSED [ 31%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[D1-daily] PASSED [ 32%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[H1-60m] PASSED [ 32%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[M30-30m] PASSED [ 32%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[M15-15m] PASSED [ 32%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[M5-5m] PASSED [ 33%]
+tests/test_data_converter.py::TestTimeframeDetection::test_timeframe_codes[M1-1m] PASSED [ 33%]
+tests/test_data_converter.py::TestTimeframeDetection::test_unknown_timeframe_raises PASSED [ 33%]
+tests/test_data_converter.py::TestDuplicateHandling::test_duplicate_timestamps_removed PASSED [ 34%]
+tests/test_engine_parity.py::test_parity_time_stop_long_daily PASSED     [ 34%]
+tests/test_engine_parity.py::test_parity_time_stop_short_daily PASSED    [ 34%]
+tests/test_engine_parity.py::test_parity_stop_hit_long PASSED            [ 35%]
+tests/test_engine_parity.py::test_parity_stop_hit_short PASSED           [ 35%]
+tests/test_engine_parity.py::test_parity_profit_target_long PASSED       [ 35%]
+tests/test_engine_parity.py::test_parity_profit_target_short PASSED      [ 35%]
+tests/test_engine_parity.py::test_parity_trailing_stop_long PASSED       [ 36%]
+tests/test_engine_parity.py::test_parity_trailing_stop_short PASSED      [ 36%]
+tests/test_engine_parity.py::test_parity_signal_exit PASSED              [ 36%]
+tests/test_engine_parity.py::test_parity_early_exit PASSED               [ 37%]
+tests/test_engine_parity.py::test_parity_break_even_stop PASSED          [ 37%]
+tests/test_engine_parity.py::test_parity_full_strategy_es_daily PASSED   [ 37%]
+tests/test_engine_parity.py::test_parity_full_strategy_es_60m PASSED     [ 38%]
+tests/test_engine_parity.py::test_parity_position_sizing PASSED          [ 38%]
+tests/test_engine_parity.py::test_parity_short_mean_reversion PASSED     [ 38%]
+tests/test_engine_parity.py::test_parity_short_breakout PASSED           [ 39%]
+tests/test_engine_parity.py::test_parity_no_signals PASSED               [ 39%]
+tests/test_engine_parity.py::test_parity_signal_on_last_bar PASSED       [ 39%]
+tests/test_engine_parity.py::test_parity_overlapping_signals PASSED      [ 39%]
+tests/test_engine_parity.py::test_parity_short_data PASSED               [ 40%]
+tests/test_engine_parity.py::test_full_sweep_parity_es_daily SKIPPED     [ 40%]
+tests/test_engine_parity.py::test_vectorized_speedup_synthetic PASSED    [ 40%]
+tests/test_engine_parity.py::test_vectorized_speedup_daily SKIPPED (...) [ 41%]
+tests/test_engine_parity.py::test_vectorized_speedup_60m SKIPPED (ES...) [ 41%]
+tests/test_engine_parity.py::test_vectorized_speedup_15m SKIPPED (ES...) [ 41%]
+tests/test_exit_architecture.py::test_engine_time_stop_remains_backward_compatible PASSED [ 42%]
+tests/test_exit_architecture.py::test_engine_trailing_stop_exit_on_rising_then_falling_trade PASSED [ 42%]
+tests/test_exit_architecture.py::test_engine_profit_target_exit_on_winning_trade PASSED [ 42%]
+tests/test_exit_architecture.py::test_engine_signal_exit_uses_fast_sma_reversion_rule PASSED [ 42%]
+tests/test_exit_architecture.py::test_engine_prefers_protective_stop_over_other_exit_types PASSED [ 43%]
+tests/test_exit_architecture.py::test_supported_exit_types_are_declared_per_family PASSED [ 43%]
+tests/test_exit_architecture.py::test_candidate_specific_build_accepts_exit_type PASSED [ 43%]
+tests/test_exit_architecture.py::test_engine_processes_exit_config_without_crashing PASSED [ 44%]
+tests/test_exit_architecture.py::test_refinement_results_include_exit_metadata PASSED [ 44%]
+tests/test_exit_architecture.py::test_family_summary_and_leaderboard_expose_exit_metadata PASSED [ 44%]
+tests/test_exit_validation_report.py::test_exit_validation_report_summarizes_by_dataset_family_and_exit_type PASSED [ 45%]
+tests/test_generate_returns.py::test_dataset_to_folder_standard PASSED   [ 45%]
+tests/test_generate_returns.py::test_dataset_to_folder_daily PASSED      [ 45%]
+tests/test_generate_returns.py::test_dataset_to_folder_short_name PASSED [ 46%]
+tests/test_generate_returns.py::test_load_cached_returns_same_object PASSED [ 46%]
+tests/test_generate_returns.py::test_parallel_rebuild_collects_results PASSED [ 46%]
+tests/test_generate_returns.py::test_parallel_rebuild_handles_none_results PASSED [ 46%]
+tests/test_generate_returns.py::test_parallel_rebuild_handles_exceptions PASSED [ 47%]
+tests/test_master_leaderboard.py::test_aggregate_master_leaderboard_bootcamp_sorting PASSED [ 47%]
+tests/test_master_leaderboard.py::test_write_master_leaderboards_writes_both_outputs PASSED [ 47%]
+tests/test_parallel_vm.py::test_vm_a_config_exists PASSED                [ 48%]
+tests/test_parallel_vm.py::test_vm_b_config_exists PASSED                [ 48%]
+tests/test_parallel_vm.py::test_vm_a_ondemand_config_exists PASSED       [ 48%]
+tests/test_parallel_vm.py::test_vm_b_ondemand_config_exists PASSED       [ 49%]
+tests/test_parallel_vm.py::test_vm_a_has_5m_only PASSED                  [ 49%]
+tests/test_parallel_vm.py::test_vm_b_has_four_datasets PASSED            [ 49%]
+tests/test_parallel_vm.py::test_vm_a_and_vm_b_datasets_are_disjoint PASSED [ 50%]
+tests/test_parallel_vm.py::test_vm_a_spot_config_has_instance_name PASSED [ 50%]
+tests/test_parallel_vm.py::test_vm_b_spot_config_has_instance_name PASSED [ 50%]
+tests/test_parallel_vm.py::test_vm_a_ondemand_is_standard PASSED         [ 50%]
+tests/test_parallel_vm.py::test_vm_b_ondemand_is_standard PASSED         [ 51%]
+tests/test_parallel_vm.py::test_vm_a_and_vm_a_ondemand_have_same_datasets PASSED [ 51%]
+tests/test_parallel_vm.py::test_instance_name_overridden_from_config PASSED [ 51%]
+tests/test_parallel_vm.py::test_instance_name_not_overridden_when_explicitly_set PASSED [ 52%]
+tests/test_parallel_vm.py::test_make_run_id_incorporates_instance_name PASSED [ 52%]
+tests/test_parallel_vm.py::test_parallel_launcher_parse_args_defaults PASSED [ 52%]
+tests/test_parallel_vm.py::test_parallel_launcher_parse_args_custom PASSED [ 53%]
+tests/test_parallel_vm.py::test_parallel_launcher_build_argv_dry_run PASSED [ 53%]
+tests/test_parallel_vm.py::test_parallel_launcher_calls_launcher_twice PASSED [ 53%]
+tests/test_parallel_vm.py::test_parallel_launcher_continues_after_vm_a_failure PASSED [ 53%]
+tests/test_parallel_vm.py::test_merge_runs_produces_merged_leaderboard FAILED [ 54%]
+tests/test_parallel_vm.py::test_merge_runs_assigns_source_run_id FAILED  [ 54%]
+tests/test_parallel_vm.py::test_merge_runs_writes_merge_manifest FAILED  [ 54%]
+tests/test_parallel_vm.py::test_merge_runs_ranks_rows_by_quality_then_pnl FAILED [ 55%]
+tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_from_multiple_runs FAILED [ 55%]
+tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_deduplicates FAILED [ 55%]
+tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_handles_empty_runs_dir FAILED [ 56%]
+tests/test_parallel_vm.py::test_get_instance_prefix FAILED               [ 56%]
+tests/test_parallel_vm.py::test_find_latest_pair_returns_different_prefixes FAILED [ 56%]
+tests/test_parallel_vm.py::test_find_latest_pair_returns_none_when_single_prefix FAILED [ 57%]
+tests/test_portfolio_selector.py::TestHardFilter::test_hard_filter_removes_weak_candidates PASSED [ 57%]
+tests/test_portfolio_selector.py::TestHardFilter::test_deduplication_keeps_best PASSED [ 57%]
+tests/test_portfolio_selector.py::TestCorrelation::test_correlation_rejects_high_pairs PASSED [ 57%]
+tests/test_portfolio_selector.py::TestPortfolioMC::test_portfolio_mc_returns_valid_rate PASSED [ 58%]
+tests/test_portfolio_selector.py::TestPortfolioMC::test_step_rates_are_monotonic PASSED [ 58%]
+tests/test_portfolio_selector.py::TestPortfolioMC::test_time_to_fund_fields_present PASSED [ 58%]
+tests/test_portfolio_selector.py::TestCorrelationDedup::test_correlation_dedup_removes_clones PASSED [ 59%]
+tests/test_portfolio_selector.py::TestCorrelationDedup::test_correlation_dedup_no_removal_when_uncorrelated PASSED [ 59%]
+tests/test_portfolio_selector.py::TestHardFilterThreshold::test_hard_filter_oos_pf_threshold PASSED [ 59%]
+tests/test_portfolio_selector.py::TestHardFilterThreshold::test_hard_filter_bootcamp_score_filter PASSED [ 60%]
+tests/test_portfolio_selector.py::TestHardFilterThreshold::test_hard_filter_configurable_threshold PASSED [ 60%]
+tests/test_portfolio_selector.py::TestSizingObjective::test_sizing_returns_weights PASSED [ 60%]
+tests/test_portfolio_selector.py::TestSizingObjective::test_sizing_accepts_min_pass_rate PASSED [ 60%]
+tests/test_portfolio_selector.py::TestEndToEnd::test_report_written PASSED [ 61%]
+tests/test_portfolio_selector.py::TestDDConstraint::test_dd_constraint_rejects_oversized_weights PASSED [ 61%]
+tests/test_portfolio_selector.py::TestInverseDDSizing::test_inverse_dd_weights_computed_correctly PASSED [ 61%]
+tests/test_portfolio_selector.py::TestInverseDDSizing::test_inverse_dd_uses_leaderboard_when_available PASSED [ 62%]
+tests/test_portfolio_selector.py::TestCalmarScoring::test_calmar_score_prefers_low_dd_high_return PASSED [ 62%]
+tests/test_portfolio_selector.py::TestRobustnessTest::test_robustness_test_runs_without_error PASSED [ 62%]
+tests/test_portfolio_selector.py::TestRollingDDMetric::test_rolling_dd_computed_on_known_data PASSED [ 63%]
+tests/test_portfolio_selector.py::TestRollingDDMetric::test_mc_result_includes_p99_dd PASSED [ 63%]
+tests/test_portfolio_selector.py::TestMultiLayerCorrelation::test_active_day_corr_differs_from_full_pearson PASSED [ 63%]
+tests/test_portfolio_selector.py::TestMultiLayerCorrelation::test_dd_state_corr_catches_co_drawdown PASSED [ 64%]
+tests/test_portfolio_selector.py::TestMultiLayerCorrelation::test_tail_coloss_catches_crisis_correlation PASSED [ 64%]
+tests/test_portfolio_selector.py::TestExpectedConditionalDrawdown::test_ecd_high_for_correlated_pair PASSED [ 64%]
+tests/test_portfolio_selector.py::TestExpectedConditionalDrawdown::test_ecd_low_for_uncorrelated_pair PASSED [ 64%]
+tests/test_portfolio_selector.py::TestExpectedConditionalDrawdown::test_ecd_returns_none_for_short_data PASSED [ 65%]
+tests/test_portfolio_selector.py::TestBlockBootstrapMC::test_block_bootstrap_returns_valid_results PASSED [ 65%]
+tests/test_portfolio_selector.py::TestBlockBootstrapMC::test_block_bootstrap_preserves_clustering PASSED [ 65%]
+tests/test_portfolio_selector.py::TestDailyDDSimulation::test_daily_dd_breach_detected PASSED [ 66%]
+tests/test_portfolio_selector.py::TestDailyDDSimulation::test_bootcamp_no_daily_dd PASSED [ 66%]
+tests/test_portfolio_selector.py::TestRegimeSurvivalGate::test_regime_gate_rejects_failing_combo PASSED [ 66%]
+tests/test_portfolio_selector.py::TestRegimeSurvivalGate::test_regime_gate_passes_healthy_combo PASSED [ 67%]
+tests/test_prop_firm_configs.py::test_bootcamp_unchanged PASSED          [ 67%]
+tests/test_prop_firm_configs.py::test_high_stakes_config_correct PASSED  [ 67%]
+tests/test_prop_firm_configs.py::test_pro_growth_config_correct PASSED   [ 67%]
+tests/test_prop_firm_configs.py::test_hyper_growth_config_correct PASSED [ 68%]
+tests/test_prop_firm_configs.py::test_daily_dd_pause_continues_trading PASSED [ 68%]
+tests/test_prop_firm_configs.py::test_daily_dd_terminate_fails_step PASSED [ 68%]
+tests/test_prop_firm_configs.py::test_daily_dd_recalculates_with_profit PASSED [ 69%]
+tests/test_prop_firm_configs.py::test_min_profitable_days_enforced PASSED [ 69%]
+tests/test_short_strategies.py::test_short_types_registered PASSED       [ 69%]
+tests/test_short_strategies.py::test_short_types_return_short_direction PASSED [ 70%]
+tests/test_short_strategies.py::test_short_filters_are_callable PASSED   [ 70%]
+tests/test_short_strategies.py::test_short_filter_masks_return_bool_array PASSED [ 70%]
+tests/test_smoke.py::test_config_loader PASSED                           [ 71%]
+tests/test_smoke.py::test_feature_builder PASSED                         [ 71%]
+tests/test_smoke.py::test_engine_config PASSED                           [ 71%]
+tests/test_smoke.py::test_engine_run_minimal PASSED                      [ 71%]
+tests/test_smoke.py::test_consistency_module PASSED                      [ 72%]
+tests/test_smoke.py::test_filter_combination_generation PASSED           [ 72%]
+tests/test_smoke.py::test_strategy_type_factory PASSED                   [ 72%]
+tests/test_smoke.py::test_quality_score_range PASSED                     [ 73%]
+tests/test_smoke.py::test_progress_tracker PASSED                        [ 73%]
+tests/test_smoke.py::test_master_leaderboard PASSED                      [ 73%]
+tests/test_smoke.py::test_timeframe_multiplier PASSED                    [ 74%]
+tests/test_smoke.py::test_hybrid_filter_scaling PASSED                   [ 74%]
+tests/test_smoke.py::test_prop_firm_config_bootcamp PASSED               [ 74%]
+tests/test_smoke.py::test_prop_firm_simulate_pass PASSED                 [ 75%]
+tests/test_smoke.py::test_prop_firm_simulate_fail PASSED                 [ 75%]
+tests/test_smoke.py::test_prop_firm_monte_carlo PASSED                   [ 75%]
+tests/test_smoke.py::test_prop_firm_challenge_score PASSED               [ 75%]
+tests/test_smoke.py::test_portfolio_evaluator_timeframe_param PASSED     [ 76%]
+tests/test_smoke.py::test_strategy_type_timeframe_affects_filters PASSED [ 76%]
+tests/test_smoke.py::test_strategy_family_exit_support_matrix PASSED     [ 76%]
+tests/test_smoke.py::test_strategy_build_defaults_to_time_stop_exit PASSED [ 77%]
+tests/test_smoke.py::test_refinement_results_expose_exit_metadata PASSED [ 77%]
+tests/test_smoke.py::test_run_dataset_caches_data_across_families PASSED [ 77%]
+tests/test_smoke.py::test_high_stakes_config PASSED                      [ 78%]
+tests/test_smoke.py::test_per_step_profit_targets PASSED                 [ 78%]
+tests/test_smoke.py::test_hyper_growth_config PASSED                     [ 78%]
+tests/test_smoke.py::test_pro_growth_config PASSED                       [ 78%]
+tests/test_smoke.py::test_daily_dd_breach FAILED                         [ 79%]
+tests/test_smoke.py::test_daily_dd_no_breach_when_disabled PASSED        [ 79%]
+tests/test_smoke.py::test_program_selector_resolver PASSED               [ 79%]
+tests/test_smoke.py::test_efficiency_ratio_filter PASSED                 [ 80%]
+tests/test_smoke.py::test_atr_expansion_ratio_filter PASSED              [ 80%]
+tests/test_smoke.py::test_wick_rejection_filter PASSED                   [ 80%]
+tests/test_smoke.py::test_cumulative_decline_filter PASSED               [ 81%]
+tests/test_smoke.py::test_consecutive_narrow_range_filter PASSED         [ 81%]
+tests/test_smoke.py::test_distance_from_extreme_filter PASSED            [ 81%]
+tests/test_smoke.py::test_failed_breakout_exclusion_filter PASSED        [ 82%]
+tests/test_smoke.py::test_break_even_stop_modifier PASSED                [ 82%]
+tests/test_smoke.py::test_early_exit_config PASSED                       [ 82%]
+tests/test_subtypes.py::test_all_subtypes_registered PASSED              [ 82%]
+tests/test_subtypes.py::test_subtypes_have_distinct_filter_pools PASSED  [ 83%]
+tests/test_subtypes.py::test_subtypes_have_valid_combo_sizes PASSED      [ 83%]
+tests/test_subtypes.py::test_subtype_filter_classes_are_importable PASSED [ 83%]
+tests/test_ultimate_leaderboard.py::test_aggregate_empty_runs_returns_empty_df PASSED [ 84%]
+tests/test_ultimate_leaderboard.py::test_aggregate_deduplicates_by_signature PASSED [ 84%]
+tests/test_ultimate_leaderboard.py::test_aggregate_adds_rank_column PASSED [ 84%]
+tests/test_ultimate_leaderboard.py::test_aggregate_filters_to_accepted_only PASSED [ 85%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[TrendDirectionFilter] PASSED [ 85%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[PullbackFilter] PASSED [ 85%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[RecoveryTriggerFilter] PASSED [ 85%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[VolatilityFilter] PASSED [ 86%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[MomentumFilter] PASSED [ 86%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[UpCloseFilter] PASSED [ 86%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[TwoBarUpFilter] PASSED [ 87%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[TrendSlopeFilter] PASSED [ 87%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[CloseAboveFastSMAFilter] PASSED [ 87%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[HigherLowFilter] PASSED [ 88%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[CompressionFilter] PASSED [ 88%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[RangeBreakoutFilter] PASSED [ 88%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[ExpansionBarFilter] PASSED [ 89%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[BreakoutRetestFilter] PASSED [ 89%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[BreakoutTrendFilter] PASSED [ 89%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[BreakoutCloseStrengthFilter] PASSED [ 89%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[PriorRangePositionFilter] PASSED [ 90%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[BreakoutDistanceFilter] PASSED [ 90%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[RisingBaseFilter] PASSED [ 90%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[TightRangeFilter] PASSED [ 91%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[BelowFastSMAFilter] PASSED [ 91%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[DistanceBelowSMAFilter] PASSED [ 91%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[DownCloseFilter] PASSED [ 92%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[TwoBarDownFilter] PASSED [ 92%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[ReversalUpBarFilter] PASSED [ 92%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[LowVolatilityRegimeFilter] PASSED [ 92%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[AboveLongTermSMAFilter] PASSED [ 93%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[ThreeBarDownFilter] PASSED [ 93%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[CloseNearLowFilter] PASSED [ 93%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[StretchFromLongTermSMAFilter] PASSED [ 94%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[InsideBarFilter] PASSED [ 94%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[OutsideBarFilter] PASSED [ 94%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[GapUpFilter] PASSED [ 95%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[GapDownFilter] PASSED [ 95%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[ATRPercentileFilter] PASSED [ 95%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[HigherHighFilter] PASSED [ 96%]
+tests/test_vectorized_filters.py::test_mask_matches_bar_by_bar[LowerLowFilter] PASSED [ 96%]
+tests/test_vectorized_filters.py::test_combined_signal_mask_matches_generate_signal PASSED [ 96%]
+tests/test_vectorized_filters.py::test_combined_signal_mask_empty_filters PASSED [ 96%]
+tests/test_vectorized_filters.py::test_engine_precomputed_signals_matches_normal_run PASSED [ 97%]
+tests/test_vectorized_filters.py::test_vectorized_vs_loop_speed PASSED   [ 97%]
+tests/test_vectorized_mc.py::test_vectorized_matches_sequential_bootcamp PASSED [ 97%]
+tests/test_vectorized_mc.py::test_vectorized_matches_sequential_high_stakes PASSED [ 98%]
+tests/test_vectorized_mc.py::test_vectorized_zero_trades PASSED          [ 98%]
+tests/test_vectorized_mc.py::test_vectorized_all_winners PASSED          [ 98%]
+tests/test_vectorized_mc.py::test_vectorized_all_losers PASSED           [ 99%]
+tests/test_vectorized_mc.py::test_vectorized_trailing_dd PASSED          [ 99%]
+tests/test_vectorized_mc.py::test_vectorized_risk_metrics_populated PASSED [ 99%]
+tests/test_vectorized_mc.py::test_vectorized_speedup PASSED              [100%]
+
+=================================== FAILURES ===================================
+_________________ test_merge_runs_produces_merged_leaderboard __________________
+tests/test_parallel_vm.py:289: in test_merge_runs_produces_merged_leaderboard
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+____________________ test_merge_runs_assigns_source_run_id _____________________
+tests/test_parallel_vm.py:321: in test_merge_runs_assigns_source_run_id
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+____________________ test_merge_runs_writes_merge_manifest _____________________
+tests/test_parallel_vm.py:343: in test_merge_runs_writes_merge_manifest
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+________________ test_merge_runs_ranks_rows_by_quality_then_pnl ________________
+tests/test_parallel_vm.py:365: in test_merge_runs_ranks_rows_by_quality_then_pnl
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+____________ test_aggregate_ultimate_leaderboard_from_multiple_runs ____________
+tests/test_parallel_vm.py:391: in test_aggregate_ultimate_leaderboard_from_multiple_runs
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+_______________ test_aggregate_ultimate_leaderboard_deduplicates _______________
+tests/test_parallel_vm.py:411: in test_aggregate_ultimate_leaderboard_deduplicates
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+__________ test_aggregate_ultimate_leaderboard_handles_empty_runs_dir __________
+tests/test_parallel_vm.py:431: in test_aggregate_ultimate_leaderboard_handles_empty_runs_dir
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+___________________________ test_get_instance_prefix ___________________________
+tests/test_parallel_vm.py:441: in test_get_instance_prefix
+    from cloud.download_run import get_instance_prefix
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+_______________ test_find_latest_pair_returns_different_prefixes _______________
+tests/test_parallel_vm.py:448: in test_find_latest_pair_returns_different_prefixes
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+____________ test_find_latest_pair_returns_none_when_single_prefix _____________
+tests/test_parallel_vm.py:467: in test_find_latest_pair_returns_none_when_single_prefix
+    import cloud.download_run as drun
+cloud/download_run.py:58: in <module>
+    GCLOUD_BIN = resolve_gcloud_binary()
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+cloud/download_run.py:55: in resolve_gcloud_binary
+    raise FileNotFoundError("Could not locate gcloud. Install Google Cloud SDK or add it to PATH.")
+E   FileNotFoundError: Could not locate gcloud. Install Google Cloud SDK or add it to PATH.
+_____________________________ test_daily_dd_breach _____________________________
+tests/test_smoke.py:919: in test_daily_dd_breach
+    assert "Daily DD breach" in result.steps[0].failure_reason
+E   AssertionError: assert 'Daily DD breach' in 'Ran out of trades (3) without hitting +10% target'
+E    +  where 'Ran out of trades (3) without hitting +10% target' = StepResult(step_number=1, starting_balance=5000, ending_balance=5340.0, profit_target=500.0, max_drawdown_limit=4700.0, peak_balance=5340.0, trough_balance=4840.0, max_drawdown_dollars=160.0, max_drawdown_pct=0.032, trades_taken=3, passed=False, failure_reason='Ran out of trades (3) without hitting +10% target', equity_curve=[5000, 4840.0, 5040.0, 5340.0], target_hit_trade_idx=None, daily_dd_breach=False).failure_reason
+=============================== warnings summary ===============================
+tests/test_data_converter.py::TestRoundTrip::test_converted_file_loads_in_engine
+  /home/rob/python-master-strategy-creator/modules/data_loader.py:37: UserWarning: Parsing dates in %m/%d/%Y %H:%M format when dayfirst=True was specified. Pass `dayfirst=False` or specify a format to silence this warning.
+    dt_dayfirst = pd.to_datetime(dt_text, errors="coerce", dayfirst=True)
+
+tests/test_portfolio_selector.py: 38 warnings
+  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=9993) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_parallel_vm.py::test_merge_runs_produces_merged_leaderboard
+FAILED tests/test_parallel_vm.py::test_merge_runs_assigns_source_run_id - Fil...
+FAILED tests/test_parallel_vm.py::test_merge_runs_writes_merge_manifest - Fil...
+FAILED tests/test_parallel_vm.py::test_merge_runs_ranks_rows_by_quality_then_pnl
+FAILED tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_from_multiple_runs
+FAILED tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_deduplicates
+FAILED tests/test_parallel_vm.py::test_aggregate_ultimate_leaderboard_handles_empty_runs_dir
+FAILED tests/test_parallel_vm.py::test_get_instance_prefix - FileNotFoundErro...
+FAILED tests/test_parallel_vm.py::test_find_latest_pair_returns_different_prefixes
+FAILED tests/test_parallel_vm.py::test_find_latest_pair_returns_none_when_single_prefix
+FAILED tests/test_smoke.py::test_daily_dd_breach - AssertionError: assert 'Da...
+====== 11 failed, 313 passed, 4 skipped, 39 warnings in 162.57s (0:02:42) ======
+EXIT=1
