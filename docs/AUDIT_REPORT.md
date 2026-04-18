@@ -384,3 +384,34 @@ All cloud code can be deleted in a single Session 69 commit. No modules become o
 - CLAUDE.md lists strategy-console VM at 35.223.104.173 as active; it is deprecated
 - TRADESTATION_EXPORT_GUIDE.md implies TradeStation is primary data source; Dukascopy is now primary
 - IMPROVEMENT_ROADMAP.md duplicates and contradicts PROJECT_STATE_REVIEW.md priorities
+
+---
+
+## 9. TODO / FIXME debt
+
+### Summary
+
+The codebase has remarkably few TODO/FIXME comments in Python code — only 1 hit (in our own audit script). The real technical debt is documented in markdown files.
+
+### Found items
+
+| File | Line | Category | Text | Assessment |
+|------|------|----------|------|------------|
+| docs/CHALLENGE_VS_FUNDED_SPEC.md | 211 | TODO | validate spreads against live The5ers via MT5 exports | Active — needed before trusting CFD cost model |
+| docs/CHALLENGE_VS_FUNDED_SPEC.md | 236 | TODO | populate FTMO config when account active | Deferred — no FTMO account yet |
+| docs/CHALLENGE_VS_FUNDED_SPEC.md | 243 | TODO | populate Darwinex config when account active | Deferred — no Darwinex account yet |
+| HANDOVER.md | 173 | DEPRECATED | Cloud infrastructure section | Session 69 cleanup target |
+| HANDOVER.md | 178 | DEPRECATED | Cloud files pending deletion | Session 69 cleanup target |
+
+### Implicit debt (not marked in code)
+
+The real technical debt is tracked in CLAUDE.md (issues list) and PROJECT_STATE_REVIEW.md (gaps section), not via inline TODOs. Key items:
+1. CFD swap costs not in MC simulator (critical)
+2. 120 Dukascopy conversions pending (blocking)
+3. test_daily_dd_breach failure (medium)
+4. ES config engine param bugs (critical, fix in Session 69)
+5. Dashboard Live Monitor broken (low)
+
+### Recommendation
+
+No action needed for TODO comments in Session 69. The codebase uses CLAUDE.md as the issue tracker rather than inline TODOs — this is a valid pattern.
