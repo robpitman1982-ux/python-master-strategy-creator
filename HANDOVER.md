@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 69 complete: cleanup execution — cloud deleted, configs fixed, tests green)
+# Last updated: 2026-04-19 (Session 70 complete: first clean CFD sweep (ES daily Dukascopy) validated)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -189,7 +189,8 @@
   - `scripts/convert_tds_to_engine.py` — TDS Metatrader CSV -> TradeStation format converter
   - `scripts/generate_sweep_configs.py` — generates sweep configs from market master config
 - **CFD swap rates gathered:** CL=$0.70/micro/night (10x Fri!), SI=$4.05, GC=$2.20, indices near-zero, FX $0.10-0.26
-- **Session 69 cleanup:** Cloud code deleted, ES config bugs fixed (futures params on CFD data), test suite green (236 pass, 0 fail)
+- **Session 69 cleanup:** Cloud code deleted, ES config bugs fixed, test suite green (236 pass, 0 fail)
+- **Session 70 first CFD sweep:** ES daily Dukascopy on c240, 7m runtime, 13 accepted strategies. Max PnL $1.0M (passed $20M critical threshold). Plausibility validated.
 
 ---
 
@@ -206,7 +207,7 @@
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-10. **First local sweep validation.** ES daily CFD sweep on c240 with corrected config. **Session 70 priority.**
+10. **First local sweep validated (Session 70).** ES daily Dukascopy, 13 accepted strategies, plausibility PASS. Next: scale to 24 markets.
 12. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 
 ---
@@ -373,7 +374,7 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **SESSION 70 PRIORITY: First clean CFD sweep.** ES daily on c240 using corrected `configs/local_sweeps/ES_daily.yaml`. Validate end-to-end before scaling.
+- **Session 71 PRIORITY: Dukascopy conversion scale-out.** 119 remaining market/TF conversions. Populate `/data/market_data/cfds/ohlc_engine/`.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Export all TDS data** — currently only ES, AD, NZDUSD have converted-to-engine CSVs. 21 markets pending × 5 timeframes each.
 - **Copy converted CSVs to c240** — when TDS converts more markets: destination is now `/data/market_data/cfds/ohlc/` (or run converter directly on c240 once it reads from `ticks_dukascopy_tds/`).
@@ -414,7 +415,8 @@ ssh x1            # X1 Carbon Tailscale (100.86.154.65)
 /data/market_data/cfds/ohlc/                    # Dukascopy TDS OHLC (120 CSVs, 2.1 GB)
 /data/market_data/cfds/ticks_dukascopy_tds/     # Raw .bfc tick cache (130k files, 32 GB)
 /data/market_data/cfds/ticks_dukascopy_raw/     # Future: dukascopy-python parquet
-/data/market_data/cfds/ticks_mt5_the5ers/       # Future: The5ers MT5 tick exports
+/data/market_data/cfds/ticks_mt5_the5ers/
+/data/market_data/cfds/ohlc_engine/               # Engine-ready converted CSVs (1/120: ES_daily_dukascopy.csv)       # Future: The5ers MT5 tick exports
 /data/leaderboards/                             # Master leaderboards
 /data/sweep_results/_inbox/                     # Worker rsync target
 /data/portfolio_outputs/                        # Portfolio selector outputs
