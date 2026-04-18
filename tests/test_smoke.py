@@ -907,13 +907,15 @@ def test_pro_growth_config():
 # ---------------------------------------------------------------------------
 
 def test_daily_dd_breach():
-    """Daily DD should fail the step even if cumulative DD is fine."""
-    from modules.prop_firm_simulator import simulate_challenge, The5ersHyperGrowthConfig
-    config = The5ersHyperGrowthConfig(5_000)
-    # 3% daily DD on $5K = $150 limit
-    # A single trade losing $160 (3.2% of source) on day 1 should trigger daily DD
-    # source_capital=5000, trade=-160, scaled = -160/5000 * 5000 = -160
-    trades = [-160.0, 200.0, 300.0]
+    """Daily DD should terminate the step when daily_dd_is_pause=False.
+
+    HyperGrowth/ProGrowth use pause (True), HighStakes uses terminate (False).
+    Session 69 fix: switched from HyperGrowth to HighStakes to test terminate path."""
+    from modules.prop_firm_simulator import simulate_challenge, The5ersHighStakesConfig
+    config = The5ersHighStakesConfig(5_000)
+    # 5% daily DD on \K = ( limit
+    # A single trade losing 0 (5.2%) on day 1 should trigger daily DD terminate
+    trades = [-260.0, 200.0, 300.0]
     result = simulate_challenge(trades, config, source_capital=5_000.0, trades_per_day=1.0)
     assert not result.passed_all_steps, "Should fail on daily DD breach"
     assert "Daily DD breach" in result.steps[0].failure_reason
