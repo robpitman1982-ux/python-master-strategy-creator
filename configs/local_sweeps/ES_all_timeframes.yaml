@@ -22,9 +22,9 @@ engine:
   initial_capital: 250000.0
   risk_per_trade: 0.01
   commission_per_contract: 0
-  slippage_ticks: 0
-  tick_value: 12.5
-  dollars_per_point: 50.0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
   use_vectorized_trades: true
 pipeline:
   max_workers_sweep: 36
