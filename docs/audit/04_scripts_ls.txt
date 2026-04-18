@@ -1,0 +1,12 @@
+total 56
+drwxrwxr-x  2 rob rob  4096 Apr 18 21:50 .
+drwxrwxr-x 17 rob rob  4096 Apr 18 21:24 ..
+-rw-rw-r--  1 rob rob  3543 Apr 18 21:50 audit_configs.py
+-rw-rw-r--  1 rob rob  3952 Apr 18 21:47 audit_modules.py
+-rw-rw-r--  1 rob rob 10506 Apr 18 04:16 convert_tds_to_engine.py
+-rw-rw-r--  1 rob rob  5793 Apr 18 04:16 generate_sweep_configs.py
+-rw-rw-r--  1 rob rob  3532 Apr 18 04:16 run_console_job.py
+-rw-rw-r--  1 rob rob  1315 Apr 18 04:16 setup_dashboard_venv.sh
+-rwxrwxr-x  1 rob rob   172 Apr 18 04:16 start_dashboard.sh
+-rw-rw-r--  1 rob rob   489 Apr 18 04:16 strategy-dashboard.service
+-rwxrwxr-x  1 rob rob   752 Apr 18 04:16 update_console.sh

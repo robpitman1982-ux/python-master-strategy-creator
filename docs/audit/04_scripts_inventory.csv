@@ -1,0 +1,10 @@
+filename,docstring,last_commit,used_by,category
+convert_tds_to_engine.py,Convert TDS Dukascopy CSVs to TradeStation format,2026-04-17,run_local_sweep.py + run_cluster_sweep.py,active
+generate_sweep_configs.py,Generate sweep config YAMLs from cfd_markets.yaml,2026-04-17,run_cluster_sweep.py + cfd_markets.yaml,active
+run_console_job.py,Console job runner (GCP strategy-console),2026-04-04,archive refs only,deprecated
+setup_dashboard_venv.sh,Setup dashboard venv on strategy-console,2026-04-04,CLAUDE.md docs,deprecated
+start_dashboard.sh,Start Streamlit dashboard on console,2026-04-04,no code refs,deprecated
+strategy-dashboard.service,systemd service for Streamlit dashboard,2026-04-04,CLAUDE.md docs,deprecated
+update_console.sh,Pull and restart on strategy-console,2026-04-04,no code refs,deprecated
+audit_modules.py,Session 68 audit: module dependency graph,2026-04-18,audit task,audit
+audit_configs.py,Session 68 audit: config inventory,2026-04-18,audit task,audit

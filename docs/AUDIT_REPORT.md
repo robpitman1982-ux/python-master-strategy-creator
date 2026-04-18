@@ -152,3 +152,25 @@ Of 122 dataset paths across all sweep configs:
 | cfd_markets.yaml | Keep: authoritative |
 | 22 other all_timeframes.yaml | Keep: generated, params correct |
 | config.yaml (root) | Fix: update data path or mark legacy |
+
+---
+
+## 4. Scripts
+
+### Inventory (9 files in scripts/)
+
+| Script | Category | Last Commit | Referenced By | Recommendation |
+|--------|----------|-------------|---------------|----------------|
+| convert_tds_to_engine.py | **active** | 2026-04-17 | run_local_sweep.py, run_cluster_sweep.py | Keep |
+| generate_sweep_configs.py | **active** | 2026-04-17 | run_cluster_sweep.py, cfd_markets.yaml | Keep |
+| run_console_job.py | deprecated | 2026-04-04 | archive refs only | Delete (GCP strategy-console) |
+| setup_dashboard_venv.sh | deprecated | 2026-04-04 | CLAUDE.md docs only | Delete (GCP console) |
+| start_dashboard.sh | deprecated | 2026-04-04 | no code refs | Delete (GCP console) |
+| strategy-dashboard.service | deprecated | 2026-04-04 | CLAUDE.md docs only | Delete (GCP console) |
+| update_console.sh | deprecated | 2026-04-04 | no code refs | Delete (GCP console) |
+| audit_modules.py | audit | 2026-04-18 | Session 68 only | Keep (audit tooling) |
+| audit_configs.py | audit | 2026-04-18 | Session 68 only | Keep (audit tooling) |
+
+**Summary:** 2 active scripts, 5 deprecated (all GCP strategy-console related), 2 audit scripts created this session.
+
+**Recommendation:** Delete the 5 deprecated scripts in Session 69 alongside cloud/ directory cleanup. They all relate to the GCP strategy-console VM which is deprecated.
