@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-17 (Session 65: CFD data pipeline + local sweep infrastructure)
+# Last updated: 2026-04-18 (Session 66: Gen 9 decommissioned; C240 commissioned as new workhorse)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -61,38 +61,32 @@
 - **Samba drive** mapped to `\\192.168.68.69\data`
 - **Back online** (2026-04-14) — power supply had died, replaced
 
-#### Gen 9 (DL360, dl360g9) — ALWAYS-ON DATA HUB + COMPUTE
-- Ubuntu 24.04, IP 192.168.68.69, Tailscale 100.121.107.49, iLO 192.168.68.75
-- MAC: ec:eb:b8:97:83:00
-- **ALWAYS ON.** ~$15-20/mo power. Auto-shutdown cron REMOVED
-- SSH enabled at boot, key auth, WOL persistent via netplan
-- ssh-recover.service (25s delayed restart), root crontab SSH fallback (45s)
-- ARP flush on boot (cron)
-- iLO power restore: Always Power On (set via iLO web UI AND ipmitool)
-- ipmitool installed
-- **CPU:** 2× E5-2673 v4 **ARRIVED** ✅ (20C/40T each @ 2.3GHz, turbo 3.5GHz). **Install tomorrow (under house).** Currently still running 1× E5-2603 v4.
-- BIOS: HP P89 (Oct 2017) — supports E5-2673 v4 ✅, no update needed
-- **RAM:** 1× 32GB DDR4-2400 ECC RDIMM 2Rx4 (HP 809083-091) in PROC 1 DIMM 12. **23 of 24 slots empty.** PROC 2 slots only available once second CPU installed.
-- **Storage:** 7.3 TB disk, root LV extended to 500 GB (437 GB free), photos LV 3.0 TB, VG has 3.79 TiB free
-- **REBOOT TEST PASSED** (2026-04-14): SSH, Samba, Tailscale, all data dirs survived
-- **Data hub directories on root SSD:**
-  - `/data/leaderboards/` — ultimate_leaderboard.csv + bootcamp (760KB)
-  - `/data/sweep_results/runs/` — all sweep output runs (2.1GB)
-  - `/data/market_data/` — 81 TradeStation CSVs (2.2GB) + mt5_ticks/ (The5ers exports)
-  - `/data/dukascopy/raw_ticks/` — Dukascopy tick data (empty, ready for download)
-  - `/data/dukascopy/ohlc_bars/` — converted OHLC bars for engine (empty, ready)
-  - `/data/configs/` — 64 cloud config YAMLs + post_sweep.sh
-  - `/data/portfolio_outputs/` — portfolio selector outputs
-- **Samba shares** (user: rob, password: Ubuntu123.):
-  - `\\192.168.68.69\data` — parent share (all strategy data)
-  - `\\192.168.68.69\leaderboards`, `\\192.168.68.69\sweep_results`, `\\192.168.68.69\market_data`, `\\192.168.68.69\configs`
-  - `\\192.168.68.69\photos` — 3TB LVM volume
-  - Latitude mapped as Z: drive, X1 Carbon mapped
-- **rclone** v1.60.1 installed, **OAuth authorized**, remote name: `gdrive`
-- rclone backup script: `/usr/local/bin/rclone_backup.sh` — syncs leaderboards + sweep_results + portfolio_outputs
-- rclone nightly cron: `0 2 * * *` in rob's crontab
-- **dukascopy-python** v4.0.1 installed (pip3, --break-system-packages)
-- SSH config has alias to gen8
+#### Gen 9 (DL360, dl360g9) — DECOMMISSIONED (Session 66)
+- **Decommissioned 2026-04-18.** Role transferred to C240 (see below).
+- 12TB SAS drive array moved to C240. E5-2673 v4 CPUs (that were pending install) moved to C240.
+- Tailscale alias `100.121.107.49` still listed — remove from Tailscale admin when convenient.
+- Old Samba shares `\\192.168.68.69\*` OFFLINE. Latitude Z: drive will fail to mount until remapped to c240.
+
+#### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
+- Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
+- **LAN IP:** 192.168.68.53/22 on eno1 (DHCP)
+- **Tailscale IP:** 100.120.11.35 (device name `c240-1` in tailnet — old `c240` at 100.104.66.48 is a stale entry, clean up in admin console)
+- **CPU:** 2× Xeon E5-2673 v4 @ 2.3 GHz = **40 cores / 80 threads** (Broadwell, v4) ✅
+- **RAM:** 64 GB (2× 32 GB DDR4-2400 RDIMM), 62 GiB usable
+- **Storage:** 10.9 TB SAS array on LSI MegaRAID SAS-3 3108 (inherited from Gen 9)
+- **LVM layout:**
+  - `ubuntu-vg` (11 173 GiB total)
+  - `/` → `ubuntu-lv` 100 GB (11 GB used)
+  - `/data` → `data-lv` **10 TiB ext4** (UUID `95cd8cf3-d070-447a-bc1f-f18d3800ad18`, fstab-persisted)
+  - VG headroom: 834 GiB free for snapshots/growth
+- **NICs:** 2× Cisco VIC (10G) + 6× Intel i350 Gigabit
+- **CIMC:** management controller reset to factory defaults, set to DHCP/dedicated port; MAC `00:A3:8E:8E:B3:84`, CIMC IP TBD (needs separate setup)
+- **Credentials:** `rob` / `Ubuntu123` (system + Samba); NOPASSWD sudo via `/etc/sudoers.d/rob-nopasswd`
+- **SSH:** key auth working (Latitude `id_ed25519` in `~/.ssh/authorized_keys`); alias `c240` in `C:\Users\Rob\.ssh\config`
+- **Tailscale 1.96.4** installed and authed as `robpitman1982@`
+- **Samba:** `smbd`/`nmbd` enabled; share `[photos]` → `/data/photos`, valid users `rob`
+  - Default `/etc/samba/smb.conf` backed up to `/etc/samba/smb.conf.orig`
+- **NOT YET MIGRATED from Gen 9:** leaderboards, sweep_results, market_data, configs, portfolio_outputs, rclone gdrive backup cron, dukascopy data, post_sweep.sh, ssh-recover.service, auto-shutdown behaviour (c240 is always-on, so not needed)
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
@@ -139,11 +133,6 @@
 - **FULLY CONFIGURED ✅**
 - MegaRAID note: required virtual drive creation (RAID 0) + Fast Initialization in BIOS before Ubuntu could see disk
 
-#### HP ProLiant c240 (Hermes) — PENDING SETUP (COMPUTE WORKER)
-- Ubuntu 24.04 install planned — same process as R630
-- Will use same creds (rob / Ubuntu123), same SSH/Tailscale/WOL/post_sweep pattern
-- Setup deferred to next session when Rob returns home
-
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
 - **RAM needed:** DDR4 ECC RDIMM 32GB sticks for Gen 9 (match 2Rx4 DDR4-2400 or faster). DDR3 for Gen 8.
@@ -185,13 +174,16 @@
 ## Open Issues (Priority Order)
 
 1. **Export remaining TDS data.** Only ES, AD, NZDUSD exported via Tick Data Suite. Need to export all 24 markets x 5 timeframes. Some markets (BTCUSD, LIGHTCMDUSD, etc.) have subdirectories but no exported CSVs yet.
-2. **Gen 9 CPU install pending.** 2x E5-2673 v4 arrived. Need to swap out E5-2603 v4, install both CPUs, verify 80 threads visible. Thermal paste needed.
-3. **Gen 8 CPU install pending.** 2x E5-2697 v2 arrived. Install same session as Gen 9, verify 48 threads.
-4. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-5. **First local sweep validation.** Run `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate the full pipeline end-to-end.
-6. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
-7. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
-8. **Cloud decommission.** Once local sweeps proven: delete `cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM. Keep `download_run.py` for existing results access.
+2. **Migrate Gen 9 data → C240.** `/data/leaderboards`, `/data/sweep_results`, `/data/market_data`, `/data/dukascopy`, `/data/configs`, `/data/portfolio_outputs` all need to be copied from Gen 9 (if still powered on) or restored from rclone/gdrive backup to `/data/` on c240. Re-create non-photos Samba shares on c240. Remap Latitude Z: drive to `\\192.168.68.53\data`.
+3. **Restore services on C240.** rclone + gdrive OAuth, nightly backup cron, post_sweep.sh, ssh-recover.service, ipmitool, dukascopy-python, WOL netplan config. Gen 9 SSH alias needs to be redirected or removed.
+4. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, last seen 7h ago) is a dead registration from the Hermes-pivot attempt — remove via Tailscale admin console.
+5. **CIMC network config for C240.** Management controller is on dedicated port with DHCP but CIMC IP has not been captured/documented. `nmap -sn 192.168.68.0/22` or check router ARP for MAC `00:A3:8E:8E:B3:84`.
+6. **Gen 8 CPU install pending.** 2x E5-2697 v2 arrived. Install under house, verify 48 threads. (Gen 9 CPUs went into C240 instead.)
+7. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
+8. **First local sweep validation.** Run `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate the full pipeline end-to-end.
+9. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
+10. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+11. **Cloud decommission.** Once local sweeps proven: delete `cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM. Keep `download_run.py` for existing results access.
 
 ---
 
@@ -251,9 +243,10 @@
 - **Session 61:** Vectorized trade simulation loop (14-23x speedup, zero-tolerance parity), prop firm config fixes (daily DD pause vs terminate)
 - **Session 62:** Repo reorganization for Claude Desktop compatibility, archived 93 session files + 60 temp dirs, fixed .gitignore
 
-### Phase 7: Local Cluster & CFD Pipeline (Sessions 63-65, Apr 14-17 2026)
+### Phase 7: Local Cluster & CFD Pipeline (Sessions 63-66, Apr 14-18 2026)
 - **Session 63:** Dukascopy architecture decision, SP500 tick download, The5ers MT5 exports, home lab network setup
 - **Session 65:** CFD data pipeline built end-to-end: TDS format converter (24 markets), engine loader "Vol" support, 24 CFD market configs, local sweep runner, batch cluster sweep launcher with resume, config generator (24 sweep YAMLs). Cloud infrastructure deprecated.
+- **Session 66 (2026-04-18):** Gen 9 decommissioned. Cisco C240 M4 commissioned as new always-on workhorse at 192.168.68.53. 2× E5-2673 v4 (40C/80T), 64 GB RAM, 10.9 TB SAS (ex-Gen 9 drives). Ubuntu 24.04.4, LVM layout: / 100 GB + /data 10 TiB ext4 + 834 GiB VG headroom. SSH key auth, NOPASSWD sudo, Tailscale 100.120.11.35 (device name c240-1), Samba [photos] share live. Initial Hermes plan on C220/old-c240 abandoned mid-session due to MegaRAID drive visibility issue — pivoted to this C240 hardware. Gen 9 data migration and non-photos Samba shares still pending.
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -275,27 +268,27 @@ Latitude (main control, home + field, SSH via Tailscale)
     ├──► X1 Carbon (always-on, in drawer, Claude + Desktop Commander)
     │        └── SSH relay to all servers
     │
-    ├──► Gen 9 (ALWAYS ON — data hub + compute, 80 threads after CPU upgrade)
-    │     ├── holds master/ultimate leaderboards (local SSD)
-    │     ├── holds market data — TradeStation, MT5 ticks, Dukascopy ticks (local SSD)
-    │     ├── Samba share to X1 Carbon + Latitude
-    │     ├── rclone → Google Drive (backup copies only, NOT for compute reads)
-    │     ├── receives sweep results from Gen 8 / R630 via rsync
+    ├──► C240 M4 (ALWAYS ON — data hub + compute, 80 threads — Gen 9 replacement)
+    │     ├── holds master/ultimate leaderboards (local 10 TiB /data)
+    │     ├── holds market data — TradeStation, MT5 ticks, Dukascopy ticks
+    │     ├── Samba share to X1 Carbon + Latitude (photos live, data shares pending migration)
+    │     ├── rclone → Google Drive (pending setup)
+    │     ├── receives sweep results from Gen 8 / R630 via rsync (pending)
     │     ├── runs leaderboard updater + portfolio selector
     │     └── wakes Gen 8 / R630 via WOL when compute needed
     │
     ├──► Gen 8 (SLEEPS WHEN IDLE — compute worker, 48 threads after CPU upgrade)
-    │     └── woken by Latitude / X1 Carbon / Gen 9 via WOL
+    │     └── woken by Latitude / X1 Carbon / C240 via WOL
     │
     └──► R630 (SLEEPS WHEN IDLE — compute worker, 88 threads)
-          └── woken by Latitude / X1 Carbon / Gen 9 via WOL
+          └── woken by Latitude / X1 Carbon / C240 via WOL
 ```
 
 - **Google Drive is backup/remote viewing ONLY — never used for compute reads**
-- Market data + leaderboards stay on local SSD for speed
-- Workers crunch sweeps, rsync results to Gen 9 over LAN
-- Portfolio selector runs on Gen 9 (or R630), reads from local SSD
-- Gen 9 NEVER sleeps (~$15-20/mo power). Workers sleep when idle.
+- Market data + leaderboards stay on local SSD/SAS for speed
+- Workers crunch sweeps, rsync results to C240 over LAN
+- Portfolio selector runs on C240 (or R630), reads from local SAS
+- C240 NEVER sleeps. Workers sleep when idle.
 
 ---
 
@@ -326,17 +319,19 @@ Latitude (main control, home + field, SSH via Tailscale)
 ## On the Horizon
 
 - **Export all TDS data** — run Tick Data Suite exports for remaining 21 markets (24 total - 3 done). Each market needs 5 timeframes (D1, H1, M30, M15, M5). Then run converter: `python scripts/convert_tds_to_engine.py --input-dir "C:/path/to/exports/" --output-dir Data/`
-- **Gen 9 CPU install** — 2x E5-2673 v4 arrived, install under house, thermal paste, verify 80 threads
-- **Gen 8 CPU install** — 2x E5-2697 v2 arrived, install same session, verify 48 threads
+- **Migrate Gen 9 data to C240** — copy `/data/*` from Gen 9 (or restore from gdrive) to c240 `/data/`. Rebuild non-photos Samba shares. Remap Latitude Z: drive to `\\192.168.68.53\data`.
+- **Restore C240 services** — rclone + gdrive OAuth + nightly backup cron, post_sweep.sh, ssh-recover.service, ipmitool, dukascopy-python, WOL netplan.
+- **Capture C240 CIMC IP** — CIMC is on DHCP via dedicated port, IP not yet documented. Check router ARP for MAC `00:A3:8E:8E:B3:84`.
+- **Clean up stale Tailscale `c240` device** (100.104.66.48, offline 7h) via admin console.
+- **Gen 8 CPU install** — 2x E5-2697 v2 arrived, install under house, verify 48 threads.
 - **First local sweep** — `python run_cluster_sweep.py --markets ES --timeframes daily` to validate full pipeline
-- **Copy converted CSVs to Gen 9** — `scp Data/*_dukascopy.csv gen9:/data/market_data/dukascopy/`
-- **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on Gen 9 after CPU upgrade
+- **Copy converted CSVs to C240** — `scp Data/*_dukascopy.csv c240:/data/market_data/dukascopy/`
+- **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on C240
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`)
 - **Challenge vs Funded mode** — implement spec in `CHALLENGE_VS_FUNDED_SPEC.md` (recency weighting, cost profiles, mode-specific scoring)
-- **HP c240 (Hermes) Ubuntu setup** — install Ubuntu 24.04, same config as R630
 - **Cloud decommission** — delete cloud/ directory, run_spot_resilient.py, run_cloud_sweep.py, strategy-console VM
 - Static IP port forwarding setup once new ISP connected
-- Hermes Agent on Gen 9 for monitoring/alerting (Linux native, Telegram gateway)
+- Hermes Agent on C240 for monitoring/alerting (Linux native, Telegram gateway)
 - Strategy templates to reduce search space
 
 ---
@@ -345,38 +340,35 @@ Latitude (main control, home + field, SSH via Tailscale)
 
 ```
 # SSH aliases (from Latitude or X1 Carbon)
-ssh gen9          # Gen 9 Tailscale (100.121.107.49)
+ssh c240          # Cisco C240 M4 — LAN 192.168.68.53, Tailscale 100.120.11.35 (device name c240-1)
 ssh gen8          # Gen 8 Tailscale (100.76.227.12)
 ssh r630          # Dell R630 Tailscale (100.85.102.4) — backtest cluster
-ssh c240          # Cisco C240 Tailscale (100.104.66.48) — autonomous agent server
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
+# ssh gen9        # DECOMMISSIONED Session 66
 
-# Samba shares (user: rob, password: Ubuntu123.)
-\\192.168.68.69\data           # All strategy data (Z: on Latitude)
-\\192.168.68.69\leaderboards   # Ultimate leaderboards
-\\192.168.68.69\sweep_results  # Sweep output runs
-\\192.168.68.69\market_data    # TradeStation CSVs + mt5_ticks/
-\\192.168.68.69\configs        # Cloud configs + post_sweep.sh
-\\192.168.68.69\photos         # 3TB photo archive
+# Samba shares (user: rob, password: Ubuntu123)
+\\192.168.68.53\photos         # C240 photos share (10 TiB /data/photos)
+# \\192.168.68.69\*            # DECOMMISSIONED with Gen 9 — remap Latitude Z: drive
+# Non-photos shares (leaderboards/sweep_results/market_data/configs/data) pending migration to c240
 
 # WOL (from Latitude)
 C:\Users\Rob\wake-r630.bat      # MAC ec:f4:bb:ed:bf:00
 C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c (on X1 Carbon)
 
-# Server creds: rob / Ubuntu123. (all servers, including future Dell R630)
+# Server creds: rob / Ubuntu123 (all servers)
+# C240 sudo: NOPASSWD via /etc/sudoers.d/rob-nopasswd
 # GCP SSH: ssh -i C:\Users\Rob\.ssh\google_compute_engine pitman_nikola@35.223.104.173
 
 # Sweep results pipeline (run on worker after sweep):
-# post_sweep.sh <sweep_output_dir>   # rsync to Gen 9, trigger leaderboard update
+# post_sweep.sh <sweep_output_dir>   # rsync to C240 (pending migration), trigger leaderboard update
 
-# rclone backup (runs nightly at 2am from Gen 9, rob's crontab)
-# Manual: rclone copy /data/leaderboards gdrive:strategy-data-backup/leaderboards/ --progress
-# Backup script: /usr/local/bin/rclone_backup.sh
+# rclone backup — pending migration from Gen 9 to C240
 
-# iLO access
-Gen 9 iLO: https://192.168.68.75 (Administrator / PVPT6M5H)
+# iLO / CIMC access
+# Gen 9 iLO: DECOMMISSIONED Session 66
 Gen 8 iLO: https://192.168.68.76 (old SSL - use Firefox, creds unknown)
 R630 LAN:  192.168.68.78, Tailscale 100.85.102.4, MAC ec:f4:bb:ed:bf:00
+C240 CIMC: on dedicated port via DHCP, MAC 00:A3:8E:8E:B3:84, IP TBD — username admin, password Ubuntu123
 ```
 
 ## Key Principles
