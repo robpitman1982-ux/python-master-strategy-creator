@@ -80,6 +80,7 @@
   - `/data` → `data-lv` **10 TiB ext4** (UUID `95cd8cf3-d070-447a-bc1f-f18d3800ad18`, fstab-persisted)
   - VG headroom: 834 GiB free for snapshots/growth
 - **NICs:** 2× Cisco VIC (10G) + 6× Intel i350 Gigabit
+- **Provenance:** ex-corporate machine; BIOS + CIMC factory-reset at start of Session 66 (cleared VLAN 303, hostname `splcbr02-5i-rac.sge.insitec.local`, old subnet 10.254.1.x)
 - **CIMC:** management controller reset to factory defaults, set to DHCP/dedicated port; MAC `00:A3:8E:8E:B3:84`, CIMC IP TBD (needs separate setup)
 - **Credentials:** `rob` / `Ubuntu123` (system + Samba); NOPASSWD sudo via `/etc/sudoers.d/rob-nopasswd`
 - **SSH:** key auth working (Latitude `id_ed25519` in `~/.ssh/authorized_keys`); alias `c240` in `C:\Users\Rob\.ssh\config`
@@ -118,20 +119,6 @@
 - `post_sweep.sh` deployed at `/usr/local/bin/post_sweep.sh`
 - Gen 9 SSH alias `r630` pointing to 192.168.68.78, Gen 9 key authorised on r630 ✅
 - **FULLY CONFIGURED** — ready to run sweeps
-
-#### Cisco C240 M4 — AUTONOMOUS AGENT SERVER (ALWAYS ON)
-- Ubuntu 24.04, hostname: c240, **static IP 192.168.68.79** (netplan configured), Tailscale 100.104.66.48
-- Credentials: rob / Ubuntu123, SSH alias: `c240`
-- **Purpose: Standalone autonomous agent/Hermes server — NOT part of backtest cluster**
-- Runs 24/7 on passive income projects: Amazon affiliate, AI agents, autonomous workflows
-- **Storage:** 118GB SSD, LVM expanded to 115GB root (97GB free)
-- System updated, packages: htop, curl, wget, git, python3 3.12, pip, venv, nodejs 18, npm, Docker 29.1.3
-- Docker enabled and running, rob added to docker group
-- SSH service configured (socket off, service on), ssh-recover.service enabled
-- NOPASSWD sudoers set, WOL via netplan (eno1)
-- Tailscale operator set for rob (no sudo needed for tailscale)
-- **FULLY CONFIGURED ✅**
-- MegaRAID note: required virtual drive creation (RAID 0) + Fast Initialization in BIOS before Ubuntu could see disk
 
 #### Pending Hardware
 - **Dell R730 on eBay** (service tag 3TW3T92, Oakleigh VIC, $500 bid / $1000 BIN) — specs unknown, asked seller for CPU/RAM info. Mfg Jan 2016 (v3 Xeon era). NO HARD DRIVES. Don't bid without knowing specs.
