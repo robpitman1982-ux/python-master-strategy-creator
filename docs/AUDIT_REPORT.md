@@ -282,3 +282,48 @@ Total: 120 conversions needed
 - Delete test_parallel_vm.py and test_cloud_launcher.py in Session 69 (cloud cleanup)
 - Fix test_daily_dd_breach in Session 69 (update assertion for new behavior)
 - After cleanup: expected test count ~265 passing, 0 failing
+
+---
+
+## 7. Cloud / deprecated code
+
+### Complete inventory
+
+| Item | Type | Files | LOC | Status |
+|------|------|-------|-----|--------|
+| cloud/ directory | GCP configs + launcher + download | 77 files | 6,793 (py+yaml+sh) | DELETE |
+| cloud/launch_gcp_run.py | GCP VM orchestrator | 1 | 3,013 | DELETE |
+| cloud/download_run.py | GCP result downloader | 1 | 563 | DELETE |
+| cloud/*.yaml | 57 GCP sweep configs | 57 | 2,713 | DELETE |
+| cloud/*.sh, *.ps1 | GCP shell scripts | 6 | 504 | DELETE |
+| cloud/GCP_WINDOWS_RUNBOOK.md | GCP docs | 1 | ~100 | DELETE |
+| cloud/SETUP.md | DigitalOcean setup | 1 | ~100 | DELETE |
+| run_spot_resilient.py | SPOT VM runner | 1 | 634 | DELETE |
+| run_cloud_sweep.py | Cloud sweep wrapper | 1 | 70 | DELETE |
+| run_cloud_parallel.py | Parallel cloud runner | 1 | 143 | DELETE |
+| run_cloud_job.py | Cloud job orchestrator | 1 | 480 | DELETE |
+| tests/test_cloud_launcher.py | Cloud launcher tests | 1 | 1,214 | DELETE |
+| tests/test_parallel_vm.py | Parallel VM tests | 1 | 476 | DELETE |
+| Dockerfile | Docker build for cloud | 1 | ~20 | DELETE |
+| .dockerignore | Docker ignore | 1 | ~10 | DELETE |
+| .github/workflows/deploy_strategy_console.yml | GCP console deploy CI | 1 | ~50 | DELETE |
+| scripts/run_console_job.py | Console job runner | 1 | 103 | DELETE |
+| scripts/setup_dashboard_venv.sh | Console venv setup | 1 | ~40 | DELETE |
+| scripts/start_dashboard.sh | Console dashboard start | 1 | ~10 | DELETE |
+| scripts/strategy-dashboard.service | Console systemd service | 1 | ~15 | DELETE |
+| scripts/update_console.sh | Console update script | 1 | ~15 | DELETE |
+| strategy_console_storage/ | GCP console data | 231 tracked files | N/A | git rm --cached |
+
+### Total LOC to delete: ~9,810
+
+### Impact on remaining code
+
+No core modules are exclusively imported by cloud code. The cloud scripts import:
+- paths.py (also used by active code)
+- modules/ultimate_leaderboard.py (also used by active code)
+
+Deleting cloud code has zero impact on engine, strategies, portfolio selector, or prop firm simulator.
+
+### Recommendation
+
+All cloud code can be deleted in a single Session 69 commit. No modules become orphaned. The only remaining reference to clean up would be cloud-specific mentions in CLAUDE.md and CHANGELOG_DEV.md.
