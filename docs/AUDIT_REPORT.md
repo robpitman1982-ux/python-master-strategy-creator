@@ -485,3 +485,93 @@ All 3 missing packages are cloud-only dependencies. After cloud code deletion, r
 - **Remove altair** from requirements.txt — it is a transitive dep of streamlit, not directly imported
 - **No packages need adding** — paramiko/scp/requests go away with cloud code deletion
 - **Version pins look current** — numpy 2.1.3 and pandas 2.2.2 are recent
+
+---
+
+## 12. Session 69 cleanup recommendations
+
+### Tier 1 — Delete (no risk, confirmed deprecated)
+
+| Item | Files | Est. LOC | Notes |
+|------|-------|----------|-------|
+| cloud/ directory | 77 | 6,793 | All GCP code, configs, docs |
+| run_spot_resilient.py | 1 | 634 | SPOT VM runner |
+| run_cloud_sweep.py | 1 | 70 | Cloud sweep wrapper |
+| run_cloud_parallel.py | 1 | 143 | Parallel cloud runner |
+| run_cloud_job.py | 1 | 480 | Cloud job orchestrator |
+| tests/test_cloud_launcher.py | 1 | 1,214 | Cloud launcher tests |
+| tests/test_parallel_vm.py | 1 | 476 | Parallel VM tests |
+| Dockerfile | 1 | ~20 | Docker build for cloud |
+| .dockerignore | 1 | ~10 | Docker ignore |
+| .github/workflows/deploy_strategy_console.yml | 1 | ~50 | GCP console deploy CI |
+| scripts/run_console_job.py | 1 | 103 | GCP console job runner |
+| scripts/setup_dashboard_venv.sh | 1 | ~40 | GCP console venv |
+| scripts/start_dashboard.sh | 1 | ~10 | GCP console dashboard |
+| scripts/strategy-dashboard.service | 1 | ~15 | GCP systemd service |
+| scripts/update_console.sh | 1 | ~15 | GCP console updater |
+
+**Total Tier 1: ~90 files, ~10,073 LOC**
+
+### Tier 2 — Delete after dry-run (proven but cautious)
+
+| Item | Action | Reason |
+|------|--------|--------|
+| configs/local_sweeps/ES_daily_cfd_v1.yaml | Delete | Buggy (futures params on CFD data) — replaced by corrected ES config |
+| configs/local_sweeps/ES_all_timeframes.yaml | Fix | Same bug — update dollars_per_point to CFD value from cfd_markets.yaml |
+| Data/ (40 tracked CSVs) | git rm --cached | .gitignore entry exists; stop tracking, keep local files |
+| strategy_console_storage/ (231 tracked files) | git rm --cached | GCP console data; stop tracking |
+| archive/old_outputs/ (~68 tracked CSVs) | git rm --cached | Historical outputs; stop tracking |
+
+### Tier 3 — Reorganize (no deletions)
+
+| Item | Action |
+|------|--------|
+| SESSION_65_TASKS.md | Move to archive/sessions/ |
+| SESSION_68_TASKS.md | Move to archive/sessions/ (after this session) |
+| SESSION_68_PIPELINE_REVIEW.md | Move to docs/ (active reference) |
+| requirements.txt | Remove altair (transitive dep) |
+| CLAUDE.md | Remove all cloud/GCP references, update deployment section |
+| config.yaml | Update default data path or mark as template |
+
+### Tier 4 — Document (write new docs)
+
+| Doc | Purpose | Est. Size |
+|-----|---------|-----------|
+| docs/NAMING_CONVENTIONS.md | Three-naming system (canonical/MT5/Dukascopy) | ~50 lines |
+| docs/DATA_LAYOUT.md | Canonical data directory structure on c240 | ~100 lines |
+| docs/CLUSTER_ARCHITECTURE.md | Compute cluster topology | ~80 lines |
+| docs/PROP_FIRM_UNIVERSES.md | Per-firm tradeable markets + excluded_markets. The5ers excludes W/NG/US/TY/RTY/HG. FTMO/Darwinex/FundedNext TBD. Critical: sweep = universal, portfolio selection = per-firm filter | ~60 lines |
+
+### Tier 5 — Fix (correctness issues)
+
+| Issue | Severity | Fix Session |
+|-------|----------|-------------|
+| ES config engine params bug (ES_all_timeframes.yaml) | Critical | 69 |
+| test_daily_dd_breach assertion | Medium | 69 |
+| Dashboard Live Monitor (engine log + promoted panels) | Low | 70+ |
+| excluded_markets not implemented in portfolio selector | Medium | 73 (swap cost session) |
+
+### Tier 6 — Defer (scope for later sessions)
+
+| Item | Session |
+|------|---------|
+| CFD swap costs in MC simulator | 73 |
+| 120 Dukascopy conversions | 71 |
+| Gen 8 CPU upgrade (hardware) | When convenient |
+| C240 CIMC IP capture | When convenient |
+| BFG repo history cleanup (optional) | After Session 69 |
+| Per-firm config files (FTMO/Darwinex/FundedNext) | When accounts active |
+| ohlc_engine/ directory creation on c240 | 71 |
+| MT5 tick export backfill (ticks_mt5_the5ers/) | When needed for spread validation |
+
+### Session estimate
+
+- **Session 69** (cleanup): Tiers 1-3, start Tier 4 = 1 session
+- **Session 70** (first sweep): Tier 5 ES config fix + first clean CFD sweep = 1 session
+- **Session 71** (conversions): 120 Dukascopy conversions = 1 session
+- **Session 72** (full sweep): Distributed 24-market sweep = 1 session
+- **Session 73** (swap costs): Tier 5 excluded_markets + Tier 6 swap costs = 1 session
+
+---
+
+*Report generated 2026-04-19 by Claude Code Session 68 audit.*
