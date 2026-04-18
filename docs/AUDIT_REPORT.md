@@ -327,3 +327,60 @@ Deleting cloud code has zero impact on engine, strategies, portfolio selector, o
 ### Recommendation
 
 All cloud code can be deleted in a single Session 69 commit. No modules become orphaned. The only remaining reference to clean up would be cloud-specific mentions in CLAUDE.md and CHANGELOG_DEV.md.
+
+---
+
+## 8. Documentation
+
+### docs/ directory (17 files + audit/)
+
+| Doc | Lines | Last Modified | Status |
+|-----|-------|---------------|--------|
+| FILTER_SUMMARY.md | 825 | 2026-04-04 | Current — comprehensive filter reference |
+| EASYLANGUAGE_FILTER_MAP.md | 532 | 2026-04-04 | Current — EasyLanguage translation reference |
+| STRATEGY_ENGINE_ANALYSIS.md | 448 | 2026-04-04 | Current — engine deep dive |
+| PROJECT_STATE_REVIEW.md | 372 | 2026-04-19 | Current — written this session |
+| CHALLENGE_VS_FUNDED_SPEC.md | 367 | 2026-04-17 | Current — challenge vs funded mode spec |
+| SESSION_HANDOFF_SUMMARY_3.md | 330 | 2026-04-04 | Stale — superseded by HANDOVER.md |
+| ES_ALL_TIMEFRAMES_RESULTS_ANALYSIS.md | 295 | 2026-04-04 | Stale — futures-era analysis |
+| IMPROVEMENT_ROADMAP.md | 294 | 2026-04-04 | Stale — superseded by PROJECT_STATE_REVIEW |
+| PROJECT_SUMMARY_FOR_LLM.md | 279 | 2026-04-04 | Stale — old LLM context dump |
+| SESSIONS_38_41_ROADMAP.md | 270 | 2026-04-04 | Stale — completed work |
+| PORTFOLIO_SELECTOR_BRIEF.md | 247 | 2026-04-04 | Current — portfolio selector technical brief |
+| LLM_CONSULTATION_PROMPT.md | 173 | 2026-04-04 | Stale — old LLM prompt template |
+| BOOTCAMP_SCORING_ANALYSIS.md | 148 | 2026-04-04 | Current — bootcamp scoring reference |
+| EXIT_VALIDATION_ANALYSIS.md | 142 | 2026-04-04 | Current — exit type validation results |
+| SSH_HARDENING.md | 110 | 2026-04-18 | Current — c240 SSH hardening notes |
+| TRADESTATION_EXPORT_GUIDE.md | 57 | 2026-04-04 | Stale — TradeStation no longer primary data source |
+| TEST_RUN_CHECKLIST.md | 34 | 2026-04-04 | Stale — cloud-era test checklist |
+
+### Top-level markdown (4 files)
+
+| Doc | Size | Status |
+|-----|------|--------|
+| CLAUDE.md | 32 KB | Current but needs cloud refs removed |
+| HANDOVER.md | 38 KB | Current — primary ops handover |
+| CHANGELOG_DEV.md | 72 KB | Current but very large (1,500+ lines) |
+| README.md | 106 bytes | Minimal placeholder |
+
+### Session handover docs
+
+- 3 at top level: SESSION_65_TASKS.md, SESSION_68_PIPELINE_REVIEW.md, SESSION_68_TASKS.md
+- 39 archived in archive/sessions/
+- **Recommendation:** Move all SESSION_* files to docs/handovers/ or archive/sessions/
+
+### Missing docs (identified in PROJECT_STATE_REVIEW.md)
+
+| Needed Doc | Purpose | Partially Written? |
+|------------|---------|-------------------|
+| NAMING_CONVENTIONS.md | Three-naming system (canonical/MT5/Dukascopy) | No — only described in PROJECT_STATE_REVIEW |
+| DATA_LAYOUT.md | Canonical data directory structure | No — only described in PROJECT_STATE_REVIEW |
+| CLUSTER_ARCHITECTURE.md | Compute cluster topology | No — only described in PROJECT_STATE_REVIEW |
+| PROP_FIRM_UNIVERSES.md | Per-firm tradeable markets + excluded_markets | No — not documented anywhere |
+
+### Contradictions found
+
+- CLAUDE.md describes GCP as active infrastructure; PROJECT_STATE_REVIEW.md marks it deprecated
+- CLAUDE.md lists strategy-console VM at 35.223.104.173 as active; it is deprecated
+- TRADESTATION_EXPORT_GUIDE.md implies TradeStation is primary data source; Dukascopy is now primary
+- IMPROVEMENT_ROADMAP.md duplicates and contradicts PROJECT_STATE_REVIEW.md priorities
