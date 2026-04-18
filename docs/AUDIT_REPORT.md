@@ -453,3 +453,35 @@ The .git directory is 366 MB, almost entirely from CSV data files committed befo
 ### Recommendation
 
 Option 1 (git rm --cached) for Session 69 — stops the bleeding. Option 2 (BFG) is optional and can be done later when convenient, since it requires a force push and all clones to re-fetch.
+
+---
+
+## 11. Dependencies
+
+### requirements.txt (7 packages)
+
+| Package | Version | Used? | Notes |
+|---------|---------|-------|-------|
+| numpy | ==2.1.3 | Yes | Core — vectorized trades, MC |
+| pandas | ==2.2.2 | Yes | Core — data loading, analysis |
+| pyyaml | ==6.0.2 | Yes | Core — config loading |
+| streamlit | ==1.37.1 | Yes | Dashboard |
+| plotly | ==5.23.0 | Yes | Dashboard charts |
+| altair | ==5.3.0 | **No direct import** | Transitive dep of streamlit |
+| pytest | >=8.0.0 | Yes | Testing |
+
+### Missing from requirements.txt
+
+| Package | Where Imported | Action |
+|---------|---------------|--------|
+| paramiko | run_cloud_job.py | Deleted with cloud code in Session 69 |
+| scp | run_cloud_job.py | Deleted with cloud code in Session 69 |
+| requests | run_cloud_job.py | Deleted with cloud code in Session 69 |
+
+All 3 missing packages are cloud-only dependencies. After cloud code deletion, requirements.txt will be complete.
+
+### Recommendations
+
+- **Remove altair** from requirements.txt — it is a transitive dep of streamlit, not directly imported
+- **No packages need adding** — paramiko/scp/requests go away with cloud code deletion
+- **Version pins look current** — numpy 2.1.3 and pandas 2.2.2 are recent
