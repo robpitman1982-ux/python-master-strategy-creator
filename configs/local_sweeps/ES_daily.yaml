@@ -1,12 +1,9 @@
-# Example local sweep config: ES daily CFD
-# Usage: python run_local_sweep.py --config configs/local_sweeps/ES_daily_cfd_v1.yaml
-
 sweep:
-  name: "es_daily_cfd_v1"
+  name: "es_daily_dukascopy_v1"
   output_dir: "Outputs"
 
 datasets:
-  - path: "Data/ES_daily_2012_2026_dukascopy.csv"
+  - path: "ES_daily_dukascopy.csv"
     market: "ES"
     timeframe: "daily"
 
@@ -16,9 +13,9 @@ engine:
   initial_capital: 250000.0
   risk_per_trade: 0.01
   commission_per_contract: 0
-  slippage_ticks: 0
-  tick_value: 12.50
-  dollars_per_point: 50.0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
   use_vectorized_trades: true
 
 pipeline:
