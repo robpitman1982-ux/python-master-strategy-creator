@@ -1,0 +1,2 @@
+34G	/data/market_data/cfds
+2.2G	/data/market_data/futures

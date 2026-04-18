@@ -174,3 +174,71 @@ Of 122 dataset paths across all sweep configs:
 **Summary:** 2 active scripts, 5 deprecated (all GCP strategy-console related), 2 audit scripts created this session.
 
 **Recommendation:** Delete the 5 deprecated scripts in Session 69 alongside cloud/ directory cleanup. They all relate to the GCP strategy-console VM which is deprecated.
+
+---
+
+## 5. Data layout
+
+### Summary counts
+
+| Location | Files | Size | Notes |
+|----------|-------|------|-------|
+| Repo Data/ | 41 | 344 MB | 36 TradeStation CSVs + 1 Dukascopy converted + 1 smoke + 3 TDS samples. **40 tracked in git despite .gitignore** |
+| c240 /data/market_data/futures/ | 87 CSVs | 2.2 GB | All TradeStation futures exports |
+| c240 /data/market_data/cfds/ohlc/ | 120 CSVs + 1 .bcf | ~1.7 GB | Dukascopy raw OHLC (24 markets x 5 TFs) |
+| c240 /data/market_data/cfds/ohlc_engine/ | **0** | 0 | **DOES NOT EXIST** on c240 |
+| c240 /data/market_data/cfds/ticks_dukascopy_tds/ | 24 dirs | 34 GB | Raw .bfc tick cache |
+| c240 /data/market_data/cfds/ticks_dukascopy_raw/ | 0 | 0 | Empty, for future parquet |
+| c240 /data/market_data/cfds/ticks_mt5_the5ers/ | 0 | 0 | Empty |
+
+### Critical finding: ZERO engine-ready CFD files
+
+The ohlc_engine/ directory does not exist on c240. The only converted file (ES_daily_2012_2026_dukascopy.csv) lives in the repo Data/ directory, not in the canonical c240 data location. This means:
+- All 120 Dukascopy conversions are pending (not 92 as previously estimated)
+- The converted ES daily file needs to be moved to c240 /data/market_data/cfds/ohlc_engine/
+
+### Coverage matrix (24 CFD markets x 5 timeframes)
+
+All 24 markets have complete Dukascopy raw OHLC for all 5 timeframes. None have engine-ready conversions.
+
+| Market | Canonical | Raw OHLC D1 | Raw OHLC H1 | Raw OHLC M30 | Raw OHLC M15 | Raw OHLC M5 | Engine-Ready |
+|--------|-----------|:-----------:|:-----------:|:------------:|:------------:|:-----------:|:------------:|
+| USA_500_Index | ES | Y | Y | Y | Y | Y | repo Data/ only |
+| USA_100_Technical_Index | NQ | Y | Y | Y | Y | Y | - |
+| USA_30_Index | YM | Y | Y | Y | Y | Y | - |
+| XAUUSD | GC | Y | Y | Y | Y | Y | - |
+| XAGUSD | SI | Y | Y | Y | Y | Y | - |
+| US_Light_Crude_Oil | CL | Y | Y | Y | Y | Y | - |
+| US_Brent_Crude_Oil | BRENT | Y | Y | Y | Y | Y | - |
+| EURUSD | EC | Y | Y | Y | Y | Y | - |
+| USDJPY | JY | Y | Y | Y | Y | Y | - |
+| GBPUSD | BP | Y | Y | Y | Y | Y | - |
+| AUDUSD | AD | Y | Y | Y | Y | Y | - |
+| USDCAD | USDCAD | Y | Y | Y | Y | Y | - |
+| USDCHF | USDCHF | Y | Y | Y | Y | Y | - |
+| NZDUSD | NZDUSD | Y | Y | Y | Y | Y | - |
+| Natural_Gas | NG | Y | Y | Y | Y | Y | - |
+| High_Grade_Copper | HG | Y | Y | Y | Y | Y | - |
+| US_Small_Cap_2000 | RTY | Y | Y | Y | Y | Y | - |
+| Bitcoin_vs_US_Dollar | BTC | Y | Y | Y | Y | Y | - |
+| Ether_vs_US_Dollar | ETH | Y | Y | Y | Y | Y | - |
+| Germany_40_Index | DAX | Y | Y | Y | Y | Y | - |
+| France_40_Index | CAC | Y | Y | Y | Y | Y | - |
+| Europe_50_Index | STOXX | Y | Y | Y | Y | Y | - |
+| UK_100_Index | FTSE | Y | Y | Y | Y | Y | - |
+| Japan_225 | N225 | Y | Y | Y | Y | Y | - |
+
+### Repo Data/ duplicates
+
+The 36 TradeStation CSVs in repo Data/ (AD, BP, BTC, EC, JY, NG, TY, US, W x 4 TFs) are duplicates of files in c240 /data/market_data/futures/. These are 344 MB tracked in git history.
+
+**Recommendation:** git rm --cached Data/ in Session 69 to stop tracking. The .gitignore entry already exists but was added after files were committed.
+
+### Conversion priority order
+
+1. **The5ers-tradeable (highest priority):** ES, NQ, YM, GC, SI, CL (6 markets x 5 TF = 30 files)
+2. **FX pairs:** EC, JY, BP, AD, USDCAD, USDCHF, NZDUSD (7 markets x 5 TF = 35 files)
+3. **Remaining indices + crypto:** BRENT, DAX, CAC, STOXX, FTSE, N225, BTC, ETH (8 markets x 5 TF = 40 files)
+4. **Excluded from The5ers but useful:** NG, HG, RTY (3 markets x 5 TF = 15 files)
+
+Total: 120 conversions needed
