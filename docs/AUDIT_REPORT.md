@@ -108,3 +108,47 @@ Files that import cloud modules (would become orphaned if cloud/ is deleted):
 ### Circular imports
 
 None detected.
+
+---
+
+## 3. Configs
+
+### Summary
+
+| Location | Count | Purpose |
+|----------|-------|---------|
+| configs/cfd_markets.yaml | 1 | Master CFD market definitions (24 markets) |
+| configs/local_sweeps/*.yaml | 25 | Per-market sweep configs |
+| config.yaml (root) | 1 | Default pipeline config (legacy ES futures) |
+| **Total** | **27** |
+
+### Known bugs
+
+| Config | Bug | Severity |
+|--------|-----|----------|
+| configs/local_sweeps/ES_daily_cfd_v1.yaml | dollars_per_point: 50.0 (futures) on Dukascopy CFD data = 50x P&L inflation | CRITICAL |
+| configs/local_sweeps/ES_all_timeframes.yaml | Same bug: dollars_per_point: 50.0 on dukascopy data paths (5 datasets) | CRITICAL |
+| config.yaml (root) | Points to Data/ES_60m_2008_2026_tradestation.csv which does not exist on c240 | Low (legacy) |
+
+### Data file existence
+
+Of 122 dataset paths across all sweep configs:
+- 1 exists: Data/ES_daily_2012_2026_dukascopy.csv
+- 121 missing: pending conversion from raw TDS exports
+
+### Excluded markets / prop firm configs
+
+- No excluded_markets field exists anywhere in configs or code
+- No separate prop firm config files. The5ers configs are Python classes in modules/prop_firm_simulator.py
+- Sweep engine does NOT read excluded_markets: confirmed correct (firm-agnostic discovery)
+- Gap: per-firm tradeable universes need to be externalized to config files
+
+### Recommendations
+
+| Config | Action |
+|--------|--------|
+| ES_daily_cfd_v1.yaml | Delete: buggy, replaced in Session 69 |
+| ES_all_timeframes.yaml | Fix: replace futures params with CFD params |
+| cfd_markets.yaml | Keep: authoritative |
+| 22 other all_timeframes.yaml | Keep: generated, params correct |
+| config.yaml (root) | Fix: update data path or mark legacy |
