@@ -1,0 +1,9 @@
+SESSION 70 PLAUSIBILITY VALIDATION
+Total families: 15
+Accepted: 13
+Max net_pnl: 
+Median PF: 1.52
+Median IS trades: 208
+CRITICAL flags: NONE
+WARN flags: NONE
+RESULT: PASS
