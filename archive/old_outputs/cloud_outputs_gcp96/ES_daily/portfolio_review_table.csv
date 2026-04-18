@@ -1,4 +1,0 @@
-strategy_family,strategy_name,quality_flag,total_trades,is_trades,oos_trades,full_pf,is_pf_pre_2019,oos_pf_post_2019,recent_12m_pf,net_pnl,max_drawdown,mc_max_dd_99,shock_drop_10pct_pnl,shock_extra_slip_pnl
-mean_reversion,RefinedMR_HB5_ATR0.4_DIST1.2_MOM0,STABLE_BORDERLINE,149,83,66,1.17,1.05,1.35,4.79,40859.5,35128.0,112102.39,34388.75,33409.5
-breakout,RefinedBreakout_HB5_ATR0.5_COMP0.9_MOM0,STABLE_BORDERLINE,236,129,107,0.92,0.73,1.2,1.14,-27095.06,83513.0,156129.06,-24949.81,-38895.06
-PORTFOLIO,Combined_All_Strategies,AGGREGATE,385,212,173,1.02,0.87,1.26,1.74,13764.44,72822.38,191716.04,10461.53,-5485.56
