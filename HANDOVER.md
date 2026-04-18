@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 68 complete: full repo audit + cleanup plan ready)
+# Last updated: 2026-04-19 (Session 69 complete: cleanup execution — cloud deleted, configs fixed, tests green)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -170,13 +170,10 @@
 - Static IP enables: direct SSH from field, Hermes webhooks, dashboard access, Contabo push-to-home
 - Recommendation: Keep Tailscale as primary remote access. Use static IP for specific services only.
 
-### Cloud Infrastructure (DEPRECATED — migrating to local cluster)
-- **GCP (Nikola's account):** project-c6c16a27-e123-459c-b7a, console IP 35.223.104.173
-  - n2-highcpu-96, 100 vCPU quota cap (upgrade denied)
-  - Bucket: gs://strategy-artifacts-nikolapitman/
-  - Migrated from old GCP account (project-813d2513) in Session 56 after $424 credit exhausted
-- **Status: DEPRECATED.** Local sweep infrastructure built in Session 65. Cloud files (`cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`) pending manual deletion once local sweeps proven.
-- **Strategy console** (strategy-console-2, 35.223.104.173) can be decommissioned after dashboard migrated to local
+### Cloud Infrastructure (DELETED — Session 69)
+- All GCP cloud code deleted in Session 69 (cloud/, run_spot_resilient.py, run_cloud_sweep.py, Dockerfile, .dockerignore, CI workflow, console scripts)
+- ~10,000 LOC removed, 89 files deleted
+- GCP project and strategy-console VM can be decommissioned at GCP console level when convenient
 
 ### Strategy Engine Status
 - **Ultimate leaderboard:** ~454 strategies (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
@@ -192,8 +189,7 @@
   - `scripts/convert_tds_to_engine.py` — TDS Metatrader CSV -> TradeStation format converter
   - `scripts/generate_sweep_configs.py` — generates sweep configs from market master config
 - **CFD swap rates gathered:** CL=$0.70/micro/night (10x Fri!), SI=$4.05, GC=$2.20, indices near-zero, FX $0.10-0.26
-- **Cloud services deprecated:** GCP SPOT runner (`run_spot_resilient.py`), GCP launcher (`launch_gcp_run.py`), cloud configs (`cloud/`) — all pending deletion once local sweeps proven. Do NOT delete yet.
-- **SPOT runner bug (legacy):** VMs launched from Claude sessions used on-demand instead of SPOT. No longer relevant — sweeps moving to local cluster.
+- **Session 69 cleanup:** Cloud code deleted, ES config bugs fixed (futures params on CFD data), test suite green (236 pass, 0 fail)
 
 ---
 
@@ -210,10 +206,8 @@
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-10. **First local sweep validation.** `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate pipeline end-to-end. **Session 68 top priority.** Workers are ready — c240 ↔ gen8 ↔ r630 full SSH mesh verified Session 67.
-11. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
+10. **First local sweep validation.** ES daily CFD sweep on c240 with corrected config. **Session 70 priority.**
 12. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
-13. **Cloud decommission.** Once local sweeps proven: delete `cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM. Keep `download_run.py` for existing results access.
 
 ---
 
@@ -379,7 +373,7 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **SESSION 68 PRIORITY: First local sweep end-to-end.** Dry run first: `ssh c240; psc-activate; python run_cluster_sweep.py --markets ES --timeframes daily --dry-run`. Then real sweep. Workers (gen8, r630) need waking via c240's `/usr/local/bin/wake-all.sh`. Verify `post_sweep.sh` rsync into `/data/sweep_results/_inbox/` works.
+- **SESSION 70 PRIORITY: First clean CFD sweep.** ES daily on c240 using corrected `configs/local_sweeps/ES_daily.yaml`. Validate end-to-end before scaling.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Export all TDS data** — currently only ES, AD, NZDUSD have converted-to-engine CSVs. 21 markets pending × 5 timeframes each.
 - **Copy converted CSVs to c240** — when TDS converts more markets: destination is now `/data/market_data/cfds/ohlc/` (or run converter directly on c240 once it reads from `ticks_dukascopy_tds/`).
@@ -391,7 +385,6 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 - **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on c240 orchestrating gen8 + r630.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
 - **Challenge vs Funded mode** — implement spec in `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
-- **Cloud decommission** — delete `cloud/` directory, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM.
 - Static IP port forwarding setup once new ISP connected.
 - Hermes Agent on c240 for monitoring/alerting (Linux native, Telegram gateway).
 - Strategy templates to reduce search space.
