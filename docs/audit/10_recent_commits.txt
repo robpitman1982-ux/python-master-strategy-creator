@@ -1,0 +1,63 @@
+bf2eafc session 68 audit task 9: technical debt comment inventory
+66f5408 session 68 audit task 8: documentation inventory
+5d09d13 session 68 audit task 7: cloud code inventory for deletion
+7e0af07 session 68 audit task 6: test suite state
+f1c9cb7 session 68 ops: SSH hardening — sshd_config.d override + runbook
+d43d3db session 68 audit task 5: data layout and conversion coverage
+29e0a3e session 68 audit task 4: scripts inventory and categorization
+cfa8185 session 68 audit task 3: config inventory with engine param audit
+5f0e020 session 68 audit task 2: module dependency analysis
+0a5771a session 68 audit task 1: top-level inventory
+fb27c53 session 68: pre-audit docs (state review, pipeline review, audit tasks)
+4612af9 handover: session 67 final - rclone OAuth done, Z: remapped, c240 relocation verified
+c7e0104 handover: session 67 - c240 full buildout, cluster onboarding, tick data migration + restructure, rclone scaffold, server timing notes
+6189bd2 handover: session 66 — remove stale autonomous-agent c240 section, add ex-corp provenance to new c240
+d5204a9 handover: Session 66 - Gen 9 decommissioned, C240 M4 commissioned as new workhorse
+83135ee session 65: task 9 - update HANDOVER.md with CFD pipeline + local sweep
+96e1e20 session 65: task 6 - verify local sweep has no cloud deps, add gitignore
+40d9e46 session 65: task 5 - batch sweep launcher for local cluster
+eac4616 session 65: task 7 - sweep config generator for 24 CFD markets
+d707b7c session 65: task 4 - local sweep runner for cluster hardware
+43ed9a1 session 65: task 3 - CFD market configuration for 24 Dukascopy markets
+2b583f9 session 65: task 2 - engine loader supports Vol column from Dukascopy CSVs
+752f495 session 65: task 8 - tests for TDS format converter
+95e02cd session 65: task 1 - TDS-to-TradeStation format converter
+0675d5f session 65: CFD sweep tasks + challenge/funded spec + TDS sample data
+512a6ce handover: c240 autonomous agent server fully configured (Docker, Node, Python, Tailscale)
+4e48ebe handover: R630 complete, c240 in progress, CPU arrival, SP500 download done, compute rental idea
+2c6d1e9 handover: c240 Hermes setup queued for next session
+d786980 handover: R630 fully configured - WOL, ssh-recover, post_sweep, Gen9 SSH trust
+a1c01cc handover: Dell R630 Ubuntu install + full cluster configuration
+29e76d7 handover: CFD tick data pipeline, CPU/RAM specs, Dukascopy architecture, Gen 9 LV extended to 500GB
+e48cd72 chore: consolidate all session history into HANDOVER.md
+94ca084 handover: rclone OAuth complete, X1 Carbon recovered, portfolio_outputs dir
+b44ec97 Update HANDOVER.md - cluster storage and data pipeline setup complete
+675a1bc Update HANDOVER.md - clarify machine roles, Gen 9 always-on, sweep pipeline architecture
+abef212 Update HANDOVER.md - infra hardening, SSH bulletproofing, cluster architecture
+0fc726c handover: comprehensive HANDOVER.md, SSH fix docs, session end prompt, session handovers
+bab36a8 Add HANDOVER.md for session continuity
+e4b4a82 perf: increase 30m15m SPOT configs from 48 to 80 workers (BLAS caps make it safe)
+4ba4d66 chore: add 9 new-market 30m+15m SPOT configs and sequential runner
+2dae028 fix: expand sizing weight grid in robustness test to match optimizer
+da717b2 fix: re-sort portfolios by pass rate after sizing optimization
+2eac7c5 chore: ensure all cloud configs skip portfolio evaluation
+c2d9ae4 fix: build equity_curve in vectorized path so drawdown is correct
+23c76cc perf: add copy_data=False to engine init, skip DataFrame copy in sweep workers
+f392841 perf: reduce per-combo logging to 10% progress updates only
+3df0284 perf: reduce cloud sweep workers from 90/94 to 48 to avoid oversubscription
+6aaafc4 perf: add BLAS/OMP thread caps to prevent worker thread explosion
+d921bc7 chore: add SESSION_62_TASKS.md - sweep speed + portfolio selector fixes
+69dc65f fix: portfolio selector — 6 bugs fixed
+e085ea9 chore: local config updates and run_high_stakes script
+f0418ea fix: add use_vectorized_trades=true to all cloud configs
+0910d2d Task 2: Fix simulate_single_step() daily DD — pause vs terminate + recalculate
+aab37d8 Task 6: Config verification tests for all 4 prop firm programs
+b1c20ae Task 4: Update factory configs — leverage, pause flags, min profitable days
+f2ab58d Task 1: Add daily_dd_is_pause and daily_dd_recalculates fields to PropFirmConfig
+2abdd52 Session 61 docs: CLAUDE.md, CHANGELOG_DEV.md updated
+15e7e29 Task 8: Benchmark tests — 14-23x speedup across all timeframes
+1c7164f Task 7: Full sweep parity test on real ES daily data
+1265f80 Task 6: Integrate vectorized engine into pipeline
+cec1317 Task 2: Vectorized trade simulator — time_stop + protective stop
+7768609 Session 61: prop firm config fixes - daily DD pause vs terminate, leverage, min profitable days, recalculating daily DD
+bf4afca Task 1: Parity test harness for vectorized trade engine

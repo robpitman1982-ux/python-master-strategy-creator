@@ -415,3 +415,41 @@ The real technical debt is tracked in CLAUDE.md (issues list) and PROJECT_STATE_
 ### Recommendation
 
 No action needed for TODO comments in Session 69. The codebase uses CLAUDE.md as the issue tracker rather than inline TODOs — this is a valid pattern.
+
+---
+
+## 10. Git state
+
+### Overview
+
+| Metric | Value | Notes |
+|--------|-------|-------|
+| Branches | 1 (main only) | Clean |
+| .git size | 366 MB | Bloated — CSVs in history |
+| Pack size | 364.65 MB | Almost all from data files |
+| Untracked files | 2 (venv/ + audit WIP) | Clean |
+| Recent commits (30 days) | 63 | Active development |
+| LFS | Not in use | |
+
+### Suspicious tracked files
+
+**Total: 128 files that should not be in git**
+
+| Category | Count | Size Impact | Action |
+|----------|-------|-------------|--------|
+| Data/*.csv (TradeStation + Dukascopy) | 40 | ~344 MB | git rm --cached |
+| archive/old_outputs/**/*.csv | 68 | ~20 MB | git rm --cached (or BFG to remove from history) |
+| strategy_console_storage/**/* | 231 | ~331 MB | git rm --cached |
+| docs/audit/*.csv | 4 | ~20 KB | Keep (audit artifacts) |
+
+### Repo bloat analysis
+
+The .git directory is 366 MB, almost entirely from CSV data files committed before .gitignore entries were added. The actual code (Python + YAML + markdown) would be under 5 MB.
+
+**Options for Session 69:**
+1. **Minimum:** git rm --cached for Data/ and strategy_console_storage/ (stops tracking, keeps local files)
+2. **Full cleanup:** BFG Repo Cleaner to rewrite history and remove CSVs from pack files (reduces .git from 366 MB to ~5 MB, requires force push)
+
+### Recommendation
+
+Option 1 (git rm --cached) for Session 69 — stops the bleeding. Option 2 (BFG) is optional and can be done later when convenient, since it requires a force push and all clones to re-fetch.
