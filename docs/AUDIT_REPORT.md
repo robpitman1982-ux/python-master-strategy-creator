@@ -52,3 +52,59 @@
 - **> 100 MB tracked content:** `Data/` (344 MB, 40 tracked CSVs) and `strategy_console_storage/` (331 MB, 231 tracked files) are bloating the repo. Both are in .gitignore but were added before the gitignore entry was created. These need `git rm --cached` in Session 69.
 - **Stale at top level:** `SESSION_65_TASKS.md` should be archived. Multiple `run_cloud_*.py` scripts are deprecated.
 - **`archive/` tracked:** 162 files, 12 MB — already moved to archive but still tracked. Acceptable if intentional.
+
+---
+
+## 2. Module inventory
+
+### File counts by directory
+
+| Directory | .py files |
+|-----------|-----------|
+| Root (.) | 14 |
+| modules/ | 26 |
+| modules/strategy_types/ | 11 |
+| scripts/ | 4 |
+| tests/ | 21 |
+| cloud/ | 2 |
+| **Total** | **78** |
+
+### Top 10 largest modules by LOC
+
+| Module | LOC | Functions | Classes |
+|--------|-----|-----------|---------|
+| cloud.launch_gcp_run | 3,013 | 70 | 7 |
+| modules.portfolio_selector | 2,294 | 34 | 0 |
+| modules.filters | 1,664 | 163 | 60 |
+| master_strategy_engine | 1,288 | 32 | 0 |
+| tests.test_cloud_launcher | 1,214 | 69 | 2 |
+| modules.prop_firm_simulator | 1,201 | 14 | 5 |
+| dashboard_utils | 1,182 | 56 | 4 |
+| dashboard | 1,134 | 7 | 0 |
+| modules.engine | 871 | 17 | 3 |
+| run_spot_resilient | 634 | 19 | 0 |
+
+**Note:** The single largest module is `cloud.launch_gcp_run` (3,013 LOC) — deprecated cloud code.
+
+### Dead code candidates
+
+**None found.** Every `modules/` file is imported by at least one non-test, non-cloud module.
+
+However, the following `modules/` are only used in cloud/deprecated contexts and should be reviewed during cleanup:
+- No modules are *exclusively* imported by cloud code. Cloud scripts import `modules.ultimate_leaderboard` and `paths`, both of which are also used by active code.
+
+### Cloud code import graph
+
+Files that import cloud modules (would become orphaned if cloud/ is deleted):
+
+| File | Cloud imports | Status |
+|------|---------------|--------|
+| `run_cloud_parallel.py` | cloud.download_run, cloud.launch_gcp_run | **Deprecated** — delete with cloud/ |
+| `run_cloud_sweep.py` | cloud.download_run, cloud.launch_gcp_run | **Deprecated** — delete with cloud/ |
+| `run_spot_resilient.py` | cloud.download_run, cloud.launch_gcp_run | **Deprecated** — delete with cloud/ |
+| `tests/test_cloud_launcher.py` | cloud.download_run, cloud.launch_gcp_run | **Deprecated** — delete with cloud/ |
+| `tests/test_parallel_vm.py` | cloud.download_run, cloud.launch_gcp_run | **Deprecated** — delete with cloud/ |
+
+### Circular imports
+
+None detected.
