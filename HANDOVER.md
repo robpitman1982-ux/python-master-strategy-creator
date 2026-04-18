@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 67: C240 fully configured; Gen 8 + R630 onboarded; tick data migrated; full SSH mesh)
+# Last updated: 2026-04-19 (Session 67 complete: c240 fully configured + under-house relocation verified; cluster ready for sweeps)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -118,9 +118,9 @@
           └── tds.db              5.2 MB (TDS settings database)
   ```
 - **Samba `[data]` share** covers entire `/data/` tree - Latitude can remap Z: to `\\192.168.68.53\data` any time
-- **rclone v1.60.1-DEV** installed; `~/.config/rclone/` exists; `rclone.conf` NOT YET created
-- **Nightly backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `30 2 * * *` — syncs `leaderboards/`, `portfolio_outputs/`, `sweep_results/`, `configs/` to `gdrive:c240_backup/`. Deliberately excludes market data + photos (regenerable/personal).
-- **PENDING manual step:** `rclone config` interactive OAuth (headless — use `n` for auto-config, paste verification code). See "Open Issues" #3.
+- **rclone v1.60.1-DEV** installed; `~/.config/rclone/rclone.conf` configured with `gdrive` remote (OAuth done via `rclone authorize` on Latitude, token pasted back into headless config Session 67)
+- **Nightly backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `30 2 * * *` — syncs `leaderboards/`, `portfolio_outputs/`, `sweep_results/`, `configs/` to `gdrive:c240_backup/`. Deliberately excludes market data + photos (regenerable/personal). **End-to-end verified** — test marker `.backup_test_marker` synced to `gdrive:c240_backup/configs/`.
+- **Physical relocation (Session 67):** moved under house 2026-04-19. Shut down cleanly, auto-booted on power restore, all services + data + rclone config + cron intact. No RAID/disk errors.
 - **NOT YET on c240:** Gen 9 data (leaderboards/sweep_results/portfolio_outputs from old disk - blocked until Gen 9 pins fixed, if at all - gdrive backup should be restored from instead once online)
 
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
@@ -200,21 +200,17 @@
 ## Open Issues (Priority Order)
 
 1. **Export remaining TDS data.** Only ES, AD, NZDUSD have converted CSVs in the engine repo. Need to export all 24 markets × 5 timeframes via TDS. The raw .bfc tick caches for all 24 symbols now live on c240 at `/data/market_data/cfds/ticks_dukascopy_tds/`, so re-exports can happen locally on c240 if TDS ever gets a Linux path — currently still requires Latitude-side TDS app.
-2. **Manual rclone OAuth on c240.** Backup script + cron already installed. One-time interactive config needed:
-   - `ssh c240`
-   - `rclone config` → `n` → name: `gdrive` → storage: `drive` → blank client_id/secret → scope `1` → blank root/service — account → advanced: `n` → **auto config: `n`** (headless) → paste URL into browser on Latitude → paste verification code → team drive: `n` → `y` → `q`
-   - Test: `rclone lsd gdrive:` — should list gdrive folders
-   - First backup: `/usr/local/bin/backup_to_gdrive.sh` (log at `/data/logs/rclone_backup_YYYYMMDD.log`)
-3. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
+2. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
    - Verify: `(Get-ChildItem 'C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy' -Recurse -File).Count` should match `find /data/market_data/cfds/ticks_dukascopy_tds -type f \| wc -l` (130,238) + 121 top-level in ohlc/
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
-4. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
-5. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
-6. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
-7. **Gen 9 revival (optional).** Rob is straightening bent CPU pins to turn Gen 9 into a new Hermes autonomous-agent server. If successful, data migration from Gen 9's old SAS array is moot (drives are already in c240). Gen 9 becomes a new role, not a restored one.
-8. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
+3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
+4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
+5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
+6. **Gen 9 revival (optional).** Rob is straightening bent CPU pins to turn Gen 9 into a new Hermes autonomous-agent server. If successful, data migration from Gen 9's old SAS array is moot (drives are already in c240). Gen 9 becomes a new role, not a restored one.
+7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
+8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-10. **First local sweep validation.** `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate pipeline end-to-end. Workers are ready — c240 ↔ gen8 ↔ r630 full SSH mesh verified Session 67.
+10. **First local sweep validation.** `python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` then a real single-market sweep to validate pipeline end-to-end. **Session 68 top priority.** Workers are ready — c240 ↔ gen8 ↔ r630 full SSH mesh verified Session 67.
 11. **Session 61 test failure.** `test_daily_dd_breach` needs updating for pause-vs-terminate daily DD change.
 12. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 13. **Cloud decommission.** Once local sweeps proven: delete `cloud/`, `run_spot_resilient.py`, `run_cloud_sweep.py`, strategy-console VM. Keep `download_run.py` for existing results access.
@@ -281,13 +277,15 @@
 - **Session 63:** Dukascopy architecture decision, SP500 tick download, The5ers MT5 exports, home lab network setup
 - **Session 65:** CFD data pipeline built end-to-end: TDS format converter (24 markets), engine loader "Vol" support, 24 CFD market configs, local sweep runner, batch cluster sweep launcher with resume, config generator (24 sweep YAMLs). Cloud infrastructure deprecated.
 - **Session 66 (2026-04-18):** Gen 9 decommissioned. Cisco C240 M4 commissioned at 192.168.68.53. 2× E5-2673 v4 (40C/80T), 64 GB RAM, 10.9 TB SAS (ex-Gen 9 drives). Ubuntu 24.04.4, LVM layout: / 100 GB + /data 10 TiB ext4. SSH key auth, NOPASSWD sudo, Tailscale 100.120.11.35, Samba [photos] share live.
-- **Session 67 (2026-04-19):** c240 full buildout + cluster onboarding + tick data migration + restructure.
+- **Session 67 (2026-04-19):** c240 full buildout + cluster onboarding + tick data migration + restructure + rclone + relocation.
   - c240: all packages installed, ssh-recover.service, ARP-flush cron, repo cloned, venv with dukascopy-python, SSH keypair + config + WOL scripts + post_sweep.sh template, [data] Samba share added.
   - Gen 8 + R630 fix-ups: ssh config rewritten (gen9 refs gone), post_sweep.sh retargeted c240, repos updated, venvs built, full bidirectional SSH mesh c240↔gen8↔r630 verified.
   - Tick data transfer: 33.4 GB / 130,359 files from Latitude TDS cache → c240 via robocopy over Samba (1h 4m, 538 MB/min). 
   - `/data` restructure: `market_data/tradestation/` → `market_data/futures/`; `tick_data/dukascopy_tds/*.csv` → `market_data/cfds/ohlc/`; `tick_data/dukascopy_tds/<SYMBOL>/` → `market_data/cfds/ticks_dukascopy_tds/`; stale empty scaffolding removed.
   - 7.3 GB wrong-path duplicate (`/data/market_data/tick_data/` from earlier crashed chat) deleted after per-file twin verification (zero unique content lost except 7-byte `.writetest` marker).
-  - rclone scaffold: `/usr/local/bin/backup_to_gdrive.sh` + user cron `30 2 * * *` installed. OAuth config pending (needs interactive session).
+  - rclone gdrive OAuth completed (headless flow: `rclone authorize` on Latitude, paste token into c240 config). First backup run successful — `gdrive:c240_backup/configs/.backup_test_marker` verified on remote. Nightly cron live at 02:30.
+  - Latitude Z: drive remapped from dead `\\192.168.68.69\data` → `\\192.168.68.53\data` (persistent, credentials saved).
+  - c240 physically relocated under house. Powered back on cleanly — health check confirms all services, /data mount, rclone config, cron, tailscale intact. No RAID or disk errors.
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -381,10 +379,8 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Run `rclone config` on c240** for gdrive OAuth — one-time 5-min manual step. Cron + backup script are ready and waiting.
-- **First local sweep** — `psc-activate && python run_cluster_sweep.py --markets ES --timeframes daily --dry-run` on c240 to validate pipeline end-to-end.
+- **SESSION 68 PRIORITY: First local sweep end-to-end.** Dry run first: `ssh c240; psc-activate; python run_cluster_sweep.py --markets ES --timeframes daily --dry-run`. Then real sweep. Workers (gen8, r630) need waking via c240's `/usr/local/bin/wake-all.sh`. Verify `post_sweep.sh` rsync into `/data/sweep_results/_inbox/` works.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
-- **Remap Latitude Z: drive** from dead `\\192.168.68.69\data` → `\\192.168.68.53\data`.
 - **Export all TDS data** — currently only ES, AD, NZDUSD have converted-to-engine CSVs. 21 markets pending × 5 timeframes each.
 - **Copy converted CSVs to c240** — when TDS converts more markets: destination is now `/data/market_data/cfds/ohlc/` (or run converter directly on c240 once it reads from `ticks_dukascopy_tds/`).
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
