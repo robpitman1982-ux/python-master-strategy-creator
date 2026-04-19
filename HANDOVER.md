@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 70 complete: first clean CFD sweep (ES daily Dukascopy) validated)
+# Last updated: 2026-04-19 (Session 71 complete: all 120 Dukascopy CSVs converted to engine format)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -25,7 +25,7 @@
 - **Local sweep infrastructure:** `run_local_sweep.py` (single market) + `run_cluster_sweep.py` (batch orchestrator with resume) + `scripts/generate_sweep_configs.py` (24 configs generated in `configs/local_sweeps/`)
 - **TDS export location (Latitude):** `C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy\`
 - **TDS symbol naming:** `{SYMBOL}_GMT+0_NO-DST_{TIMEFRAME}.csv` (e.g., `USA_500_Index_GMT+0_NO-DST_H1.csv`)
-- **Converted data files:** 15 files available for ES (5 TFs), AD (2 TFs), NZDUSD (5 TFs) — rest pending TDS export
+- **Converted data files:** 120 files on c240 at `/data/market_data/cfds/ohlc_engine/` (all 24 markets × 5 TFs)
 - **dukascopy-python** v4.0.1 installed on Gen 9 (for raw tick downloads, separate from TDS path)
 - **SP500 Dukascopy download COMPLETE** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), stored at `/data/dukascopy/raw_ticks/sp500/` on Gen 9
 - **Gen 9 storage ready:** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` created, 437 GB free
@@ -196,7 +196,6 @@
 
 ## Open Issues (Priority Order)
 
-1. **Export remaining TDS data.** Only ES, AD, NZDUSD have converted CSVs in the engine repo. Need to export all 24 markets × 5 timeframes via TDS. The raw .bfc tick caches for all 24 symbols now live on c240 at `/data/market_data/cfds/ticks_dukascopy_tds/`, so re-exports can happen locally on c240 if TDS ever gets a Linux path — currently still requires Latitude-side TDS app.
 2. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
    - Verify: `(Get-ChildItem 'C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy' -Recurse -File).Count` should match `find /data/market_data/cfds/ticks_dukascopy_tds -type f \| wc -l` (130,238) + 121 top-level in ohlc/
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
@@ -207,7 +206,6 @@
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-10. **First local sweep validated (Session 70).** ES daily Dukascopy, 13 accepted strategies, plausibility PASS. Next: scale to 24 markets.
 12. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 
 ---
@@ -374,10 +372,8 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Session 71 PRIORITY: Dukascopy conversion scale-out.** 119 remaining market/TF conversions. Populate `/data/market_data/cfds/ohlc_engine/`.
+- **Session 72 PRIORITY: 24-market × 5-TF sweep matrix on c240+gen8+r630.** Validate CFD engine params across all markets. Build ultimate CFD leaderboard.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
-- **Export all TDS data** — currently only ES, AD, NZDUSD have converted-to-engine CSVs. 21 markets pending × 5 timeframes each.
-- **Copy converted CSVs to c240** — when TDS converts more markets: destination is now `/data/market_data/cfds/ohlc/` (or run converter directly on c240 once it reads from `ticks_dukascopy_tds/`).
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
