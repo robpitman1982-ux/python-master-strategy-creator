@@ -47,6 +47,12 @@ SYMBOL_MAP: dict[str, str] = {
     "NZDUSD":            "NZDUSD",
     "US_Brent_Crude":    "BRENT",
     "Ether_USD":         "ETH",
+    # Aliases for actual TDS filenames on c240 (longer variants)
+    "Bitcoin_vs_US_Dollar":   "BTC",
+    "Ether_vs_US_Dollar":     "ETH",
+    "USA_100_Technical_Index": "NQ",
+    "US_Brent_Crude_Oil":     "BRENT",
+    "US_Light_Crude_Oil":     "CL",
 }
 
 # TDS timeframe suffix → engine timeframe label
