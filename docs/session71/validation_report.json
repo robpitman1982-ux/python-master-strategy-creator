@@ -1,0 +1,760 @@
+{
+  "total_files": 120,
+  "passed": 104,
+  "warned": 16,
+  "failed": 0,
+  "per_file": [
+    {
+      "file": "AD_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 453988,
+      "issues": []
+    },
+    {
+      "file": "AD_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 227050,
+      "issues": []
+    },
+    {
+      "file": "AD_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1361305,
+      "issues": []
+    },
+    {
+      "file": "AD_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 113570,
+      "issues": [
+        "WARN: row count 113,570 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "AD_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5717,
+      "issues": [
+        "WARN: row count 5,717 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "BP_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 456377,
+      "issues": []
+    },
+    {
+      "file": "BP_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 228201,
+      "issues": []
+    },
+    {
+      "file": "BP_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1368855,
+      "issues": []
+    },
+    {
+      "file": "BP_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 114106,
+      "issues": [
+        "WARN: row count 114,106 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "BP_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5719,
+      "issues": [
+        "WARN: row count 5,719 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "BRENT_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 301157,
+      "issues": []
+    },
+    {
+      "file": "BRENT_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 151215,
+      "issues": []
+    },
+    {
+      "file": "BRENT_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 896584,
+      "issues": []
+    },
+    {
+      "file": "BRENT_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 75952,
+      "issues": []
+    },
+    {
+      "file": "BRENT_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 3703,
+      "issues": []
+    },
+    {
+      "file": "BTC_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 275131,
+      "issues": []
+    },
+    {
+      "file": "BTC_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 137636,
+      "issues": []
+    },
+    {
+      "file": "BTC_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 824148,
+      "issues": []
+    },
+    {
+      "file": "BTC_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 68873,
+      "issues": []
+    },
+    {
+      "file": "BTC_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 3085,
+      "issues": []
+    },
+    {
+      "file": "CAC_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 221081,
+      "issues": []
+    },
+    {
+      "file": "CAC_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 111486,
+      "issues": []
+    },
+    {
+      "file": "CAC_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 654638,
+      "issues": []
+    },
+    {
+      "file": "CAC_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 56452,
+      "issues": []
+    },
+    {
+      "file": "CAC_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 3731,
+      "issues": []
+    },
+    {
+      "file": "CL_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 307883,
+      "issues": []
+    },
+    {
+      "file": "CL_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 154592,
+      "issues": []
+    },
+    {
+      "file": "CL_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 917736,
+      "issues": []
+    },
+    {
+      "file": "CL_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 77716,
+      "issues": []
+    },
+    {
+      "file": "CL_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4069,
+      "issues": []
+    },
+    {
+      "file": "DAX_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 281089,
+      "issues": []
+    },
+    {
+      "file": "DAX_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 142407,
+      "issues": []
+    },
+    {
+      "file": "DAX_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 833640,
+      "issues": []
+    },
+    {
+      "file": "DAX_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 72902,
+      "issues": []
+    },
+    {
+      "file": "DAX_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4115,
+      "issues": []
+    },
+    {
+      "file": "EC_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 456397,
+      "issues": []
+    },
+    {
+      "file": "EC_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 228213,
+      "issues": []
+    },
+    {
+      "file": "EC_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1368985,
+      "issues": []
+    },
+    {
+      "file": "EC_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 114115,
+      "issues": [
+        "WARN: row count 114,115 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "EC_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5721,
+      "issues": [
+        "WARN: row count 5,721 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "ES_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 278722,
+      "issues": []
+    },
+    {
+      "file": "ES_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 141539,
+      "issues": []
+    },
+    {
+      "file": "ES_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 829237,
+      "issues": []
+    },
+    {
+      "file": "ES_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 72787,
+      "issues": []
+    },
+    {
+      "file": "ES_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4163,
+      "issues": []
+    },
+    {
+      "file": "ETH_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 250145,
+      "issues": []
+    },
+    {
+      "file": "ETH_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 125234,
+      "issues": []
+    },
+    {
+      "file": "ETH_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 748422,
+      "issues": []
+    },
+    {
+      "file": "ETH_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 62756,
+      "issues": []
+    },
+    {
+      "file": "ETH_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 2896,
+      "issues": []
+    },
+    {
+      "file": "FTSE_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 279114,
+      "issues": []
+    },
+    {
+      "file": "FTSE_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 141122,
+      "issues": []
+    },
+    {
+      "file": "FTSE_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 828291,
+      "issues": []
+    },
+    {
+      "file": "FTSE_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 72009,
+      "issues": []
+    },
+    {
+      "file": "FTSE_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4115,
+      "issues": []
+    },
+    {
+      "file": "GC_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 337519,
+      "issues": []
+    },
+    {
+      "file": "GC_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 169104,
+      "issues": []
+    },
+    {
+      "file": "GC_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1011168,
+      "issues": []
+    },
+    {
+      "file": "GC_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 84893,
+      "issues": []
+    },
+    {
+      "file": "GC_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4439,
+      "issues": []
+    },
+    {
+      "file": "HG_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 329585,
+      "issues": []
+    },
+    {
+      "file": "HG_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 165802,
+      "issues": []
+    },
+    {
+      "file": "HG_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 966832,
+      "issues": []
+    },
+    {
+      "file": "HG_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 83305,
+      "issues": []
+    },
+    {
+      "file": "HG_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4364,
+      "issues": []
+    },
+    {
+      "file": "JY_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 455151,
+      "issues": []
+    },
+    {
+      "file": "JY_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 227605,
+      "issues": []
+    },
+    {
+      "file": "JY_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1365103,
+      "issues": []
+    },
+    {
+      "file": "JY_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 113822,
+      "issues": [
+        "WARN: row count 113,822 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "JY_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5712,
+      "issues": [
+        "WARN: row count 5,712 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "N225_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 286659,
+      "issues": []
+    },
+    {
+      "file": "N225_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 145101,
+      "issues": []
+    },
+    {
+      "file": "N225_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 849869,
+      "issues": []
+    },
+    {
+      "file": "N225_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 74290,
+      "issues": []
+    },
+    {
+      "file": "N225_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4127,
+      "issues": []
+    },
+    {
+      "file": "NG_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 317193,
+      "issues": []
+    },
+    {
+      "file": "NG_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 160153,
+      "issues": []
+    },
+    {
+      "file": "NG_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 914033,
+      "issues": []
+    },
+    {
+      "file": "NG_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 80695,
+      "issues": []
+    },
+    {
+      "file": "NG_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4212,
+      "issues": []
+    },
+    {
+      "file": "NQ_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 276294,
+      "issues": []
+    },
+    {
+      "file": "NQ_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 140184,
+      "issues": []
+    },
+    {
+      "file": "NQ_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 824042,
+      "issues": []
+    },
+    {
+      "file": "NQ_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 72067,
+      "issues": []
+    },
+    {
+      "file": "NQ_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4147,
+      "issues": []
+    },
+    {
+      "file": "NZDUSD_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 456183,
+      "issues": []
+    },
+    {
+      "file": "NZDUSD_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 228118,
+      "issues": []
+    },
+    {
+      "file": "NZDUSD_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1368103,
+      "issues": []
+    },
+    {
+      "file": "NZDUSD_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 114069,
+      "issues": [
+        "WARN: row count 114,069 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "NZDUSD_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5716,
+      "issues": [
+        "WARN: row count 5,716 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "RTY_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 165276,
+      "issues": []
+    },
+    {
+      "file": "RTY_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 83750,
+      "issues": []
+    },
+    {
+      "file": "RTY_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 494783,
+      "issues": []
+    },
+    {
+      "file": "RTY_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 42911,
+      "issues": []
+    },
+    {
+      "file": "RTY_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 2346,
+      "issues": []
+    },
+    {
+      "file": "SI_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 428958,
+      "issues": []
+    },
+    {
+      "file": "SI_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 214803,
+      "issues": []
+    },
+    {
+      "file": "SI_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1282059,
+      "issues": []
+    },
+    {
+      "file": "SI_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 107711,
+      "issues": [
+        "WARN: row count 107,711 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "SI_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5614,
+      "issues": [
+        "WARN: row count 5,614 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "STOXX_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 200164,
+      "issues": []
+    },
+    {
+      "file": "STOXX_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 100944,
+      "issues": []
+    },
+    {
+      "file": "STOXX_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 586301,
+      "issues": []
+    },
+    {
+      "file": "STOXX_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 51068,
+      "issues": []
+    },
+    {
+      "file": "STOXX_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 3650,
+      "issues": []
+    },
+    {
+      "file": "USDCAD_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 456355,
+      "issues": []
+    },
+    {
+      "file": "USDCAD_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 228193,
+      "issues": []
+    },
+    {
+      "file": "USDCAD_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1368696,
+      "issues": []
+    },
+    {
+      "file": "USDCAD_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 114105,
+      "issues": [
+        "WARN: row count 114,105 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "USDCAD_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5720,
+      "issues": [
+        "WARN: row count 5,720 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "USDCHF_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 456339,
+      "issues": []
+    },
+    {
+      "file": "USDCHF_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 228193,
+      "issues": []
+    },
+    {
+      "file": "USDCHF_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 1368490,
+      "issues": []
+    },
+    {
+      "file": "USDCHF_60m_dukascopy.csv",
+      "status": "warn",
+      "rows": 114108,
+      "issues": [
+        "WARN: row count 114,108 outside expected 40,000-100,000 for 60m"
+      ]
+    },
+    {
+      "file": "USDCHF_daily_dukascopy.csv",
+      "status": "warn",
+      "rows": 5720,
+      "issues": [
+        "WARN: row count 5,720 outside expected 2,000-5,000 for daily"
+      ]
+    },
+    {
+      "file": "YM_15m_dukascopy.csv",
+      "status": "pass",
+      "rows": 277023,
+      "issues": []
+    },
+    {
+      "file": "YM_30m_dukascopy.csv",
+      "status": "pass",
+      "rows": 140683,
+      "issues": []
+    },
+    {
+      "file": "YM_5m_dukascopy.csv",
+      "status": "pass",
+      "rows": 826357,
+      "issues": []
+    },
+    {
+      "file": "YM_60m_dukascopy.csv",
+      "status": "pass",
+      "rows": 72169,
+      "issues": []
+    },
+    {
+      "file": "YM_daily_dukascopy.csv",
+      "status": "pass",
+      "rows": 4148,
+      "issues": []
+    }
+  ]
+}
