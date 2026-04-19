@@ -103,7 +103,7 @@
   ├── logs/                       (rclone_backup_YYYYMMDD.log will live here)
   └── lost+found/                 (root:root, expected)
   ```
-- **Backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `45 2 * * *` — syncs `/data/hermes/`, `/data/openclaw/`, `/data/backups/` to `gdrive:g9_backup/`. **Backup script is in place but rclone OAuth not yet completed** — script will silently fail until `rclone config` runs. Use same headless flow as c240 (`rclone authorize drive` on Latitude → paste token into g9's rclone config).
+- **Backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `45 2 * * *` — syncs `/data/hermes/`, `/data/openclaw/`, `/data/backups/` to `gdrive:g9_backup/`. **rclone gdrive OAuth completed Session 71b** via headless flow (`rclone authorize drive` on Latitude → token written to `~/.config/rclone/rclone.conf` on g9). End-to-end verified — test marker `hermes/.rclone_test_marker` synced to `gdrive:g9_backup/hermes/` (36 bytes), then removed. `gdrive:g9_backup/` currently empty pending real content.
 - **Not installed deliberately:** Samba (not a data-sharing cluster member), sweep scripts, market_data, `dukascopy-python`, repo clone, `psc-activate` alias. g9 is isolated from backtesting workflow.
 - **Env marker:** `.bashrc` exports `G9_ROLE="hermes_autonomous_host"` + alias `venv-activate` (sources `~/venv/bin/activate`).
 - **iLO:** not yet configured (DHCP on management port expected).
@@ -244,11 +244,10 @@
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
 5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
-6. **rclone OAuth on g9 not yet done.** Backup script + cron installed but will silently fail until `rclone config` completes headless OAuth (same flow as c240 Session 67). Run `rclone authorize drive` on Latitude, paste token into g9's rclone config.
-7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
-8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
-9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-12. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+6. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
+7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
+8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
+9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 
 ---
 
@@ -322,7 +321,7 @@
   - Latitude Z: drive remapped from dead `\\192.168.68.69\data` → `\\192.168.68.53\data` (persistent, credentials saved).
   - c240 physically relocated under house. Powered back on cleanly — health check confirms all services, /data mount, rclone config, cron, tailscale intact. No RAID or disk errors.
 - **Session 71 (2026-04-19):** Dukascopy conversion scale-out. All 120 TDS CSVs converted to engine format via `scripts/convert_tds_batch.py` on c240. Full CFD OHLC dataset engine-ready at `/data/market_data/cfds/ohlc_engine/`.
-- **Session 71b (2026-04-19):** Gen 9 revived as standalone **autonomous business host** (`g9` at 192.168.68.75, Tailscale 100.71.141.89). Fresh Ubuntu 24.04.4 on new 128 GB SATA SSD boot drive. 2× 146 GB SAS drives configured as RAID0 logical drive via ssacli 6.45-8.0 → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4). Installed: Docker 29.1.3, Node.js v24.14.1, Tailscale 1.96.4, Python 3.12.3 venv, ssacli, rclone. SSH via ProxyJump c240 (Latitude Wi-Fi ARP quirk) + direct Tailscale. NOPASSWD sudo, ssh-recover.service, ARP-flush cron, sleep/suspend/hibernate masked (always-on). `/data/{hermes,openclaw,backups,logs}/` layout. Backup script + 02:45 cron in place, rclone OAuth pending. **g9 is NOT a backtesting cluster member** — deliberately isolated from sweep workflow.
+- **Session 71b (2026-04-19):** Gen 9 revived as standalone **autonomous business host** (`g9` at 192.168.68.75, Tailscale 100.71.141.89). Fresh Ubuntu 24.04.4 on new 128 GB SATA SSD boot drive. 2× 146 GB SAS drives configured as RAID0 logical drive via ssacli 6.45-8.0 → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4). Installed: Docker 29.1.3, Node.js v24.14.1, Tailscale 1.96.4, Python 3.12.3 venv, ssacli, rclone. SSH via ProxyJump c240 (Latitude Wi-Fi ARP quirk) + direct Tailscale. NOPASSWD sudo, ssh-recover.service, ARP-flush cron, sleep/suspend/hibernate masked (always-on). `/data/{hermes,openclaw,backups,logs}/` layout. Backup script + 02:45 cron in place; rclone gdrive OAuth completed end-to-end (verified via test-marker sync). **g9 is NOT a backtesting cluster member** — deliberately isolated from sweep workflow.
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -421,7 +420,6 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
-- **rclone OAuth on g9** — headless flow (`rclone authorize drive` on Latitude, paste token into g9's rclone config), enables nightly backup cron.
 - **R630 netplan cleanup** — drop stale `192.168.68.75` DHCP lease from eno1.
 - **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on c240 orchestrating gen8 + r630.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
