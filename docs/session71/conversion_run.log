@@ -1,0 +1,170 @@
+Inventory: 120 files
+  Skip (already converted): 1
+  Pending conversion: 119
+  Workers: 8
+  [SKIPPED] EC_30m  0.0s
+  [SKIPPED] STOXX_15m  0.0s
+  [SKIPPED] AD_15m  0.0s
+  [SKIPPED] STOXX_daily  0.0s
+  [SKIPPED] AD_60m  0.0s
+  [SKIPPED] BTC_5m  0.0s
+  [SKIPPED] BTC_30m  0.0s
+  [SKIPPED] AD_30m  0.0s
+  [SKIPPED] ETH_5m  0.0s
+  [SKIPPED] BTC_15m  0.0s
+  [SKIPPED] AD_daily  0.0s
+  [SKIPPED] ETH_30m  0.0s
+  [SKIPPED] ETH_15m  0.0s
+  [SKIPPED] BTC_daily  0.0s
+  [SKIPPED] ETH_60m  0.0s
+  [SKIPPED] ETH_daily  0.0s
+  [SKIPPED] EC_5m  0.0s
+  [SKIPPED] AD_5m  0.0s
+  [SKIPPED] BTC_60m  0.0s
+  [SKIPPED] EC_15m  0.0s
+  [SKIPPED] EC_60m  0.0s
+  [SKIPPED] EC_daily  0.0s
+  [SKIPPED] STOXX_60m  0.0s
+  [SKIPPED] STOXX_30m  0.0s
+  [SKIPPED] STOXX_5m  0.0s
+  [SKIPPED] CAC_60m  0.0s
+  [SKIPPED] CAC_15m  0.0s
+  [SKIPPED] CAC_daily  0.0s
+  [SKIPPED] BP_60m  0.0s
+  [SKIPPED] BP_15m  0.0s
+  [SKIPPED] CAC_30m  0.0s
+  [SKIPPED] BP_30m  0.0s
+  [SKIPPED] BP_daily  0.0s
+  [SKIPPED] CAC_5m  0.0s
+  [SKIPPED] BP_5m  0.0s
+  [SKIPPED] HG_daily  0.0s
+  [SKIPPED] HG_60m  0.0s
+  [SKIPPED] HG_15m  0.0s
+  [SKIPPED] HG_30m  0.0s
+  [SKIPPED] HG_5m  0.0s
+  [SKIPPED] N225_daily  0.0s
+  [SKIPPED] DAX_30m  0.0s
+  [SKIPPED] DAX_60m  0.0s
+  [SKIPPED] DAX_daily  0.0s
+  [SKIPPED] N225_60m  0.0s
+  [SKIPPED] NZDUSD_daily  0.0s
+  [SKIPPED] NZDUSD_60m  0.0s
+  [SKIPPED] N225_5m  0.0s
+  [SKIPPED] N225_15m  0.0s
+  [SKIPPED] DAX_15m  0.0s
+  [SKIPPED] NG_daily  0.0s
+  [SKIPPED] NZDUSD_30m  0.0s
+  [SKIPPED] N225_30m  0.0s
+  [SKIPPED] NG_30m  0.0s
+  [SKIPPED] NG_5m  0.0s
+  [SKIPPED] FTSE_daily  0.0s
+  [SKIPPED] NZDUSD_15m  0.0s
+  [SKIPPED] NG_60m  0.0s
+  [SKIPPED] NG_15m  0.0s
+  [SKIPPED] DAX_5m  0.0s
+  [SKIPPED] NQ_daily  0.0s
+  [SKIPPED] NQ_60m  0.0s
+  [SKIPPED] NQ_15m  0.0s
+  [SKIPPED] NQ_30m  0.0s
+  [SKIPPED] FTSE_60m  0.0s
+  [SKIPPED] YM_daily  0.0s
+  [SKIPPED] YM_60m  0.0s
+  [SKIPPED] YM_15m  0.0s
+  [SKIPPED] FTSE_5m  0.0s
+  [SKIPPED] FTSE_15m  0.0s
+  [SKIPPED] FTSE_30m  0.0s
+  [SKIPPED] ES_15m  0.0s
+  [SKIPPED] ES_60m  0.0s
+  [SKIPPED] YM_30m  0.0s
+  [SKIPPED] USDCAD_60m  0.0s
+  [SKIPPED] USDCAD_daily  0.0s
+  [SKIPPED] ES_30m  0.0s
+  [SKIPPED] USDCHF_daily  0.0s
+  [SKIPPED] USDCHF_60m  0.0s
+  [OK     ] USDCAD_30m 228193->228193 278.3s
+  [OK     ] USDCHF_30m 228193->228193 256.4s
+  [OK     ] USDCHF_15m 456339->456339 549.8s
+  [SKIPPED] JY_daily  0.0s
+  [SKIPPED] JY_60m  0.0s
+  [OK     ] USDCAD_15m 456355->456355 551.9s
+  [SKIPPED] JY_30m  0.0s
+  [OK     ] ES_5m 829237->829237 962.7s
+  [SKIPPED] BRENT_daily  0.0s
+  [SKIPPED] BRENT_60m  0.0s
+  [SKIPPED] BRENT_15m  0.0s
+  [SKIPPED] BRENT_30m  0.0s
+  [OK     ] NQ_5m 824042->824042 974.9s
+  [SKIPPED] CL_daily  0.0s
+  [SKIPPED] CL_60m  0.0s
+  [OK     ] YM_5m 826357->826357 983.5s
+  [SKIPPED] CL_30m  0.0s
+  [OK     ] JY_15m 455151->455151 528.8s
+  [SKIPPED] RTY_daily  0.0s
+  [SKIPPED] RTY_60m  0.0s
+  [SKIPPED] RTY_15m  0.0s
+  [SKIPPED] RTY_30m  0.0s
+  [OK     ] CL_15m 307883->307883 359.5s
+  [SKIPPED] SI_daily  0.0s
+  [SKIPPED] SI_60m  0.0s
+  [OK     ] NZDUSD_5m 1368103->1368103 1609.3s
+  [SKIPPED] SI_30m  0.0s
+  [OK     ] USDCAD_5m 1368696->1368696 1619.1s
+  [SKIPPED] GC_daily  0.0s
+  [SKIPPED] GC_60m  0.0s
+  [OK     ] RTY_5m 494783->494783 579.6s
+  [OK     ] SI_15m 428958->428958 501.6s
+  [OK     ] GC_30m 169104->169104 199.9s
+  [OK     ] GC_15m 337519->337519 375.4s
+  [OK     ] BRENT_5m 896584->896584 1037.4s
+  [OK     ] CL_5m 917736->917736 1038.0s
+  [OK     ] USDCHF_5m 1368490->1368490 1508.9s
+  [OK     ] JY_5m 1365103->1365103 1496.0s
+  [OK     ] GC_5m 1011168->1011168 298.6s
+  [OK     ] SI_5m 1282059->1282059 527.2s
+
+============================================================
+BATCH CONVERSION COMPLETE
+  Total:    120
+  OK:       21
+  Skipped:  99
+  Failed:   0
+  Elapsed:  2136.6s
+  Log:      /home/rob/python-master-strategy-creator/docs/session71/conversion_log.json
+============================================================
+4.1s
+  [OK     ] CL_60m 77716->77716 89.0s
+  [OK     ] BRENT_30m 151215->151215 179.9s
+  [OK     ] BRENT_15m 301157->301157 354.7s
+  [OK     ] JY_15m 455151->455151 548.5s
+  [OK     ] RTY_daily 2346->2346 2.6s
+  [OK     ] CL_30m 154592->154592 182.0s
+  [OK     ] RTY_60m 42911->42911 50.4s
+  [OK     ] RTY_30m 83750->83750 98.0s
+  [OK     ] CL_15m 307883->307883 365.1s
+  [OK     ] SI_daily 5614->5614 6.2s
+  [OK     ] RTY_15m 165276->165276 194.4s
+  [OK     ] SI_60m 107711->107711 124.9s
+  [OK     ] SI_30m 214803->214803 246.7s
+  [OK     ] USDCAD_5m 1368696->1368696 1629.6s
+  [OK     ] GC_daily 4439->4439 4.9s
+  [OK     ] RTY_5m 494783->494783 580.5s
+  [OK     ] SI_15m 428958->428958 505.9s
+  [OK     ] GC_60m 84893->84893 103.2s
+  [OK     ] BRENT_5m 896584->896584 1065.1s
+  [OK     ] USDCHF_5m 1368490->1368490 1618.4s
+  [OK     ] GC_30m 169104->169104 173.8s
+  [OK     ] CL_5m 917736->917736 1025.1s
+  [OK     ] JY_5m 1365103->1365103 1499.9s
+  [OK     ] GC_15m 337519->337519 267.0s
+  [OK     ] GC_5m 1011168->1011168 329.6s
+  [OK     ] SI_5m 1282059->1282059 504.4s
+
+============================================================
+BATCH CONVERSION COMPLETE
+  Total:    120
+  OK:       119
+  Skipped:  1
+  Failed:   0
+  Elapsed:  5500.8s
+  Log:      /home/rob/python-master-strategy-creator/docs/session71/conversion_log.json
+============================================================
