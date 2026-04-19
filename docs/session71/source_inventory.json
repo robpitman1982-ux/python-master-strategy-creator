@@ -1,0 +1,1202 @@
+[
+  {
+    "source_path": "/data/market_data/cfds/ohlc/AUDUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/AD_daily_dukascopy.csv",
+    "symbol": "AD",
+    "timeframe": "daily",
+    "tds_symbol": "AUDUSD",
+    "tds_tf": "D1",
+    "size_bytes": 333788,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/AUDUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/AD_60m_dukascopy.csv",
+    "symbol": "AD",
+    "timeframe": "60m",
+    "tds_symbol": "AUDUSD",
+    "tds_tf": "H1",
+    "size_bytes": 6514804,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/AUDUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/AD_15m_dukascopy.csv",
+    "symbol": "AD",
+    "timeframe": "15m",
+    "tds_symbol": "AUDUSD",
+    "tds_tf": "M15",
+    "size_bytes": 25707138,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/AUDUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/AD_30m_dukascopy.csv",
+    "symbol": "AD",
+    "timeframe": "30m",
+    "tds_symbol": "AUDUSD",
+    "tds_tf": "M30",
+    "size_bytes": 12943188,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/AUDUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/AD_5m_dukascopy.csv",
+    "symbol": "AD",
+    "timeframe": "5m",
+    "tds_symbol": "AUDUSD",
+    "tds_tf": "M5",
+    "size_bytes": 76580727,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Bitcoin_vs_US_Dollar_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BTC_daily_dukascopy.csv",
+    "symbol": "BTC",
+    "timeframe": "daily",
+    "tds_symbol": "Bitcoin_vs_US_Dollar",
+    "tds_tf": "D1",
+    "size_bytes": 178877,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Bitcoin_vs_US_Dollar_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BTC_60m_dukascopy.csv",
+    "symbol": "BTC",
+    "timeframe": "60m",
+    "tds_symbol": "Bitcoin_vs_US_Dollar",
+    "tds_tf": "H1",
+    "size_bytes": 3903378,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Bitcoin_vs_US_Dollar_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BTC_15m_dukascopy.csv",
+    "symbol": "BTC",
+    "timeframe": "15m",
+    "tds_symbol": "Bitcoin_vs_US_Dollar",
+    "tds_tf": "M15",
+    "size_bytes": 15446956,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Bitcoin_vs_US_Dollar_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BTC_30m_dukascopy.csv",
+    "symbol": "BTC",
+    "timeframe": "30m",
+    "tds_symbol": "Bitcoin_vs_US_Dollar",
+    "tds_tf": "M30",
+    "size_bytes": 7762330,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Bitcoin_vs_US_Dollar_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BTC_5m_dukascopy.csv",
+    "symbol": "BTC",
+    "timeframe": "5m",
+    "tds_symbol": "Bitcoin_vs_US_Dollar",
+    "tds_tf": "M5",
+    "size_bytes": 45802570,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/EURUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/EC_daily_dukascopy.csv",
+    "symbol": "EC",
+    "timeframe": "daily",
+    "tds_symbol": "EURUSD",
+    "tds_tf": "D1",
+    "size_bytes": 334633,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/EURUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/EC_60m_dukascopy.csv",
+    "symbol": "EC",
+    "timeframe": "60m",
+    "tds_symbol": "EURUSD",
+    "tds_tf": "H1",
+    "size_bytes": 6548342,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/EURUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/EC_15m_dukascopy.csv",
+    "symbol": "EC",
+    "timeframe": "15m",
+    "tds_symbol": "EURUSD",
+    "tds_tf": "M15",
+    "size_bytes": 25905988,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/EURUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/EC_30m_dukascopy.csv",
+    "symbol": "EC",
+    "timeframe": "30m",
+    "tds_symbol": "EURUSD",
+    "tds_tf": "M30",
+    "size_bytes": 13029126,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/EURUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/EC_5m_dukascopy.csv",
+    "symbol": "EC",
+    "timeframe": "5m",
+    "tds_symbol": "EURUSD",
+    "tds_tf": "M5",
+    "size_bytes": 77065629,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Ether_vs_US_Dollar_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ETH_daily_dukascopy.csv",
+    "symbol": "ETH",
+    "timeframe": "daily",
+    "tds_symbol": "Ether_vs_US_Dollar",
+    "tds_tf": "D1",
+    "size_bytes": 153276,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Ether_vs_US_Dollar_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ETH_60m_dukascopy.csv",
+    "symbol": "ETH",
+    "timeframe": "60m",
+    "tds_symbol": "Ether_vs_US_Dollar",
+    "tds_tf": "H1",
+    "size_bytes": 3259461,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Ether_vs_US_Dollar_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ETH_15m_dukascopy.csv",
+    "symbol": "ETH",
+    "timeframe": "15m",
+    "tds_symbol": "Ether_vs_US_Dollar",
+    "tds_tf": "M15",
+    "size_bytes": 12852716,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Ether_vs_US_Dollar_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ETH_30m_dukascopy.csv",
+    "symbol": "ETH",
+    "timeframe": "30m",
+    "tds_symbol": "Ether_vs_US_Dollar",
+    "tds_tf": "M30",
+    "size_bytes": 6469291,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Ether_vs_US_Dollar_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ETH_5m_dukascopy.csv",
+    "symbol": "ETH",
+    "timeframe": "5m",
+    "tds_symbol": "Ether_vs_US_Dollar",
+    "tds_tf": "M5",
+    "size_bytes": 38054738,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Europe_50_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/STOXX_daily_dukascopy.csv",
+    "symbol": "STOXX",
+    "timeframe": "daily",
+    "tds_symbol": "Europe_50_Index",
+    "tds_tf": "D1",
+    "size_bytes": 211294,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Europe_50_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/STOXX_60m_dukascopy.csv",
+    "symbol": "STOXX",
+    "timeframe": "60m",
+    "tds_symbol": "Europe_50_Index",
+    "tds_tf": "H1",
+    "size_bytes": 2885714,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Europe_50_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/STOXX_15m_dukascopy.csv",
+    "symbol": "STOXX",
+    "timeframe": "15m",
+    "tds_symbol": "Europe_50_Index",
+    "tds_tf": "M15",
+    "size_bytes": 11201952,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Europe_50_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/STOXX_30m_dukascopy.csv",
+    "symbol": "STOXX",
+    "timeframe": "30m",
+    "tds_symbol": "Europe_50_Index",
+    "tds_tf": "M30",
+    "size_bytes": 5681442,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Europe_50_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/STOXX_5m_dukascopy.csv",
+    "symbol": "STOXX",
+    "timeframe": "5m",
+    "tds_symbol": "Europe_50_Index",
+    "tds_tf": "M5",
+    "size_bytes": 32595655,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/France_40_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CAC_daily_dukascopy.csv",
+    "symbol": "CAC",
+    "timeframe": "daily",
+    "tds_symbol": "France_40_Index",
+    "tds_tf": "D1",
+    "size_bytes": 223920,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/France_40_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CAC_60m_dukascopy.csv",
+    "symbol": "CAC",
+    "timeframe": "60m",
+    "tds_symbol": "France_40_Index",
+    "tds_tf": "H1",
+    "size_bytes": 3304379,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/France_40_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CAC_15m_dukascopy.csv",
+    "symbol": "CAC",
+    "timeframe": "15m",
+    "tds_symbol": "France_40_Index",
+    "tds_tf": "M15",
+    "size_bytes": 12812842,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/France_40_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CAC_30m_dukascopy.csv",
+    "symbol": "CAC",
+    "timeframe": "30m",
+    "tds_symbol": "France_40_Index",
+    "tds_tf": "M30",
+    "size_bytes": 6497885,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/France_40_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CAC_5m_dukascopy.csv",
+    "symbol": "CAC",
+    "timeframe": "5m",
+    "tds_symbol": "France_40_Index",
+    "tds_tf": "M5",
+    "size_bytes": 37681511,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/GBPUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BP_daily_dukascopy.csv",
+    "symbol": "BP",
+    "timeframe": "daily",
+    "tds_symbol": "GBPUSD",
+    "tds_tf": "D1",
+    "size_bytes": 333220,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/GBPUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BP_60m_dukascopy.csv",
+    "symbol": "BP",
+    "timeframe": "60m",
+    "tds_symbol": "GBPUSD",
+    "tds_tf": "H1",
+    "size_bytes": 6520187,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/GBPUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BP_15m_dukascopy.csv",
+    "symbol": "BP",
+    "timeframe": "15m",
+    "tds_symbol": "GBPUSD",
+    "tds_tf": "M15",
+    "size_bytes": 25791175,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/GBPUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BP_30m_dukascopy.csv",
+    "symbol": "BP",
+    "timeframe": "30m",
+    "tds_symbol": "GBPUSD",
+    "tds_tf": "M30",
+    "size_bytes": 12976859,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/GBPUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BP_5m_dukascopy.csv",
+    "symbol": "BP",
+    "timeframe": "5m",
+    "tds_symbol": "GBPUSD",
+    "tds_tf": "M5",
+    "size_bytes": 76719996,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Germany_40_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/DAX_daily_dukascopy.csv",
+    "symbol": "DAX",
+    "timeframe": "daily",
+    "tds_symbol": "Germany_40_Index",
+    "tds_tf": "D1",
+    "size_bytes": 262471,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Germany_40_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/DAX_60m_dukascopy.csv",
+    "symbol": "DAX",
+    "timeframe": "60m",
+    "tds_symbol": "Germany_40_Index",
+    "tds_tf": "H1",
+    "size_bytes": 4562386,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Germany_40_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/DAX_15m_dukascopy.csv",
+    "symbol": "DAX",
+    "timeframe": "15m",
+    "tds_symbol": "Germany_40_Index",
+    "tds_tf": "M15",
+    "size_bytes": 17450596,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Germany_40_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/DAX_30m_dukascopy.csv",
+    "symbol": "DAX",
+    "timeframe": "30m",
+    "tds_symbol": "Germany_40_Index",
+    "tds_tf": "M30",
+    "size_bytes": 8881063,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Germany_40_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/DAX_5m_dukascopy.csv",
+    "symbol": "DAX",
+    "timeframe": "5m",
+    "tds_symbol": "Germany_40_Index",
+    "tds_tf": "M5",
+    "size_bytes": 51398999,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/High_Grade_Copper_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/HG_daily_dukascopy.csv",
+    "symbol": "HG",
+    "timeframe": "daily",
+    "tds_symbol": "High_Grade_Copper",
+    "tds_tf": "D1",
+    "size_bytes": 233695,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/High_Grade_Copper_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/HG_60m_dukascopy.csv",
+    "symbol": "HG",
+    "timeframe": "60m",
+    "tds_symbol": "High_Grade_Copper",
+    "tds_tf": "H1",
+    "size_bytes": 4358050,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/High_Grade_Copper_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/HG_15m_dukascopy.csv",
+    "symbol": "HG",
+    "timeframe": "15m",
+    "tds_symbol": "High_Grade_Copper",
+    "tds_tf": "M15",
+    "size_bytes": 17035571,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/High_Grade_Copper_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/HG_30m_dukascopy.csv",
+    "symbol": "HG",
+    "timeframe": "30m",
+    "tds_symbol": "High_Grade_Copper",
+    "tds_tf": "M30",
+    "size_bytes": 8615421,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/High_Grade_Copper_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/HG_5m_dukascopy.csv",
+    "symbol": "HG",
+    "timeframe": "5m",
+    "tds_symbol": "High_Grade_Copper",
+    "tds_tf": "M5",
+    "size_bytes": 49562000,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Japan_225_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/N225_daily_dukascopy.csv",
+    "symbol": "N225",
+    "timeframe": "daily",
+    "tds_symbol": "Japan_225",
+    "tds_tf": "D1",
+    "size_bytes": 267118,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Japan_225_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/N225_60m_dukascopy.csv",
+    "symbol": "N225",
+    "timeframe": "60m",
+    "tds_symbol": "Japan_225",
+    "tds_tf": "H1",
+    "size_bytes": 4736568,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Japan_225_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/N225_15m_dukascopy.csv",
+    "symbol": "N225",
+    "timeframe": "15m",
+    "tds_symbol": "Japan_225",
+    "tds_tf": "M15",
+    "size_bytes": 18114175,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Japan_225_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/N225_30m_dukascopy.csv",
+    "symbol": "N225",
+    "timeframe": "30m",
+    "tds_symbol": "Japan_225",
+    "tds_tf": "M30",
+    "size_bytes": 9215204,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Japan_225_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/N225_5m_dukascopy.csv",
+    "symbol": "N225",
+    "timeframe": "5m",
+    "tds_symbol": "Japan_225",
+    "tds_tf": "M5",
+    "size_bytes": 53340192,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/NZDUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NZDUSD_daily_dukascopy.csv",
+    "symbol": "NZDUSD",
+    "timeframe": "daily",
+    "tds_symbol": "NZDUSD",
+    "tds_tf": "D1",
+    "size_bytes": 332119,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/NZDUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NZDUSD_60m_dukascopy.csv",
+    "symbol": "NZDUSD",
+    "timeframe": "60m",
+    "tds_symbol": "NZDUSD",
+    "tds_tf": "H1",
+    "size_bytes": 6502658,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/NZDUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NZDUSD_15m_dukascopy.csv",
+    "symbol": "NZDUSD",
+    "timeframe": "15m",
+    "tds_symbol": "NZDUSD",
+    "tds_tf": "M15",
+    "size_bytes": 25685494,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/NZDUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NZDUSD_30m_dukascopy.csv",
+    "symbol": "NZDUSD",
+    "timeframe": "30m",
+    "tds_symbol": "NZDUSD",
+    "tds_tf": "M30",
+    "size_bytes": 12919638,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/NZDUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NZDUSD_5m_dukascopy.csv",
+    "symbol": "NZDUSD",
+    "timeframe": "5m",
+    "tds_symbol": "NZDUSD",
+    "tds_tf": "M5",
+    "size_bytes": 76446238,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Natural_Gas_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NG_daily_dukascopy.csv",
+    "symbol": "NG",
+    "timeframe": "daily",
+    "tds_symbol": "Natural_Gas",
+    "tds_tf": "D1",
+    "size_bytes": 224753,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Natural_Gas_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NG_60m_dukascopy.csv",
+    "symbol": "NG",
+    "timeframe": "60m",
+    "tds_symbol": "Natural_Gas",
+    "tds_tf": "H1",
+    "size_bytes": 4199940,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Natural_Gas_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NG_15m_dukascopy.csv",
+    "symbol": "NG",
+    "timeframe": "15m",
+    "tds_symbol": "Natural_Gas",
+    "tds_tf": "M15",
+    "size_bytes": 16313042,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Natural_Gas_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NG_30m_dukascopy.csv",
+    "symbol": "NG",
+    "timeframe": "30m",
+    "tds_symbol": "Natural_Gas",
+    "tds_tf": "M30",
+    "size_bytes": 8282896,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/Natural_Gas_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NG_5m_dukascopy.csv",
+    "symbol": "NG",
+    "timeframe": "5m",
+    "tds_symbol": "Natural_Gas",
+    "tds_tf": "M5",
+    "size_bytes": 46602690,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/UK_100_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/FTSE_daily_dukascopy.csv",
+    "symbol": "FTSE",
+    "timeframe": "daily",
+    "tds_symbol": "UK_100_Index",
+    "tds_tf": "D1",
+    "size_bytes": 248046,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/UK_100_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/FTSE_60m_dukascopy.csv",
+    "symbol": "FTSE",
+    "timeframe": "60m",
+    "tds_symbol": "UK_100_Index",
+    "tds_tf": "H1",
+    "size_bytes": 4266427,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/UK_100_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/FTSE_15m_dukascopy.csv",
+    "symbol": "FTSE",
+    "timeframe": "15m",
+    "tds_symbol": "UK_100_Index",
+    "tds_tf": "M15",
+    "size_bytes": 16377692,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/UK_100_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/FTSE_30m_dukascopy.csv",
+    "symbol": "FTSE",
+    "timeframe": "30m",
+    "tds_symbol": "UK_100_Index",
+    "tds_tf": "M30",
+    "size_bytes": 8326322,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/UK_100_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/FTSE_5m_dukascopy.csv",
+    "symbol": "FTSE",
+    "timeframe": "5m",
+    "tds_symbol": "UK_100_Index",
+    "tds_tf": "M5",
+    "size_bytes": 48256856,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_100_Technical_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NQ_daily_dukascopy.csv",
+    "symbol": "NQ",
+    "timeframe": "daily",
+    "tds_symbol": "USA_100_Technical_Index",
+    "tds_tf": "D1",
+    "size_bytes": 264700,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_100_Technical_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NQ_60m_dukascopy.csv",
+    "symbol": "NQ",
+    "timeframe": "60m",
+    "tds_symbol": "USA_100_Technical_Index",
+    "tds_tf": "H1",
+    "size_bytes": 4529155,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_100_Technical_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NQ_15m_dukascopy.csv",
+    "symbol": "NQ",
+    "timeframe": "15m",
+    "tds_symbol": "USA_100_Technical_Index",
+    "tds_tf": "M15",
+    "size_bytes": 17222087,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_100_Technical_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NQ_30m_dukascopy.csv",
+    "symbol": "NQ",
+    "timeframe": "30m",
+    "tds_symbol": "USA_100_Technical_Index",
+    "tds_tf": "M30",
+    "size_bytes": 8777346,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_100_Technical_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/NQ_5m_dukascopy.csv",
+    "symbol": "NQ",
+    "timeframe": "5m",
+    "tds_symbol": "USA_100_Technical_Index",
+    "tds_tf": "M5",
+    "size_bytes": 50997688,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_30_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/YM_daily_dukascopy.csv",
+    "symbol": "YM",
+    "timeframe": "daily",
+    "tds_symbol": "USA_30_Index",
+    "tds_tf": "D1",
+    "size_bytes": 271611,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_30_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/YM_60m_dukascopy.csv",
+    "symbol": "YM",
+    "timeframe": "60m",
+    "tds_symbol": "USA_30_Index",
+    "tds_tf": "H1",
+    "size_bytes": 4648315,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_30_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/YM_15m_dukascopy.csv",
+    "symbol": "YM",
+    "timeframe": "15m",
+    "tds_symbol": "USA_30_Index",
+    "tds_tf": "M15",
+    "size_bytes": 17692877,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_30_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/YM_30m_dukascopy.csv",
+    "symbol": "YM",
+    "timeframe": "30m",
+    "tds_symbol": "USA_30_Index",
+    "tds_tf": "M30",
+    "size_bytes": 9021236,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_30_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/YM_5m_dukascopy.csv",
+    "symbol": "YM",
+    "timeframe": "5m",
+    "tds_symbol": "USA_30_Index",
+    "tds_tf": "M5",
+    "size_bytes": 52389785,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_500_Index_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ES_daily_dukascopy.csv",
+    "symbol": "ES",
+    "timeframe": "daily",
+    "tds_symbol": "USA_500_Index",
+    "tds_tf": "D1",
+    "size_bytes": 256157,
+    "already_converted": true
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_500_Index_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ES_60m_dukascopy.csv",
+    "symbol": "ES",
+    "timeframe": "60m",
+    "tds_symbol": "USA_500_Index",
+    "tds_tf": "H1",
+    "size_bytes": 4397701,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_500_Index_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ES_15m_dukascopy.csv",
+    "symbol": "ES",
+    "timeframe": "15m",
+    "tds_symbol": "USA_500_Index",
+    "tds_tf": "M15",
+    "size_bytes": 16695399,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_500_Index_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ES_30m_dukascopy.csv",
+    "symbol": "ES",
+    "timeframe": "30m",
+    "tds_symbol": "USA_500_Index",
+    "tds_tf": "M30",
+    "size_bytes": 8519755,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USA_500_Index_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/ES_5m_dukascopy.csv",
+    "symbol": "ES",
+    "timeframe": "5m",
+    "tds_symbol": "USA_500_Index",
+    "tds_tf": "M5",
+    "size_bytes": 49275703,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCAD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCAD_daily_dukascopy.csv",
+    "symbol": "USDCAD",
+    "timeframe": "daily",
+    "tds_symbol": "USDCAD",
+    "tds_tf": "D1",
+    "size_bytes": 332702,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCAD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCAD_60m_dukascopy.csv",
+    "symbol": "USDCAD",
+    "timeframe": "60m",
+    "tds_symbol": "USDCAD",
+    "tds_tf": "H1",
+    "size_bytes": 6506650,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCAD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCAD_15m_dukascopy.csv",
+    "symbol": "USDCAD",
+    "timeframe": "15m",
+    "tds_symbol": "USDCAD",
+    "tds_tf": "M15",
+    "size_bytes": 25721398,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCAD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCAD_30m_dukascopy.csv",
+    "symbol": "USDCAD",
+    "timeframe": "30m",
+    "tds_symbol": "USDCAD",
+    "tds_tf": "M30",
+    "size_bytes": 12941082,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCAD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCAD_5m_dukascopy.csv",
+    "symbol": "USDCAD",
+    "timeframe": "5m",
+    "tds_symbol": "USDCAD",
+    "tds_tf": "M5",
+    "size_bytes": 76535779,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCHF_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCHF_daily_dukascopy.csv",
+    "symbol": "USDCHF",
+    "timeframe": "daily",
+    "tds_symbol": "USDCHF",
+    "tds_tf": "D1",
+    "size_bytes": 332346,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCHF_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCHF_60m_dukascopy.csv",
+    "symbol": "USDCHF",
+    "timeframe": "60m",
+    "tds_symbol": "USDCHF",
+    "tds_tf": "H1",
+    "size_bytes": 6501691,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCHF_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCHF_15m_dukascopy.csv",
+    "symbol": "USDCHF",
+    "timeframe": "15m",
+    "tds_symbol": "USDCHF",
+    "tds_tf": "M15",
+    "size_bytes": 25693495,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCHF_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCHF_30m_dukascopy.csv",
+    "symbol": "USDCHF",
+    "timeframe": "30m",
+    "tds_symbol": "USDCHF",
+    "tds_tf": "M30",
+    "size_bytes": 12927198,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDCHF_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/USDCHF_5m_dukascopy.csv",
+    "symbol": "USDCHF",
+    "timeframe": "5m",
+    "tds_symbol": "USDCHF",
+    "tds_tf": "M5",
+    "size_bytes": 76454931,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDJPY_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/JY_daily_dukascopy.csv",
+    "symbol": "JY",
+    "timeframe": "daily",
+    "tds_symbol": "USDJPY",
+    "tds_tf": "D1",
+    "size_bytes": 326366,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDJPY_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/JY_60m_dukascopy.csv",
+    "symbol": "JY",
+    "timeframe": "60m",
+    "tds_symbol": "USDJPY",
+    "tds_tf": "H1",
+    "size_bytes": 6371168,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDJPY_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/JY_15m_dukascopy.csv",
+    "symbol": "JY",
+    "timeframe": "15m",
+    "tds_symbol": "USDJPY",
+    "tds_tf": "M15",
+    "size_bytes": 25180703,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDJPY_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/JY_30m_dukascopy.csv",
+    "symbol": "JY",
+    "timeframe": "30m",
+    "tds_symbol": "USDJPY",
+    "tds_tf": "M30",
+    "size_bytes": 12666321,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/USDJPY_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/JY_5m_dukascopy.csv",
+    "symbol": "JY",
+    "timeframe": "5m",
+    "tds_symbol": "USDJPY",
+    "tds_tf": "M5",
+    "size_bytes": 74903435,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Brent_Crude_Oil_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BRENT_daily_dukascopy.csv",
+    "symbol": "BRENT",
+    "timeframe": "daily",
+    "tds_symbol": "US_Brent_Crude_Oil",
+    "tds_tf": "D1",
+    "size_bytes": 204072,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Brent_Crude_Oil_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BRENT_60m_dukascopy.csv",
+    "symbol": "BRENT",
+    "timeframe": "60m",
+    "tds_symbol": "US_Brent_Crude_Oil",
+    "tds_tf": "H1",
+    "size_bytes": 4077979,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Brent_Crude_Oil_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BRENT_15m_dukascopy.csv",
+    "symbol": "BRENT",
+    "timeframe": "15m",
+    "tds_symbol": "US_Brent_Crude_Oil",
+    "tds_tf": "M15",
+    "size_bytes": 15971591,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Brent_Crude_Oil_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BRENT_30m_dukascopy.csv",
+    "symbol": "BRENT",
+    "timeframe": "30m",
+    "tds_symbol": "US_Brent_Crude_Oil",
+    "tds_tf": "M30",
+    "size_bytes": 8067618,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Brent_Crude_Oil_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/BRENT_5m_dukascopy.csv",
+    "symbol": "BRENT",
+    "timeframe": "5m",
+    "tds_symbol": "US_Brent_Crude_Oil",
+    "tds_tf": "M5",
+    "size_bytes": 47137468,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Light_Crude_Oil_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CL_daily_dukascopy.csv",
+    "symbol": "CL",
+    "timeframe": "daily",
+    "tds_symbol": "US_Light_Crude_Oil",
+    "tds_tf": "D1",
+    "size_bytes": 221302,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Light_Crude_Oil_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CL_60m_dukascopy.csv",
+    "symbol": "CL",
+    "timeframe": "60m",
+    "tds_symbol": "US_Light_Crude_Oil",
+    "tds_tf": "H1",
+    "size_bytes": 4128516,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Light_Crude_Oil_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CL_15m_dukascopy.csv",
+    "symbol": "CL",
+    "timeframe": "15m",
+    "tds_symbol": "US_Light_Crude_Oil",
+    "tds_tf": "M15",
+    "size_bytes": 16161991,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Light_Crude_Oil_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CL_30m_dukascopy.csv",
+    "symbol": "CL",
+    "timeframe": "30m",
+    "tds_symbol": "US_Light_Crude_Oil",
+    "tds_tf": "M30",
+    "size_bytes": 8163114,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Light_Crude_Oil_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/CL_5m_dukascopy.csv",
+    "symbol": "CL",
+    "timeframe": "5m",
+    "tds_symbol": "US_Light_Crude_Oil",
+    "tds_tf": "M5",
+    "size_bytes": 47748378,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Small_Cap_2000_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/RTY_daily_dukascopy.csv",
+    "symbol": "RTY",
+    "timeframe": "daily",
+    "tds_symbol": "US_Small_Cap_2000",
+    "tds_tf": "D1",
+    "size_bytes": 146714,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Small_Cap_2000_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/RTY_60m_dukascopy.csv",
+    "symbol": "RTY",
+    "timeframe": "60m",
+    "tds_symbol": "US_Small_Cap_2000",
+    "tds_tf": "H1",
+    "size_bytes": 2633806,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Small_Cap_2000_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/RTY_15m_dukascopy.csv",
+    "symbol": "RTY",
+    "timeframe": "15m",
+    "tds_symbol": "US_Small_Cap_2000",
+    "tds_tf": "M15",
+    "size_bytes": 10057712,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Small_Cap_2000_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/RTY_30m_dukascopy.csv",
+    "symbol": "RTY",
+    "timeframe": "30m",
+    "tds_symbol": "US_Small_Cap_2000",
+    "tds_tf": "M30",
+    "size_bytes": 5118398,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/US_Small_Cap_2000_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/RTY_5m_dukascopy.csv",
+    "symbol": "RTY",
+    "timeframe": "5m",
+    "tds_symbol": "US_Small_Cap_2000",
+    "tds_tf": "M5",
+    "size_bytes": 29846452,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAGUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/SI_daily_dukascopy.csv",
+    "symbol": "SI",
+    "timeframe": "daily",
+    "tds_symbol": "XAGUSD",
+    "tds_tf": "D1",
+    "size_bytes": 305019,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAGUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/SI_60m_dukascopy.csv",
+    "symbol": "SI",
+    "timeframe": "60m",
+    "tds_symbol": "XAGUSD",
+    "tds_tf": "H1",
+    "size_bytes": 5715148,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAGUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/SI_15m_dukascopy.csv",
+    "symbol": "SI",
+    "timeframe": "15m",
+    "tds_symbol": "XAGUSD",
+    "tds_tf": "M15",
+    "size_bytes": 22523706,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAGUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/SI_30m_dukascopy.csv",
+    "symbol": "SI",
+    "timeframe": "30m",
+    "tds_symbol": "XAGUSD",
+    "tds_tf": "M30",
+    "size_bytes": 11340133,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAGUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/SI_5m_dukascopy.csv",
+    "symbol": "SI",
+    "timeframe": "5m",
+    "tds_symbol": "XAGUSD",
+    "tds_tf": "M5",
+    "size_bytes": 66641039,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAUUSD_GMT+0_NO-DST_D1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/GC_daily_dukascopy.csv",
+    "symbol": "GC",
+    "timeframe": "daily",
+    "tds_symbol": "XAUUSD",
+    "tds_tf": "D1",
+    "size_bytes": 280760,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAUUSD_GMT+0_NO-DST_H1.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/GC_60m_dukascopy.csv",
+    "symbol": "GC",
+    "timeframe": "60m",
+    "tds_symbol": "XAUUSD",
+    "tds_tf": "H1",
+    "size_bytes": 5261185,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAUUSD_GMT+0_NO-DST_M15.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/GC_15m_dukascopy.csv",
+    "symbol": "GC",
+    "timeframe": "15m",
+    "tds_symbol": "XAUUSD",
+    "tds_tf": "M15",
+    "size_bytes": 20742073,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAUUSD_GMT+0_NO-DST_M30.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/GC_30m_dukascopy.csv",
+    "symbol": "GC",
+    "timeframe": "30m",
+    "tds_symbol": "XAUUSD",
+    "tds_tf": "M30",
+    "size_bytes": 10435610,
+    "already_converted": false
+  },
+  {
+    "source_path": "/data/market_data/cfds/ohlc/XAUUSD_GMT+0_NO-DST_M5.csv",
+    "target_path": "/data/market_data/cfds/ohlc_engine/GC_5m_dukascopy.csv",
+    "symbol": "GC",
+    "timeframe": "5m",
+    "tds_symbol": "XAUUSD",
+    "tds_tf": "M5",
+    "size_bytes": 61588814,
+    "already_converted": false
+  }
+]
