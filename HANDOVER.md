@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 71 complete: all 120 Dukascopy CSVs converted to engine format)
+# Last updated: 2026-04-19 (Session 71b complete: Gen 9 revived as standalone autonomous business host)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -26,10 +26,10 @@
 - **TDS export location (Latitude):** `C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy\`
 - **TDS symbol naming:** `{SYMBOL}_GMT+0_NO-DST_{TIMEFRAME}.csv` (e.g., `USA_500_Index_GMT+0_NO-DST_H1.csv`)
 - **Converted data files:** 120 files on c240 at `/data/market_data/cfds/ohlc_engine/` (all 24 markets × 5 TFs)
-- **dukascopy-python** v4.0.1 installed on Gen 9 (for raw tick downloads, separate from TDS path)
-- **SP500 Dukascopy download COMPLETE** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), stored at `/data/dukascopy/raw_ticks/sp500/` on Gen 9
-- **Gen 9 storage ready:** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` created, 437 GB free
-- **Gen 9 new data target:** `/data/market_data/dukascopy/` for converted CSVs
+- **dukascopy-python** v4.0.1 was installed on the OLD Gen 9 (pre-Session 66 decommissioning) for raw tick downloads. NOT installed on the current `g9` (which is a separate autonomous-business host).
+- **SP500 Dukascopy download COMPLETE** — 3.4GB, 2012-01 through 2026-04 (bid + ask parquets), originally stored at `/data/dukascopy/raw_ticks/sp500/` on the OLD Gen 9. Data drives moved to c240 Session 66; specific path may or may not be preserved under the c240 /data restructure (Session 67).
+- **Gen 9 storage notes (OLD Gen 9, pre-decommission):** `/data/dukascopy/raw_ticks/` and `/data/dukascopy/ohlc_bars/` existed with 437 GB free — historical reference only.
+- **Converted data target (OLD plan):** `/data/market_data/dukascopy/` on Gen 9 — superseded. Current target is `/data/market_data/cfds/ohlc_engine/` on c240.
 - **The5ers MT5 tick exports** (manual via Ctrl+U -> Ticks -> Export, saved to `Z:\market_data\mt5_ticks\`):
   - SP500: 3.1 GB, 76.5M ticks from 2022-05-23
   - NAS100: 10.6 GB, 245.8M ticks from 2022-05-23
@@ -61,11 +61,53 @@
 - **Samba drive** mapped to `\\192.168.68.69\data`
 - **Back online** (2026-04-14) — power supply had died, replaced
 
-#### Gen 9 (DL360, dl360g9) — DECOMMISSIONED (Session 66)
-- **Decommissioned 2026-04-18.** Role transferred to C240 (see below).
-- 12TB SAS drive array moved to C240. E5-2673 v4 CPUs (that were pending install) moved to C240.
-- Tailscale alias `100.121.107.49` still listed — remove from Tailscale admin when convenient.
-- Old Samba shares `\\192.168.68.69\*` OFFLINE. Latitude Z: drive will fail to mount until remapped to c240.
+#### Gen 9 (DL360, `g9`) — ALWAYS-ON AUTONOMOUS BUSINESS HOST (Hermes/OpenClaw)
+- **Role:** Standalone autonomous-business host. NOT a backtesting cluster member. Runs Hermes + OpenClaw agent workloads. Always on.
+- **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
+- **Hostname:** `g9`
+- **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
+- **LAN IP:** `192.168.68.75/22` on `eno1` (DHCP via cloud-init netplan)
+- **Tailscale IP:** `100.71.141.89` (device name `g9` in tailnet, auth user `robpitman1982@`, `--ssh` enabled)
+- **CPU:** 1× Xeon E5-2650 v4 @ 2.20 GHz = **12 cores / 12 threads** (single socket, HT off)
+- **RAM:** 16 GB + 4 GB swap
+- **Storage — HP Smart Array P440ar:**
+  - Array A: logicaldrive 1 (119.21 GB, RAID 0) — SATA SSD `1I:0:1` → `/dev/sda` (boot + `/` on LVM `ubuntu-vg/ubuntu-lv`, 58 GB used / 116 GB VG headroom)
+  - Array B: logicaldrive 2 (273.40 GB, RAID 0) — 2× 146 GB SAS HDD `1I:0:2,1I:0:3` striped → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4, fstab-persisted, owned by rob, UUID `0661ff58-9086-432e-b70b-51bc8a271cf1`)
+- **Credentials:** `rob` / `Ubuntu123`; NOPASSWD sudo via `/etc/sudoers.d/rob-nopasswd`
+- **SSH access from Latitude:**
+  - Direct LAN SSH from Latitude Wi-Fi fails (client-isolation/ARP quirk) — use `ProxyJump c240` via `ssh g9` alias, or direct over Tailscale via `ssh g9-ts`.
+  - `Host g9` in `C:\Users\Rob\.ssh\config` uses `ProxyJump c240`; `Host g9-ts` points at Tailscale IP.
+  - Latitude `strategy-engine` pubkey in `~/.ssh/authorized_keys` on g9.
+- **SSH services:** `ssh.socket` masked, `ssh.service` enabled + active, `ssh-recover.service` (25s delayed restart) enabled — matches cluster pattern even though g9 is not a cluster member.
+- **Always-on posture:** `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target` all **masked**; `systemd-logind.conf.d/no-sleep.conf` sets lid/suspend/idle = ignore.
+- **ARP-flush-on-boot:** `@reboot /usr/sbin/ip -s -s neigh flush all` in root crontab.
+- **SSH keypair:** `~/.ssh/id_ed25519` (`rob@g9`) — pubkey installed on c240 `authorized_keys` for admin peer access (c240 can ssh to g9; g9→c240 not yet configured, intentionally minimal).
+- **Toolchain installed (Session 71b):**
+  - Docker 29.1.3 (`docker.io` + `docker-compose-v2`, `rob` in `docker` group, daemon enabled)
+  - Node.js v24.14.1 + npm 11.11.0 (via NodeSource `setup_lts.x`)
+  - Python 3.12.3 + venv at `~/venv` (latest pip/setuptools/wheel)
+  - Tailscale 1.96.4
+  - ssacli 6.45-8.0 (HP Smart Storage CLI, from HPE MCP repo with `[trusted=yes]` — GPG key `E3FE26E774C3A4A2` not in published keyfiles, bypass is intentional)
+  - rclone v1.60.1-DEV (config not yet done — see Open Issues)
+  - Base: `build-essential`, `git`, `curl`, `wget`, `jq`, `unzip`, `tmux`, `htop`, `iotop`, `net-tools`, `nfs-common`, `cifs-utils`, `wakeonlan`, `etherwake`, `ipmitool`, `ca-certificates`, `gnupg`, `software-properties-common`
+- **/data layout:**
+  ```
+  /data/                          (269 GB ext4, rob:rob, noatime)
+  ├── hermes/
+  │   ├── agents/
+  │   ├── state/
+  │   ├── logs/
+  │   └── workspace/
+  ├── openclaw/
+  ├── backups/
+  ├── logs/                       (rclone_backup_YYYYMMDD.log will live here)
+  └── lost+found/                 (root:root, expected)
+  ```
+- **Backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `45 2 * * *` — syncs `/data/hermes/`, `/data/openclaw/`, `/data/backups/` to `gdrive:g9_backup/`. **Backup script is in place but rclone OAuth not yet completed** — script will silently fail until `rclone config` runs. Use same headless flow as c240 (`rclone authorize drive` on Latitude → paste token into g9's rclone config).
+- **Not installed deliberately:** Samba (not a data-sharing cluster member), sweep scripts, market_data, `dukascopy-python`, repo clone, `psc-activate` alias. g9 is isolated from backtesting workflow.
+- **Env marker:** `.bashrc` exports `G9_ROLE="hermes_autonomous_host"` + alias `venv-activate` (sources `~/venv/bin/activate`).
+- **iLO:** not yet configured (DHCP on management port expected).
+- **Audit log:** `/tmp/g9_audit.log` on box, full final state.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -202,7 +244,7 @@
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
 5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
-6. **Gen 9 revival (optional).** Rob is straightening bent CPU pins to turn Gen 9 into a new Hermes autonomous-agent server. If successful, data migration from Gen 9's old SAS array is moot (drives are already in c240). Gen 9 becomes a new role, not a restored one.
+6. **rclone OAuth on g9 not yet done.** Backup script + cron installed but will silently fail until `rclone config` completes headless OAuth (same flow as c240 Session 67). Run `rclone authorize drive` on Latitude, paste token into g9's rclone config.
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
@@ -279,6 +321,8 @@
   - rclone gdrive OAuth completed (headless flow: `rclone authorize` on Latitude, paste token into c240 config). First backup run successful — `gdrive:c240_backup/configs/.backup_test_marker` verified on remote. Nightly cron live at 02:30.
   - Latitude Z: drive remapped from dead `\\192.168.68.69\data` → `\\192.168.68.53\data` (persistent, credentials saved).
   - c240 physically relocated under house. Powered back on cleanly — health check confirms all services, /data mount, rclone config, cron, tailscale intact. No RAID or disk errors.
+- **Session 71 (2026-04-19):** Dukascopy conversion scale-out. All 120 TDS CSVs converted to engine format via `scripts/convert_tds_batch.py` on c240. Full CFD OHLC dataset engine-ready at `/data/market_data/cfds/ohlc_engine/`.
+- **Session 71b (2026-04-19):** Gen 9 revived as standalone **autonomous business host** (`g9` at 192.168.68.75, Tailscale 100.71.141.89). Fresh Ubuntu 24.04.4 on new 128 GB SATA SSD boot drive. 2× 146 GB SAS drives configured as RAID0 logical drive via ssacli 6.45-8.0 → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4). Installed: Docker 29.1.3, Node.js v24.14.1, Tailscale 1.96.4, Python 3.12.3 venv, ssacli, rclone. SSH via ProxyJump c240 (Latitude Wi-Fi ARP quirk) + direct Tailscale. NOPASSWD sudo, ssh-recover.service, ARP-flush cron, sleep/suspend/hibernate masked (always-on). `/data/{hermes,openclaw,backups,logs}/` layout. Backup script + 02:45 cron in place, rclone OAuth pending. **g9 is NOT a backtesting cluster member** — deliberately isolated from sweep workflow.
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -288,7 +332,7 @@
 - **Block bootstrap MC** (Session 58): preserves crisis clustering vs naive shuffle
 - **3-layer correlation** (Session 58): active-day + DD-state + tail co-loss replaces simple Pearson
 - **Dukascopy for discovery, The5ers for validation** (Session 63): tick data architecture separates strategy discovery (deep Dukascopy history) from execution validation (The5ers real spreads)
-- **Local cluster replaces cloud** (Session 65): `run_local_sweep.py` + `run_cluster_sweep.py` replace GCP SPOT runners. Zero cloud dependencies. ~216 threads available locally (Gen 9: 80, Gen 8: 48, R630: 88).
+- **Local cluster replaces cloud** (Session 65): `run_local_sweep.py` + `run_cluster_sweep.py` replace GCP SPOT runners. Zero cloud dependencies. ~200 threads available locally (C240: 80, Gen 8: 12→48 post-CPU-upgrade, R630: 88). Note: g9 is NOT in this pool — it's the standalone autonomous business host.
 
 ---
 
@@ -377,7 +421,7 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
-- **Gen 9 revival as Hermes box** (optional) — bent pins being straightened.
+- **rclone OAuth on g9** — headless flow (`rclone authorize drive` on Latitude, paste token into g9's rclone config), enables nightly backup cron.
 - **R630 netplan cleanup** — drop stale `192.168.68.75` DHCP lease from eno1.
 - **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on c240 orchestrating gen8 + r630.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
@@ -396,7 +440,8 @@ ssh c240          # Cisco C240 M4 — LAN 192.168.68.53, Tailscale 100.120.11.35
 ssh gen8          # Gen 8 Tailscale (100.76.227.12) — LAN 192.168.68.71
 ssh r630          # Dell R630 Tailscale (100.85.102.4) — LAN 192.168.68.78
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
-# ssh gen9        # DECOMMISSIONED Session 66
+ssh g9            # Gen 9 autonomous business host — LAN 192.168.68.75 via ProxyJump c240
+ssh g9-ts         # Gen 9 Tailscale direct (100.71.141.89) — works from anywhere
 
 # SSH mesh (c240 ↔ gen8 ↔ r630) — all bidirectional, verified Session 67
 # Each box can ssh to any other without password prompt
