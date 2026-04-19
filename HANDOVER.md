@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 71b complete: Gen 9 revived as standalone autonomous business host)
+# Last updated: 2026-04-19 (Session 71/71b complete: CFD conversion scale-out + Gen 9 revived as autonomous business host. Session 72 scoped: ES-only × 4 TFs)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -415,13 +415,13 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Session 72 PRIORITY: 24-market × 5-TF sweep matrix on c240+gen8+r630.** Validate CFD engine params across all markets. Build ultimate CFD leaderboard.
+- **Session 72 PRIORITY: ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Rob's explicit scope decision — validate engine params + timeframe-dependent logic on known-good market before scaling out. Session 70 proved ES daily works (13 accepted, PF 1.52 median). Session 72 extends ES to 3 more TFs and confirms clean output across TFs. Runs on c240 alone (~30-60 min), no WOL needed. If clean: Session 73 fans out to remaining 23 markets × 4 TFs = 92 sweeps across c240+gen8+r630. If dirty: fix engine before touching other markets.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
 - **R630 netplan cleanup** — drop stale `192.168.68.75` DHCP lease from eno1.
-- **Full 24-market sweep** — `python run_cluster_sweep.py` (all markets, all timeframes) on c240 orchestrating gen8 + r630.
+- **Full 24-market sweep (Session 73)** — `python run_cluster_sweep.py` (all markets × 4 TFs = 92 sweeps, 5m excluded) on c240 orchestrating gen8 + r630. Gated on Session 72 ES validation passing.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
 - **Challenge vs Funded mode** — implement spec in `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
 - Static IP port forwarding setup once new ISP connected.
@@ -455,7 +455,7 @@ ssh g9-ts         # Gen 9 Tailscale direct (100.71.141.89) — works from anywhe
 /data/market_data/cfds/ticks_dukascopy_tds/     # Raw .bfc tick cache (130k files, 32 GB)
 /data/market_data/cfds/ticks_dukascopy_raw/     # Future: dukascopy-python parquet
 /data/market_data/cfds/ticks_mt5_the5ers/
-/data/market_data/cfds/ohlc_engine/               # Engine-ready converted CSVs (1/120: ES_daily_dukascopy.csv)       # Future: The5ers MT5 tick exports
+/data/market_data/cfds/ohlc_engine/             # Engine-ready converted CSVs (120/120 complete, Session 71)
 /data/leaderboards/                             # Master leaderboards
 /data/sweep_results/_inbox/                     # Worker rsync target
 /data/portfolio_outputs/                        # Portfolio selector outputs
