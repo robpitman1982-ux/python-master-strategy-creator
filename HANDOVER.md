@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72c: Hermes gets write path — bidirectional handover flow + cluster SSH access. Hermes can now edit HANDOVER.md and push to git; Hermes can ssh to c240/gen8/r630 as rob with NOPASSWD sudo. Laptops (Latitude, X1) remain isolated from server SSH by design. Session 73 still queued: ES sanity-check × 4 TFs.)
+# Last updated: 2026-04-20 (Session 72d: Hermes skill-building session on Telegram — created 2 skills (handover-update, handover-memory-reconcile), scheduled hourly cron, fixed stale MEMORY.md. Discovered memory tool has security filter blocking SSH-path strings — this is by design. Session 73 still queued: ES sanity-check × 4 TFs.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -162,6 +162,20 @@
   - Never commit anything other than HANDOVER.md via this clone without asking Rob first. This clone is scoped to handover maintenance, not full development.
   - When you make infrastructure changes on c240/gen8/r630 (packages installed, configs changed, services started), update the relevant server section in HANDOVER.md. That's how Rob's next Claude chat stays current on what you've done.
   - Do not modify `HANDOVER.md` during conversations unless something concrete happened worth recording. Casual chats don't need handover entries.
+- **Session 72d additions (2026-04-20) — Hermes skills + reconcile cron + memory filter discovered:**
+  - **Two skills created by Hermes** in `/home/hermes/.hermes/skills/productivity/`:
+    - `handover-update/SKILL.md` (4 KB) — documents the pull → edit → commit → push workflow, commit-message conventions, what-to-edit decision table, pitfalls. Invoke when updating HANDOVER from a Hermes session.
+    - `handover-memory-reconcile/SKILL.md` (4.8 KB) — SHA-based skip logic, section-focused reading strategy, memory-filter workaround documented, state-file path. Invoked by the hourly cron below.
+  - **Cron job `3fbca7f44580`** registered via Hermes's native `cronjob` tool at `/home/hermes/.hermes/cron/jobs.json`. Runs `handover-memory-reconcile` skill every 60 minutes, reports to Rob's Telegram only if MEMORY needed updating (silent on no-op). Reads `/data/shared/handover/LAST_CHANGE` (written by sync-handover when git repo fast-forwards) and compares against `/home/hermes/.hermes/state/last_reconciled_sha`. First run: 09:43 UTC 2026-04-20.
+  - **Memory tool security filter — BY DESIGN, not a bug.** `tools/memory_tool.py` has a regex blocklist on all memory writes:
+    - `authorized_keys` → tagged `ssh_backdoor`
+    - `~/.ssh` or `$HOME/.ssh` → tagged `ssh_access`
+    - `~/.hermes/.env` → tagged `hermes_env`
+    Intent: prevent the LLM-managed memory store from ever holding pointers to credential artifacts. If memory leaks via context stuffing or cross-session carry-over, no credential locations go with it. **Workaround (the intended pattern):** keep memory entries high-level and abstract ("Hermes can SSH to cluster servers as rob with sudo"), and put key paths / credential-bearing specifics in HANDOVER.md only. HANDOVER.md loads fresh each session via the symlink, so detail is always current without needing durable memory.
+  - **MEMORY.md drift fixed.** Session 72c changes (cluster SSH, deploy key, bidirectional flow) are now reflected in the 4-entry memory store (1343 bytes total, ~60% of budget). The stale "Phase 1 NOW: no SSH to cluster" line is gone.
+  - **LAST_CHANGE marker wired into sync-handover.** When `sync-handover` detects a real fast-forward (not a no-op pull), it writes `/data/shared/handover/LAST_CHANGE` with fields `sha`, `timestamp`, `previous_sha`. hermes:agents 640. Enables both Hermes's cron and future external triggers to know what actually changed via `git diff --name-only $previous_sha $sha`.
+  - **First cross-agent git sync verified.** Hermes commit `485e3a1` (self-test) was pulled by Latitude before Claude pushed `5c71e28`/`5ba9235`. Round-trip works both directions. No conflicts.
+  - **Session still `memory_flushed: false`** in sessions.json — Hermes's periodic LLM-driven flush hasn't fired (needs ≥6 turns at current config). Not blocking: the explicit `+memory:` tool calls captured what mattered.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -537,7 +551,13 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 # Handover sync   : ssh g9-ts "sudo /usr/local/bin/sync-handover"   # called by Latitude after every git push of HANDOVER.md
 #                   -> /data/hermes/psc-handover/HANDOVER.md  (canonical, hermes:agents, git-tracked)
 #                   -> /home/hermes/.hermes/memories/HANDOVER.md  (symlink, auto-loaded next Hermes session)
+#                   -> /data/shared/handover/LAST_CHANGE  (sha+timestamp marker, read by Hermes reconcile cron)
 #                   Safety-net cron /etc/cron.d/sync-handover runs every 5 min, logs to /var/log/sync-handover.log
+# Hermes cron jobs: /home/hermes/.hermes/cron/jobs.json  (managed by Hermes's `cronjob` tool)
+#   Active: 3fbca7f44580 (handover-memory-reconcile, every 60m)
+#   Inspect: sudo cat /home/hermes/.hermes/cron/jobs.json | python3 -m json.tool
+#   Pause:  ask Hermes "pause cron 3fbca7f44580" via Telegram
+# Hermes skills   : /home/hermes/.hermes/skills/productivity/handover-{update,memory-reconcile}/SKILL.md
 # OpenClaw start  : sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service
 # OpenClaw stop   : sudo systemctl stop openclaw-gateway.service && sudo systemctl disable openclaw-gateway.service (current state)
 # OpenClaw logs   : sudo tail -f /data/openclaw/logs/gateway.stdout.log
