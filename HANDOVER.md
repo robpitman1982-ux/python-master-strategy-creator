@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72d: Hermes skill-building session on Telegram — created 2 skills (handover-update, handover-memory-reconcile), scheduled hourly cron, fixed stale MEMORY.md. Discovered memory tool has security filter blocking SSH-path strings — this is by design. Session 73 still queued: ES sanity-check × 4 TFs.)
+# Last updated: 2026-04-20 (Session 72e: housekeeping — cost tracking gap documented, multi-LLM panel-review + API spend cap added to horizon. Session 73 still queued: ES sanity-check × 4 TFs.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -317,6 +317,7 @@
 7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint. **When back online, also verify laptop SSH isolation:** inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` on X1 and confirm no server pubkeys are present (Latitude was audited clean in Session 72c; X1 was offline at audit time).
 8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
 9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+10. **Hermes cost tracking shows $0.00 / "unknown" in sessions.json.** Token counters aren't populating (`input_tokens: 0`, `cost_status: "unknown"`) despite Hermes hitting Anthropic API rate limits (so it IS making real paid calls). Relies on upstream fix from NousResearch — design spec at `/data/hermes/hermes-agent/docs/plans/2026-03-16-pricing-accuracy-architecture-design.md`. Until fixed, check actual spend at https://console.anthropic.com/settings/usage — that's authoritative. Not blocking (API billing is happening correctly; Hermes just isn't self-reporting).
 
 ---
 
@@ -498,6 +499,8 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 - **Hermes cluster SSH — DONE Session 72c:** Hermes now has direct SSH to c240/gen8/r630 as rob user (NOPASSWD sudo). Phase 2 trust level elevated ahead of original 1–2-week Phase 1 validation window per Rob's direction. No scoped `hermes-agent-runner` allowlist wrapper — full shell access. Laptops remain isolated.
 - **OpenClaw re-enable decision** — defer until specific need emerges (sandboxed untrusted code execution, a plugin Hermes lacks). Unit at `/etc/systemd/system/openclaw-gateway.service`, currently disabled. Fix default model to `anthropic/claude-sonnet-4-6` before restart.
 - **External memory provider decision** — FTS5 keyword session search is built-in and working. Supermemory/Honcho/Mem0 only if Phase 1 shows need.
+- **Set spend cap on Anthropic API key** at https://console.anthropic.com/settings/limits — belt-and-braces against runaway Hermes cost (currently no hard ceiling). Rob's stated Hermes budget is $30/mo. Set the cap slightly above that to avoid accidental cutoffs during legitimate high-context sessions.
+- **Multi-LLM panel-review skill for Hermes.** Already supported by hermes-agent — `hermes_cli/providers.py` uses models.dev catalog (109+ providers) + user overlays. Plan: add OpenAI + Gemini API keys to `~/.hermes/.env`, add provider entries in `~/.hermes/config.yaml`, build `panel-review` skill at `~/.hermes/skills/research/panel-review/` that calls Claude + GPT + Gemini in parallel on a given question and synthesises three perspectives + a reconciliation. Fit: big architectural calls, risky code changes, strategy direction. Cheap (~$0.05/question × 3 providers). Rob already does this manually via ChatGPT and Gemini web — automating via Hermes removes copy-paste. Defer until after Hermes Phase 1 validation settles.
 - Strategy templates to reduce search space.
 
 ---
