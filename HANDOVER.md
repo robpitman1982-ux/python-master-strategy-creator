@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-19 (Session 71/71b complete: CFD conversion scale-out + Gen 9 revived as autonomous business host. Session 72 scoped: ES-only × 4 TFs)
+# Last updated: 2026-04-20 (Session 72 complete: Hermes + OpenClaw deployed on g9 autonomous business host. Hermes LIVE, OpenClaw installed-but-dormant. Session 73 re-scoped: ES sanity-check × 4 TFs, deferred from 72)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -66,8 +66,8 @@
 - **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
 - **Hostname:** `g9`
 - **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
-- **LAN IP:** `192.168.68.75/22` on `eno1` (DHCP via cloud-init netplan)
-- **Tailscale IP:** `100.71.141.89` (device name `g9` in tailnet, auth user `robpitman1982@`, `--ssh` enabled)
+- **LAN IP:** `192.168.68.50/22` on `eno1` (DHCP lease changed from .75 → .50 after Session 71b relocation/power-cycle; stale .75 no longer valid)
+- **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`). Session 72: `sudo tailscale up --reset` applied to fix stale offline state; `--ssh` disabled to avoid browser-auth dependency for regular OpenSSH
 - **CPU:** 1× Xeon E5-2650 v4 @ 2.20 GHz = **12 cores / 12 threads** (single socket, HT off)
 - **RAM:** 16 GB + 4 GB swap
 - **Storage — HP Smart Array P440ar:**
@@ -90,24 +90,44 @@
   - ssacli 6.45-8.0 (HP Smart Storage CLI, from HPE MCP repo with `[trusted=yes]` — GPG key `E3FE26E774C3A4A2` not in published keyfiles, bypass is intentional)
   - rclone v1.60.1-DEV (config not yet done — see Open Issues)
   - Base: `build-essential`, `git`, `curl`, `wget`, `jq`, `unzip`, `tmux`, `htop`, `iotop`, `net-tools`, `nfs-common`, `cifs-utils`, `wakeonlan`, `etherwake`, `ipmitool`, `ca-certificates`, `gnupg`, `software-properties-common`
-- **/data layout:**
+- **/data layout (expanded Session 72):**
   ```
-  /data/                          (269 GB ext4, rob:rob, noatime)
-  ├── hermes/
-  │   ├── agents/
-  │   ├── state/
-  │   ├── logs/
-  │   └── workspace/
-  ├── openclaw/
+  /data/                          (269 GB ext4, noatime)
+  ├── hermes/                     (hermes:agents — Hermes Agent install + state)
+  │   ├── hermes-agent/           git clone NousResearch/hermes-agent + uv venv Python 3.11
+  │   ├── agents/  state/  logs/  workspace/  skills_cache/
+  ├── openclaw/                   (openclaw:agents — dormant backup)
+  │   ├── venv/  logs/  workspace/  sandbox/
+  ├── shared/                     (hermes:agents, setgid 2775 — cross-agent workspace)
+  │   ├── credentials/            (openclaw_gateway_token, mode 640)
+  │   └── logs/ skills/ task_queue/ results/ artifacts/
   ├── backups/
-  ├── logs/                       (rclone_backup_YYYYMMDD.log will live here)
+  ├── logs/
   └── lost+found/                 (root:root, expected)
   ```
-- **Backup:** `/usr/local/bin/backup_to_gdrive.sh` + user cron `45 2 * * *` — syncs `/data/hermes/`, `/data/openclaw/`, `/data/backups/` to `gdrive:g9_backup/`. **rclone gdrive OAuth completed Session 71b** via headless flow (`rclone authorize drive` on Latitude → token written to `~/.config/rclone/rclone.conf` on g9). End-to-end verified — test marker `hermes/.rclone_test_marker` synced to `gdrive:g9_backup/hermes/` (36 bytes), then removed. `gdrive:g9_backup/` currently empty pending real content.
+- **Backup: DISABLED Session 72** — rclone user cron removed per Rob's decision ("no backup until we know what we're doing"). Script preserved at `/usr/local/bin/backup_to_gdrive.sh`, rclone config at `~/.config/rclone/rclone.conf` still valid. Re-enable after Phase 1 Hermes validation (~1–2 weeks) once retention semantics are settled.
 - **Not installed deliberately:** Samba (not a data-sharing cluster member), sweep scripts, market_data, `dukascopy-python`, repo clone, `psc-activate` alias. g9 is isolated from backtesting workflow.
 - **Env marker:** `.bashrc` exports `G9_ROLE="hermes_autonomous_host"` + alias `venv-activate` (sources `~/venv/bin/activate`).
 - **iLO:** not yet configured (DHCP on management port expected).
 - **Audit log:** `/tmp/g9_audit.log` on box, full final state.
+- **Session 72 additions (2026-04-20) — Hermes + OpenClaw deployment:**
+  - **Hermes Agent LIVE** — systemd user service `hermes-gateway.service` under `user@1001.service` (linger enabled for hermes). Auto-starts on boot.
+    - Source: `git clone --recurse-submodules https://github.com/NousResearch/hermes-agent /data/hermes/hermes-agent` → `uv venv venv --python 3.11` → `uv pip install -e ".[all]"` (45s install, includes python-telegram-bot, faster-whisper, sounddevice).
+    - Wrapper patched: `/data/hermes/hermes-agent/hermes` shebang set to `#!/data/hermes/hermes-agent/venv/bin/python` (system python3.12 grab avoided). Symlink `~hermes/.local/bin/hermes`.
+    - Config: `~hermes/.hermes/config.yaml` (model=claude-sonnet-4-6, tts.provider=edge, stt.provider=local). `.env` (mode 600, 283 bytes) has `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`.
+    - Brain: Claude Sonnet 4.6 via Anthropic API. STT: local faster-whisper (CPU). TTS: Edge TTS (Microsoft cloud, free, no key). Telegram bot: `@pitmans_heremes_bot` (typo in handle is intentional at this point — created with it, not renaming).
+    - Project manifest: `/home/hermes/.hermes/memories/PROJECT_MANIFEST.md` (26 KB, hermes:hermes 640) — full project briefing; Hermes absorbed into MEMORY.md + USER.md via voice/text command.
+    - Voice roundtrip VALIDATED — Rob sent voice memo, Hermes transcribed, replied as audio.
+  - **OpenClaw STOPPED + DISABLED** (installed, onboarded, then stopped):
+    - Install: `npm install -g openclaw@latest` as openclaw user (npm prefix `~/.npm-global`). Onboarded loopback-bind / token-auth / Anthropic API key flow.
+    - Config: `/home/openclaw/.openclaw/openclaw.json`. Gateway token at `/data/shared/credentials/openclaw_gateway_token` (hermes:agents, 640).
+    - Service unit: `/etc/systemd/system/openclaw-gateway.service` (root-owned, **system-level** — chosen over `systemctl --user` because OpenClaw's Node wrapper dropped bus context on re-spawn, "Permission denied" errors. System-level bypasses `systemctl --user` entirely). User=openclaw, Group=agents. Logs to `/data/openclaw/logs/gateway.{stdout,stderr}.log`.
+    - Smoke test passed before stop: gateway reachable on `ws://127.0.0.1:18789`, probe 72 ms, 5 plugins loaded (acpx, browser, device-pair, phone-control, talk-voice).
+    - Re-enable: `sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service`.
+    - **Known fix needed if re-enabled:** default model is `anthropic/claude-opus-4-7` but SDK warmup fails "Unknown model". Change to `anthropic/claude-sonnet-4-6` via `openclaw config set agents.defaults.model.primary anthropic/claude-sonnet-4-6` before re-starting.
+  - **Users/dirs:** users `hermes` (uid 1001) + `openclaw` (uid 1002), both in group `agents` (gid 1001) + `docker`. Passwords: `Ubuntu123`. `loginctl enable-linger` for both — user systemd managers persist across logout.
+  - **Scoped sudoers:** `/etc/sudoers.d/agents` — hermes + openclaw NOPASSWD on `systemctl start/stop/restart/status` of their own services only.
+  - **Decision:** running Hermes solo for Phase 1 (1–2 weeks). OpenClaw dormant as hot-swap backup. Re-evaluate based on real usage — Hermes has native `delegation`, `terminal`, `code_execution`, `cronjob`, `skills` tools which may be sufficient. See Phase plan in PROJECT_MANIFEST.md section 12.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -238,6 +258,7 @@
 
 ## Open Issues (Priority Order)
 
+1. **Phase 1 Hermes validation period (1–2 weeks from 2026-04-20).** Drive with Hermes daily. Report: voice roundtrip reliability, task extraction quality, context retention across days, skill auto-promotion (target: ≥3 skills). Go/no-go for Phase 2 (cluster SSH) based on real use.
 2. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
    - Verify: `(Get-ChildItem 'C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy' -Recurse -File).Count` should match `find /data/market_data/cfds/ticks_dukascopy_tds -type f \| wc -l` (130,238) + 121 top-level in ohlc/
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
@@ -322,6 +343,7 @@
   - c240 physically relocated under house. Powered back on cleanly — health check confirms all services, /data mount, rclone config, cron, tailscale intact. No RAID or disk errors.
 - **Session 71 (2026-04-19):** Dukascopy conversion scale-out. All 120 TDS CSVs converted to engine format via `scripts/convert_tds_batch.py` on c240. Full CFD OHLC dataset engine-ready at `/data/market_data/cfds/ohlc_engine/`.
 - **Session 71b (2026-04-19):** Gen 9 revived as standalone **autonomous business host** (`g9` at 192.168.68.75, Tailscale 100.71.141.89). Fresh Ubuntu 24.04.4 on new 128 GB SATA SSD boot drive. 2× 146 GB SAS drives configured as RAID0 logical drive via ssacli 6.45-8.0 → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4). Installed: Docker 29.1.3, Node.js v24.14.1, Tailscale 1.96.4, Python 3.12.3 venv, ssacli, rclone. SSH via ProxyJump c240 (Latitude Wi-Fi ARP quirk) + direct Tailscale. NOPASSWD sudo, ssh-recover.service, ARP-flush cron, sleep/suspend/hibernate masked (always-on). `/data/{hermes,openclaw,backups,logs}/` layout. Backup script + 02:45 cron in place; rclone gdrive OAuth completed end-to-end (verified via test-marker sync). **g9 is NOT a backtesting cluster member** — deliberately isolated from sweep workflow.
+- **Session 72 (2026-04-20):** Hermes + OpenClaw deployed on g9. g9 brought back from offline state (21h last-seen on Tailscale) via `sudo tailscale up --reset`; LAN IP moved .75 → .50 post-relocation DHCP lease change. Users + dirs created: hermes (1001), openclaw (1002), group agents, /data/{hermes,openclaw,shared}/ tree with setgid shared workspace. Hermes Agent installed from `NousResearch/hermes-agent` via uv venv Python 3.11, brain = Claude Sonnet 4.6, STT = local faster-whisper, TTS = Edge TTS, Telegram bot `@pitmans_heremes_bot`. Voice roundtrip validated. Project manifest (26 KB) absorbed into MEMORY.md + USER.md. OpenClaw installed via npm, system-level systemd unit (not user-level — Node wrapper dropped bus context), 5 plugins ran (acpx, browser, device-pair, phone-control, talk-voice), then stopped+disabled. Phase 1 = Hermes solo for 1–2 weeks; OpenClaw dormant backup. Backup disabled (rclone cron removed, config preserved).
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -415,17 +437,19 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Session 72 PRIORITY: ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Rob's explicit scope decision — validate engine params + timeframe-dependent logic on known-good market before scaling out. Session 70 proved ES daily works (13 accepted, PF 1.52 median). Session 72 extends ES to 3 more TFs and confirms clean output across TFs. Runs on c240 alone (~30-60 min), no WOL needed. If clean: Session 73 fans out to remaining 23 markets × 4 TFs = 92 sweeps across c240+gen8+r630. If dirty: fix engine before touching other markets.
+- **Session 73 PRIORITY (deferred from 72): ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Rob's scope decision — validate engine params + TF-dependent logic on known-good market before scaling out. Session 70 proved ES daily works (13 accepted, PF 1.52 median). Extends ES to 3 more TFs and confirms clean output. Runs on c240 alone (~30–60 min), no WOL needed. If clean: Session 74 fans out to 23 markets × 4 TFs = 92 sweeps across c240+gen8+r630. If dirty: fix engine before touching other markets.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
 - **R630 netplan cleanup** — drop stale `192.168.68.75` DHCP lease from eno1.
-- **Full 24-market sweep (Session 73)** — `python run_cluster_sweep.py` (all markets × 4 TFs = 92 sweeps, 5m excluded) on c240 orchestrating gen8 + r630. Gated on Session 72 ES validation passing.
+- **Full 24-market sweep (Session 74)** — `python run_cluster_sweep.py` (all markets × 4 TFs = 92 sweeps, 5m excluded) on c240 orchestrating gen8 + r630. Gated on Session 73 ES validation passing.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
 - **Challenge vs Funded mode** — implement spec in `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
 - Static IP port forwarding setup once new ISP connected.
-- Hermes Agent on c240 for monitoring/alerting (Linux native, Telegram gateway).
+- **Hermes Phase 2 gate:** after Phase 1 passes, generate scoped `hermes-agent` SSH user on c240/gen8/r630 with `command="/usr/local/bin/hermes-agent-runner"` allowlist wrapper. Daily + 60m sweeps unlocked, shorter TFs stay off-limits initially.
+- **OpenClaw re-enable decision** — defer until specific need emerges (sandboxed untrusted code execution, a plugin Hermes lacks). Unit at `/etc/systemd/system/openclaw-gateway.service`, currently disabled. Fix default model to `anthropic/claude-sonnet-4-6` before restart.
+- **External memory provider decision** — FTS5 keyword session search is built-in and working. Supermemory/Honcho/Mem0 only if Phase 1 shows need.
 - Strategy templates to reduce search space.
 
 ---
@@ -438,7 +462,7 @@ ssh c240          # Cisco C240 M4 — LAN 192.168.68.53, Tailscale 100.120.11.35
 ssh gen8          # Gen 8 Tailscale (100.76.227.12) — LAN 192.168.68.71
 ssh r630          # Dell R630 Tailscale (100.85.102.4) — LAN 192.168.68.78
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
-ssh g9            # Gen 9 autonomous business host — LAN 192.168.68.75 via ProxyJump c240
+ssh g9            # Gen 9 autonomous business host — LAN 192.168.68.50 via ProxyJump c240 (was .75 pre-72)
 ssh g9-ts         # Gen 9 Tailscale direct (100.71.141.89) — works from anywhere
 
 # SSH mesh (c240 ↔ gen8 ↔ r630) — all bidirectional, verified Session 67
@@ -468,6 +492,15 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 /usr/local/bin/wake-gen8.sh     # MAC ac:16:2d:6e:74:2c
 /usr/local/bin/wake-r630.sh     # MAC ec:f4:bb:ed:bf:00
 /usr/local/bin/wake-all.sh      # both
+
+# Hermes / OpenClaw management (on g9)
+# Hermes status   : sudo -u hermes bash -l -c 'hermes gateway status'
+# Hermes logs     : sudo tail -f /home/hermes/.hermes/logs/agent.log
+# Hermes restart  : sudo -u hermes env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus systemctl --user restart hermes-gateway.service
+# Telegram bot    : @pitmans_heremes_bot (voice memo in, audio out)
+# OpenClaw start  : sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service
+# OpenClaw stop   : sudo systemctl stop openclaw-gateway.service && sudo systemctl disable openclaw-gateway.service (current state)
+# OpenClaw logs   : sudo tail -f /data/openclaw/logs/gateway.stdout.log
 
 # Server creds: rob / Ubuntu123 (all servers)
 # C240 sudo: NOPASSWD via /etc/sudoers.d/rob-nopasswd
