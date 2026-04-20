@@ -53,8 +53,23 @@ fi
 if [ "${LOCAL}" = "${BASE}" ]; then
   # Fast-forward possible
   sudo -u hermes git merge --ff-only origin/main --quiet
-  log "OK: fast-forwarded to $(sudo -u hermes git rev-parse --short main)"
+  NEW_SHA=$(sudo -u hermes git rev-parse main)
+  log "OK: fast-forwarded to ${NEW_SHA:0:8}"
   log "    HANDOVER.md now at $(stat -c%s HANDOVER.md) bytes, $(stat -c%y HANDOVER.md)"
+
+  # Write marker file so Hermes's reconcile skill knows something changed.
+  # Only written when a real update happened (not on no-op syncs).
+  MARKER_DIR=/data/shared/handover
+  MARKER_FILE=${MARKER_DIR}/LAST_CHANGE
+  mkdir -p "${MARKER_DIR}"
+  {
+    echo "sha=${NEW_SHA}"
+    echo "timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "previous_sha=${LOCAL}"
+  } > "${MARKER_FILE}"
+  chown hermes:agents "${MARKER_FILE}"
+  chmod 640 "${MARKER_FILE}"
+  log "    marker written: ${MARKER_FILE}"
   exit 0
 fi
 
