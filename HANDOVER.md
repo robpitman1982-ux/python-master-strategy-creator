@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72b: handover → g9 auto-ingest wired in — every `git push` of this file now also lands in Hermes's memories dir for cross-session continuity between Claude and Hermes chats. Session 73 still queued: ES sanity-check × 4 TFs.)
+# Last updated: 2026-04-20 (Session 72c: Hermes gets write path — bidirectional handover flow + cluster SSH access. Hermes can now edit HANDOVER.md and push to git; Hermes can ssh to c240/gen8/r630 as rob with NOPASSWD sudo. Laptops (Latitude, X1) remain isolated from server SSH by design. Session 73 still queued: ES sanity-check × 4 TFs.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -135,6 +135,32 @@
   - Auto-load: file lives inside hermes's `~/.hermes/memories/` so it becomes part of context on next Hermes session start — no manual "read the handover" prompt needed.
   - Policy: latest-only, overwrite each time. No archive dir. Re-evaluate if history becomes useful.
   - Verified end-to-end Session 72b: `sudo -u hermes cat /home/hermes/.hermes/memories/HANDOVER.md` returns full file through the symlink.
+- **Session 72c additions (2026-04-20) — Bidirectional handover + Hermes cluster SSH:**
+  - **Hermes can now write to HANDOVER.md + push to GitHub.** Clone at `/data/hermes/psc-handover/` (hermes:agents, setgid 2775). Git remote set to SSH: `git@github.com:robpitman1982-ux/python-master-strategy-creator.git`. git user = "Hermes Agent <hermes-agent@g9.local>".
+  - **Deploy key on GitHub:** repo Settings → Deploy keys → "Hermes Agent (g9)" with write access. Pubkey `ssh-ed25519 AAAAC3...EawZR hermes-agent@g9` at `/home/hermes/.ssh/id_ed25519_github`. Confirmed via `ssh -T git@github.com` → "Hi robpitman1982-ux/python-master-strategy-creator!".
+  - **Symlink repointed:** `/home/hermes/.hermes/memories/HANDOVER.md` → `/data/hermes/psc-handover/HANDOVER.md` (was → `/data/shared/handover/` in 72b, now → the live git clone).
+  - **Old ingest retired.** `/usr/local/bin/ingest-handover` removed. Replaced by `/usr/local/bin/sync-handover` (repo-tracked at `scripts/sync-handover.sh`) which does `git fetch` + `git merge --ff-only origin/main`. Old `scripts/ingest-handover.sh` deleted from repo.
+  - **Sync triggers:**
+    - Explicit (Latitude after Claude pushes): `ssh g9-ts "sudo /usr/local/bin/sync-handover"`
+    - Safety net (root cron): `/etc/cron.d/sync-handover` runs `*/5 * * * *` with `--quiet`, logs to `/var/log/sync-handover.log`.
+  - **Hermes cluster SSH (Phase 2 gate crossed):** generated separate `/home/hermes/.ssh/id_ed25519_cluster` keypair. Pubkey `ssh-ed25519 AAAAC3...JvbVaj hermes-agent@g9-cluster` appended to rob's authorized_keys on c240, gen8, r630. Hermes's `~/.ssh/config` has `c240`/`gen8`/`r630` aliases (Tailscale IPs) — **deliberately no `latitude` or `x1` aliases.** Hermes logs in as rob (NOPASSWD sudo inherited). Tested: Hermes → c240 ✅, → gen8 ✅, → r630 ✅.
+  - **Laptop isolation verified:** Latitude's `administrators_authorized_keys` only contains Latitude's own key + X1 Carbon's key. No server pubkeys present. Empirical test — `sudo -u hermes ssh rob@100.79.72.125` → `Permission denied (publickey,password,keyboard-interactive)` ✅.
+  - **X1 Carbon unverified** (offline at audit time) — must inspect its `administrators_authorized_keys` and `~/.ssh/authorized_keys` next time it's online to confirm no server pubkeys present. See Open Issue #7.
+  - **Phase 1 validation scope changed.** Hermes now has repo-write + cluster SSH, which was scoped for "Phase 2" in the original plan. Trust level elevated at Rob's direction per Session 72c decision.
+- **Hermes Protocol — READ THIS, HERMES (the agent reading its memories/HANDOVER.md symlink):**
+  - You edit HANDOVER.md directly. No buffer file. One source of truth, committed to git.
+  - Workflow every time you need to record a change:
+    1. `cd /data/hermes/psc-handover`
+    2. `git pull --ff-only` (pick up anything Claude/Rob pushed from Latitude)
+    3. Edit `HANDOVER.md` — update "Last updated" line in the header, update the relevant section, update Open Issues / On The Horizon if applicable. Preserve existing structure.
+    4. `git add HANDOVER.md`
+    5. `git commit -m "hermes: <concise summary of what changed>"`
+    6. `git push`
+  - Commit messages: always prefix with `hermes:` so Rob/Claude can see who made the change in `git log`.
+  - If `git push` is rejected (someone else pushed meanwhile): `git pull --rebase origin main`, resolve conflicts if any, retry `git push`.
+  - Never commit anything other than HANDOVER.md via this clone without asking Rob first. This clone is scoped to handover maintenance, not full development.
+  - When you make infrastructure changes on c240/gen8/r630 (packages installed, configs changed, services started), update the relevant server section in HANDOVER.md. That's how Rob's next Claude chat stays current on what you've done.
+  - Do not modify `HANDOVER.md` during conversations unless something concrete happened worth recording. Casual chats don't need handover entries.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -273,7 +299,7 @@
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
 5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
 6. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
-7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint.
+7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint. **When back online, also verify laptop SSH isolation:** inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` on X1 and confirm no server pubkeys are present (Latitude was audited clean in Session 72c; X1 was offline at audit time).
 8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
 9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 
@@ -454,7 +480,7 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
 - **Challenge vs Funded mode** — implement spec in `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
 - Static IP port forwarding setup once new ISP connected.
-- **Hermes Phase 2 gate:** after Phase 1 passes, generate scoped `hermes-agent` SSH user on c240/gen8/r630 with `command="/usr/local/bin/hermes-agent-runner"` allowlist wrapper. Daily + 60m sweeps unlocked, shorter TFs stay off-limits initially.
+- **Hermes cluster SSH — DONE Session 72c:** Hermes now has direct SSH to c240/gen8/r630 as rob user (NOPASSWD sudo). Phase 2 trust level elevated ahead of original 1–2-week Phase 1 validation window per Rob's direction. No scoped `hermes-agent-runner` allowlist wrapper — full shell access. Laptops remain isolated.
 - **OpenClaw re-enable decision** — defer until specific need emerges (sandboxed untrusted code execution, a plugin Hermes lacks). Unit at `/etc/systemd/system/openclaw-gateway.service`, currently disabled. Fix default model to `anthropic/claude-sonnet-4-6` before restart.
 - **External memory provider decision** — FTS5 keyword session search is built-in and working. Supermemory/Honcho/Mem0 only if Phase 1 shows need.
 - Strategy templates to reduce search space.
@@ -505,9 +531,12 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 # Hermes logs     : sudo tail -f /home/hermes/.hermes/logs/agent.log
 # Hermes restart  : sudo -u hermes env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus systemctl --user restart hermes-gateway.service
 # Telegram bot    : @pitmans_heremes_bot (voice memo in, audio out)
-# Handover ingest : scp HANDOVER.md g9-ts:/tmp/HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"
-#                   -> /data/shared/handover/HANDOVER.md  (canonical, hermes:agents 640)
+# Hermes repo     : /data/hermes/psc-handover/ (hermes:agents, git remote=SSH, deploy key Hermes Agent (g9) on GitHub)
+# Hermes cluster  : sudo -u hermes ssh c240 / gen8 / r630 (logs in as rob, NOPASSWD sudo)
+# Handover sync   : ssh g9-ts "sudo /usr/local/bin/sync-handover"   # called by Latitude after every git push of HANDOVER.md
+#                   -> /data/hermes/psc-handover/HANDOVER.md  (canonical, hermes:agents, git-tracked)
 #                   -> /home/hermes/.hermes/memories/HANDOVER.md  (symlink, auto-loaded next Hermes session)
+#                   Safety-net cron /etc/cron.d/sync-handover runs every 5 min, logs to /var/log/sync-handover.log
 # OpenClaw start  : sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service
 # OpenClaw stop   : sudo systemctl stop openclaw-gateway.service && sudo systemctl disable openclaw-gateway.service (current state)
 # OpenClaw logs   : sudo tail -f /data/openclaw/logs/gateway.stdout.log
