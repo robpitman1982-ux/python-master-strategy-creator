@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72f: Gen 8 + g9 powered down cleanly for Rob's CPU installs. Both offline until Rob boots them back up. Hermes offline while g9 is down — reconcile cron + voice bot will resume on boot. Session 73 still queued: ES sanity-check × 4 TFs.)
+# Last updated: 2026-04-21 (Session 72g: CPU installs done on g9 + gen8. gen8 waiting for 2 fans. g9 network FAULT after move under house — OS up, NIC dead, iLO works. r630 ES 5m sweep OOM'd at 9h18m (82 workers × 5m dataset = 62GB RAM exhausted) — 14 promoted candidates salvageable. Hermes offline while g9 NIC unresolved.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -64,9 +64,19 @@
 #### Gen 9 (DL360, `g9`) — ALWAYS-ON AUTONOMOUS BUSINESS HOST (Hermes/OpenClaw)
 - **Role:** Standalone autonomous-business host. NOT a backtesting cluster member. Runs Hermes + OpenClaw agent workloads. Always on.
 - **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
+- **Session 72g (2026-04-21): SECOND CPU INSTALLED.** Rob installed E5-2650 v4 into CPU2 socket after fixing bent pins with pencil-spacer trick. Heat sink mounted. Pre-boot BIOS verification done (HT enabled, power profile = Maximum Performance, both CPUs should show in Processor Information). **Physical state: under house in final position.**
+- **Session 72g NETWORK FAULT — UNRESOLVED.** After under-house move g9's main NIC (eno1) is not coming up despite:
+  - iLO accessible at 192.168.68.69 (HPE MAC `98:F2:B3:35:67:AA`) — old Gen 9 iLO creds `Administrator / PVPT6M5H` STILL WORK
+  - `chassis status` = "System Power: on" ✓
+  - Swapped to g8's known-good network cable — still no link → rules out cable + switch port
+  - Swapped to g8's known-good power cable (now in PSU2 slot, 140W) — rules out outlet + power cable
+  - SEL shows no reboot or fault events during swap — system ran through cable changes without cycling
+  - Tailscale `100.71.141.89 g9` offline >1 hour, repeatedly
+  - **Remaining suspects (ranked):** (1) cable in wrong physical NIC port (DL360 has 4 ports — should be port 1 = eno1), (2) eno1 disabled in BIOS RBSU, (3) OS hung during boot, (4) eno1 hardware fault
+  - **Next step on Rob's to-do when under house:** verify cable in leftmost/topmost "1" port. If that fails, try ports 2/3/4 — they'd be eno2/3/4 which have no OS config yet but link light tells us NIC chip is alive.
 - **Hostname:** `g9`
 - **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
-- **LAN IP:** `192.168.68.50/22` on `eno1` (DHCP lease changed from .75 → .50 after Session 71b relocation/power-cycle; stale .75 no longer valid)
+- **LAN IP:** `192.168.68.50/22` on `eno1` (DHCP lease changed from .75 → .50 after Session 71b relocation/power-cycle; stale .75 no longer valid). **Session 72g: no DHCP lease confirmed — NIC silent.**
 - **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`). Session 72: `sudo tailscale up --reset` applied to fix stale offline state; `--ssh` disabled to avoid browser-auth dependency for regular OpenSSH
 - **CPU:** 1× Xeon E5-2650 v4 @ 2.20 GHz = **12 cores / 12 threads** (single socket, HT off)
 - **RAM:** 16 GB + 4 GB swap
@@ -236,7 +246,13 @@
 #### Gen 8 (DL380p, dl380p) — COMPUTE WORKER (SLEEPS WHEN IDLE)
 - Ubuntu 24.04, IP 192.168.68.71, Tailscale 100.76.227.12, iLO 192.168.68.76
 - MAC: ac:16:2d:6e:74:2c
-- **Threads: 12** (pre-CPU-upgrade). 2× E5-2697 v2 chips **ARRIVED**, install pending under house → 48 threads.
+- **Session 72g CPU UPGRADE COMPLETE.** 2× E5-2697 v2 + 2 heat sinks installed successfully. 48 threads expected when back online (currently 12 with the v1 chip). Rob verified both CPUs seat properly; RAM reslotted for dual-socket balance (see RAM layout below).
+- **RAM layout (Session 72g, per-socket balanced):**
+  - CPU1: 16GB @ 1C + 16GB @ 2G + 8GB @ 7J = **40 GB**
+  - CPU2: 16GB @ 12A + 16GB @ 11E + 8GB @ 6L = **40 GB**
+  - **Total: 80 GB DDR3 ECC RDIMM.** 16GB sticks in outer slots (farthest from CPU), 8GB on inside. Different channels per letter — no same-channel size mixing.
+- **FANS BLOCKER — waiting for 2× replacement fans.** Dual-CPU DL380p Gen 8 requires **6 fans** in bays 1-6. Rob currently has 4 (bays 1, 2, 5, 6 — split 2+2 across both sides for airflow). Bays 3 + 4 empty. Will boot with warnings + non-redundant cooling, WILL throttle under sweep load. **Ordered 2× HP 662520-001 from Interbyte Computers (eBay) AU$4 each + $11 postage. Est. delivery Mon 27 Apr – Mon 4 May 2026.** Seller asked re: combined postage.
+- **Gen 8 powered OFF under house** until fans arrive. No access needed meantime.
 - BIOS: HP P70 (Feb 2014) — supports E5-2697 v2 ✅, no update needed
 - **RAM: DDR3 ECC RDIMM** — NOT DDR4! Cannot share DIMMs with Gen 9 or R630.
 - SSH: socket disabled, service enabled, `ssh-recover.service` at 25s, `@reboot sleep 45` root cron fallback
@@ -302,6 +318,33 @@
 - **Session 69 cleanup:** Cloud code deleted, ES config bugs fixed, test suite green (236 pass, 0 fail)
 - **Session 70 first CFD sweep:** ES daily Dukascopy on c240, 7m runtime, 13 accepted strategies. Max PnL $1.0M (passed $20M critical threshold). Plausibility validated.
 
+### r630 ES 5m sweep OOM postmortem (Session 72g, 2026-04-21)
+- **Launched:** 19/04/26 21:08 UTC on r630 (ES 5m Dukascopy, all 15 strategy families)
+- **Expected finish:** ~11 AM 21/04/26 (~62h runtime)
+- **Actual end:** **OOM-killer at 20/04/26 06:26:40 UTC — 9h 18m in (~15% through plan)**
+- **Auto-shutdown cron** then powered r630 off at 07:00 UTC once system went idle (working as designed)
+- **Root cause:** `configs/local_sweeps/ES_5m.yaml` specified `max_workers_sweep: 82` and `max_workers_refinement: 82` (hard override of global `config.yaml` default of 2). r630 has only **62 GiB RAM + 8 GiB swap**. 82 × 5m dataset in parallel exhausted memory during REFINEMENT stage.
+- **Progress at OOM** (from `status.json`):
+  - Family 1 (mean_reversion): initial sweep ✅ complete (31,008 combos tested)
+  - Family 1 refinement: 49.5% (190 / 384 items, 2/5 candidates)
+  - Families 2-15: not started
+- **Salvageable on disk** at `~/python-master-strategy-creator/Outputs/es_5m_dukascopy_v1/ES_5m/`:
+  - `mean_reversion_filter_combination_sweep_results.csv` (21.5 MB, 31,008 rows)
+  - `mean_reversion_promoted_candidates.csv` — **14 promoted candidates** with quality flags. Top pick `ComboMR_DownClose_ReversalUpBar_CloseNearLow_InsideBar_ATRExpansionRatio_CumulativeDecline` is ROBUST with IS PF 2.24 → OOS PF 2.59 → recent 12m PF 3.16 (improving OOS).
+- **Dataset sizes on disk** (ES CFD Dukascopy, `/data/market_data/cfds/ohlc_engine/`):
+  - daily 0.25 MB (1×)
+  - 60m 4.3 MB (17×)
+  - 30m 8.2 MB (33×)
+  - 15m 16.1 MB (65×)
+  - **5m 47.6 MB (192×)**
+- **Worker review IN PROGRESS (incomplete Session 72g):**
+  - ✅ Confirmed `ES_5m.yaml` workers=82 — not 2, not 88
+  - ✅ Dataset sizes by TF captured
+  - ⏸️ Per-worker memory measurement — `mem_probe.py` staged at `/tmp/mem_probe.py` on r630 (rewritten to use /proc/self/status, no psutil dep). Didn't run due to SSH/venv hiccups.
+  - ⏸️ Nested parallelism check (grep engine modules for ProcessPool / Pool() inside workers) — would explain why OOM dump showed "30+" processes when config specified 82.
+  - ⏸️ Prior 15m sweep search — Rob believes 15m succeeded; need to locate the output dir and confirm.
+  - ⏸️ Concrete RAM + worker recommendation — needs measured per-worker footprint first.
+
 ---
 
 ## Open Issues (Priority Order)
@@ -312,13 +355,14 @@
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
-5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.) **Session 72f: Gen 8 powered down cleanly at Rob's request for this install.**
-6. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
-7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint. **When back online, also verify laptop SSH isolation:** inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` on X1 and confirm no server pubkeys are present (Latitude was audited clean in Session 72c; X1 was offline at audit time).
-8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
-10. **Hermes cost tracking shows $0.00 / "unknown" in sessions.json.** Token counters aren't populating (`input_tokens: 0`, `cost_status: "unknown"`) despite Hermes hitting Anthropic API rate limits (so it IS making real paid calls). Relies on upstream fix from NousResearch — design spec at `/data/hermes/hermes-agent/docs/plans/2026-03-16-pricing-accuracy-architecture-design.md`. Until fixed, check actual spend at https://console.anthropic.com/settings/usage — that's authoritative. Not blocking (API billing is happening correctly; Hermes just isn't self-reporting).
-11. **Gen 8 + g9 powered down Session 72f for CPU installs.** Both clean shutdowns. g9 being offline means: (a) Hermes Telegram bot unavailable until boot, (b) reconcile cron 3fbca7f44580 paused, (c) sync-handover cron paused — but Claude-side pushes to GitHub still land fine, they'll sync when g9 is back. No action needed from next session unless servers don't come back up after CPU install.
+5. **Gen 8 CPU install DONE (Session 72g).** 2× E5-2697 v2 + heat sinks installed. RAM re-balanced 40GB per CPU (see Gen 8 section). **Now blocked on 2 missing fans (bays 3-4)** — ordered HP 662520-001 from Interbyte Computers eBay AU$19 total, est. Mon 27 Apr - Mon 4 May 2026. Gen 8 OFF under house until fans arrive. Do NOT power on with 4 fans under sweep load — will throttle.
+6. **g9 NETWORK FAULT post-move (Session 72g, UNRESOLVED).** Main NIC (eno1) not coming up after physical relocation under house. iLO accessible at 192.168.68.69 (old Gen 9 iLO creds `Administrator / PVPT6M5H` confirmed still work). System Power=ON, PSU2 delivering 140W. Already ruled out: network cable (swapped to g8's known-good cable), outlet/power cable (swapped to g8's), switch port (g8 worked on it). **First physical check when next under house:** cable in leftmost "port 1" — Gen 9 DL360 has 4 LAN ports. If wrong port, 30sec fix. If right port, next suspects are BIOS disable, OS hung, or NIC hardware failure. **Hermes offline until this resolves.**
+7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
+8. **X1 Carbon offline** — also need to verify laptop SSH isolation when back online (inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` — no server pubkeys should be present).
+9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
+10. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+11. **Hermes cost tracking shows $0.00 / "unknown" in sessions.json.** Token counters aren't populating despite real paid API calls. Upstream NousResearch fix pending. Until then, https://console.anthropic.com/settings/usage is authoritative.
+12. **r630 5m sweep OOM'd with 82 workers (Session 72g).** See "r630 ES 5m sweep OOM postmortem" section in Strategy Engine Status. Need: (a) per-worker RAM measurement, (b) nested-pool audit in engine, (c) safe worker count derivation, (d) decide if `configs/local_sweeps/ES_5m.yaml` gets workers dropped from 82 → e.g. 20, or whether sweep needs to move to c240 (64 GiB same constraint) or r630 RAM gets upgraded. 14 promoted candidates from partial run ARE usable — don't discard.
 
 ---
 
@@ -487,7 +531,9 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Session 73 PRIORITY (deferred from 72): ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Rob's scope decision — validate engine params + TF-dependent logic on known-good market before scaling out. Session 70 proved ES daily works (13 accepted, PF 1.52 median). Extends ES to 3 more TFs and confirms clean output. Runs on c240 alone (~30–60 min), no WOL needed. If clean: Session 74 fans out to 23 markets × 4 TFs = 92 sweeps across c240+gen8+r630. If dirty: fix engine before touching other markets.
+- **Session 73 PRIORITY (still deferred): ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Runs on c240 alone (~30–60 min), no WOL needed. Gated on: (a) g9 NIC fix so Hermes monitoring is live, (b) worker review completion so we don't repeat the r630 OOM mistake at c240 scale. If clean: Session 74 fans out to 23 markets × 4 TFs.
+- **Finish the r630 worker review** (carried over from Session 72g). Specifically: run `mem_probe.py` on r630 to get per-TF per-worker footprint, grep engine modules for nested ProcessPool, confirm whether 15m previously succeeded, then decide workers-per-machine (drop ES_5m.yaml workers from 82 to something safe, OR upgrade r630 RAM from 62 GiB → 128 GiB).
+- **Resolve g9 NIC fault** — blocking Hermes and all cross-agent workflows. Rob needs to physically check port number first.
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
@@ -585,7 +631,11 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 psc-activate        # sources venv + cd to repo + sets PYTHONPATH=.
 
 # iLO / CIMC access
-# Gen 9 iLO: DECOMMISSIONED
+# Gen 9 iLO: https://192.168.68.69   Administrator / PVPT6M5H   (CONFIRMED WORKING Session 72g)
+#            ipmitool example (run from c240 where ipmitool is installed):
+#            ipmitool -I lanplus -H 192.168.68.69 -U Administrator -P PVPT6M5H chassis status
+#            ipmitool -I lanplus -H 192.168.68.69 -U Administrator -P PVPT6M5H sdr type 'Power Supply'
+#            ipmitool -I lanplus -H 192.168.68.69 -U Administrator -P PVPT6M5H sel list last 10
 Gen 8 iLO: https://192.168.68.76 (old SSL - use Firefox, creds unknown)
 R630 iDRAC: IP TBD
 C240 CIMC: on dedicated port via DHCP, MAC 00:A3:8E:8E:B3:84, IP TBD — default admin/password
