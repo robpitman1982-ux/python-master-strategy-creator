@@ -147,6 +147,7 @@
   - **Laptop isolation verified:** Latitude's `administrators_authorized_keys` only contains Latitude's own key + X1 Carbon's key. No server pubkeys present. Empirical test — `sudo -u hermes ssh rob@100.79.72.125` → `Permission denied (publickey,password,keyboard-interactive)` ✅.
   - **X1 Carbon unverified** (offline at audit time) — must inspect its `administrators_authorized_keys` and `~/.ssh/authorized_keys` next time it's online to confirm no server pubkeys present. See Open Issue #7.
   - **Phase 1 validation scope changed.** Hermes now has repo-write + cluster SSH, which was scoped for "Phase 2" in the original plan. Trust level elevated at Rob's direction per Session 72c decision.
+- Hermes self-test passed 2026-04-20
 - **Hermes Protocol — READ THIS, HERMES (the agent reading its memories/HANDOVER.md symlink):**
   - You edit HANDOVER.md directly. No buffer file. One source of truth, committed to git.
   - Workflow every time you need to record a change:
