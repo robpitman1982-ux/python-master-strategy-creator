@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72e: housekeeping — cost tracking gap documented, multi-LLM panel-review + API spend cap added to horizon. Session 73 still queued: ES sanity-check × 4 TFs.)
+# Last updated: 2026-04-20 (Session 72f: Gen 8 + g9 powered down cleanly for Rob's CPU installs. Both offline until Rob boots them back up. Hermes offline while g9 is down — reconcile cron + voice bot will resume on boot. Session 73 still queued: ES sanity-check × 4 TFs.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -312,12 +312,13 @@
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
-5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.)
+5. **Gen 8 CPU install pending.** 2× E5-2697 v2 arrived. Install under house, verify 48 threads. (Currently 12 threads with E5-2640 v1.) **Session 72f: Gen 8 powered down cleanly at Rob's request for this install.**
 6. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 7. **X1 Carbon offline ~20h** (noted Session 67 post-relocation tailscale check). Not blocking — wake and verify when next needed as a Claude/Desktop-Commander endpoint. **When back online, also verify laptop SSH isolation:** inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` on X1 and confirm no server pubkeys are present (Latitude was audited clean in Session 72c; X1 was offline at audit time).
 8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
 9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
 10. **Hermes cost tracking shows $0.00 / "unknown" in sessions.json.** Token counters aren't populating (`input_tokens: 0`, `cost_status: "unknown"`) despite Hermes hitting Anthropic API rate limits (so it IS making real paid calls). Relies on upstream fix from NousResearch — design spec at `/data/hermes/hermes-agent/docs/plans/2026-03-16-pricing-accuracy-architecture-design.md`. Until fixed, check actual spend at https://console.anthropic.com/settings/usage — that's authoritative. Not blocking (API billing is happening correctly; Hermes just isn't self-reporting).
+11. **Gen 8 + g9 powered down Session 72f for CPU installs.** Both clean shutdowns. g9 being offline means: (a) Hermes Telegram bot unavailable until boot, (b) reconcile cron 3fbca7f44580 paused, (c) sync-handover cron paused — but Claude-side pushes to GitHub still land fine, they'll sync when g9 is back. No action needed from next session unless servers don't come back up after CPU install.
 
 ---
 
