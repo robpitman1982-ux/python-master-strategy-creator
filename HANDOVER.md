@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-20 (Session 72 complete: Hermes + OpenClaw deployed on g9 autonomous business host. Hermes LIVE, OpenClaw installed-but-dormant. Session 73 re-scoped: ES sanity-check × 4 TFs, deferred from 72)
+# Last updated: 2026-04-20 (Session 72b: handover → g9 auto-ingest wired in — every `git push` of this file now also lands in Hermes's memories dir for cross-session continuity between Claude and Hermes chats. Session 73 still queued: ES sanity-check × 4 TFs.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -128,6 +128,13 @@
   - **Users/dirs:** users `hermes` (uid 1001) + `openclaw` (uid 1002), both in group `agents` (gid 1001) + `docker`. Passwords: `Ubuntu123`. `loginctl enable-linger` for both — user systemd managers persist across logout.
   - **Scoped sudoers:** `/etc/sudoers.d/agents` — hermes + openclaw NOPASSWD on `systemctl start/stop/restart/status` of their own services only.
   - **Decision:** running Hermes solo for Phase 1 (1–2 weeks). OpenClaw dormant as hot-swap backup. Re-evaluate based on real usage — Hermes has native `delegation`, `terminal`, `code_execution`, `cronjob`, `skills` tools which may be sufficient. See Phase plan in PROJECT_MANIFEST.md section 12.
+- **Session 72b additions (2026-04-20) — Handover → Hermes auto-ingest:**
+  - Goal: HANDOVER.md content flows to Hermes automatically so conversations started with Claude (desktop/road) carry over to the next Hermes chat.
+  - Ingest script: `/usr/local/bin/ingest-handover` (root:root 0755) — repo-tracked at `scripts/ingest-handover.sh`. Overwrites `/data/shared/handover/HANDOVER.md` (hermes:agents 640) and refreshes symlink `/home/hermes/.hermes/memories/HANDOVER.md` → canonical.
+  - Trigger: last step of handover PowerShell on Latitude is now `scp HANDOVER.md g9-ts:/tmp/HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"` after `git push`.
+  - Auto-load: file lives inside hermes's `~/.hermes/memories/` so it becomes part of context on next Hermes session start — no manual "read the handover" prompt needed.
+  - Policy: latest-only, overwrite each time. No archive dir. Re-evaluate if history becomes useful.
+  - Verified end-to-end Session 72b: `sudo -u hermes cat /home/hermes/.hermes/memories/HANDOVER.md` returns full file through the symlink.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -498,6 +505,9 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 # Hermes logs     : sudo tail -f /home/hermes/.hermes/logs/agent.log
 # Hermes restart  : sudo -u hermes env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus systemctl --user restart hermes-gateway.service
 # Telegram bot    : @pitmans_heremes_bot (voice memo in, audio out)
+# Handover ingest : scp HANDOVER.md g9-ts:/tmp/HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"
+#                   -> /data/shared/handover/HANDOVER.md  (canonical, hermes:agents 640)
+#                   -> /home/hermes/.hermes/memories/HANDOVER.md  (symlink, auto-loaded next Hermes session)
 # OpenClaw start  : sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service
 # OpenClaw stop   : sudo systemctl stop openclaw-gateway.service && sudo systemctl disable openclaw-gateway.service (current state)
 # OpenClaw logs   : sudo tail -f /data/openclaw/logs/gateway.stdout.log
