@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-21 (Session 73: g9 NIC FIXED — cable was in wrong port, eno1 now up at 192.168.68.50, Tailscale live. betfair-trader onboarded to Hermes — local clone on g9, 4 skills, 3 crons, Telegram batcher live. Hermes monitoring back online.)
+# Last updated: 2026-04-21 (Session 73/72h: **ALL-SERVERS-ALWAYS-ON policy adopted — HARD RULE, no more shutdowns.** g9 back online — Rob reseated SAS drives + verified cable in correct port; root-cause attribution (drives vs cable) unresolved but both were actioned. g9 post-boot specs: 48 threads (HT on), 32 GB RAM (was 16 GB — needs audit). Hermes PID 1846, 260 MB RSS, reconcile cron healthy.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -39,6 +39,11 @@
 
 ### Home Lab Infrastructure
 
+#### Power Policy (Session 72h/73, 2026-04-21) — ALL SERVERS ALWAYS-ON (HARD RULE)
+- **HARD RULE: All cluster servers (c240, g9, gen8, r630) stay powered on 24/7. DO NOT SHUT DOWN ANY SERVER UNDER ANY CIRCUMSTANCES.** No auto-shutdown crons, no manual power-off, no suspend, no hibernate, no "just this once". The only acceptable power cycles are: (a) planned hardware installs requiring physical work, (b) unplanned power failure.
+- **Rationale:** Rob has home solar + battery + off-peak AUD $0.08/kWh (00:00–06:00) and free solar 11:00–14:00. Idle cost ~AUD $0.50–$1/server/month — negligible vs. reliability pain of WOL failures, Gen 8's 5-min POST, r630's flaky first-WOL behaviour, and interrupted sweeps.
+- **Implementation status:** c240 + g9 already always-on. **gen8 + r630 need auto-shutdown crons removed** (see Open Issue). Gen 8 joins the always-on pool when replacement fans arrive (~27 Apr–4 May 2026). WOL scripts retained as emergency wake-only fallback.
+
 #### Lenovo Latitude (desktop-k2u9o61) — MAIN CONTROL & DEVELOPMENT MACHINE
 - Windows 10 Pro, Tailscale 100.79.72.125
 - Rob's primary laptop for scripting, development, and project building
@@ -65,13 +70,13 @@
 - **Role:** Standalone autonomous-business host. NOT a backtesting cluster member. Runs Hermes + OpenClaw agent workloads. Always on.
 - **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
 - **Session 72g (2026-04-21): SECOND CPU INSTALLED.** Rob installed E5-2650 v4 into CPU2 socket after fixing bent pins with pencil-spacer trick. Heat sink mounted. Pre-boot BIOS verification done (HT enabled, power profile = Maximum Performance, both CPUs should show in Processor Information). **Physical state: under house in final position.**
-- **Session 72g NETWORK FAULT — RESOLVED 2026-04-21.** Cable was in wrong NIC port. Moved to port 1 (leftmost), eno1 came up immediately. LAN IP: 192.168.68.50, Tailscale 100.71.141.89 online. Hermes Telegram bot and reconcile cron back online.
+- **Session 72g/73 NETWORK FAULT — RESOLVED 2026-04-21.** Both possible root causes were actioned during the same trip: (a) Rob reseated the 2× SAS drives in Array B (had come partially unseated during under-house move; P440ar RAID controller can hang POST when unable to enumerate drives), and (b) cable position verified in leftmost port (eno1). Attributing definitively to one or the other is not possible without a deliberate regression test; both were needed fixes regardless. Verified post-resolution 2026-04-21 04:00 UTC via `ssh g9-ts`: 5-min uptime, eno1 UP on 192.168.68.50, Tailscale 100.71.141.89 responding (0% packet loss), `/data` mounted intact (1.4 GB used of 269 GB), Hermes gateway active (PID 1846, 260 MB RSS). iLO remains reachable at 192.168.68.69 (`Administrator / PVPT6M5H`). **Lesson for next time:** after a physical move, reseat storage *and* verify cable positions before blaming the network stack — symptoms overlap.
 - **Hostname:** `g9`
 - **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
 - **LAN IP:** `192.168.68.50/22` on `eno1`. **Session 73: NIC fixed, DHCP lease confirmed.**
 - **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`). Session 72: `sudo tailscale up --reset` applied to fix stale offline state; `--ssh` disabled to avoid browser-auth dependency for regular OpenSSH
-- **CPU:** 1× Xeon E5-2650 v4 @ 2.20 GHz = **12 cores / 12 threads** (single socket, HT off)
-- **RAM:** 16 GB + 4 GB swap
+- **CPU:** 2× Xeon E5-2650 v4 @ 2.20 GHz = **24 cores / 48 threads** (dual socket, Hyperthreading ON). Session 72g installed CPU2 with bent-pin fix; Session 72h/73 verified post-boot: `nproc` = 48.
+- **RAM:** 32 GB + 4 GB swap (doubled from 16 GB between Sessions 72g and 72h/73 — needs audit: did Rob add 2× 8 GB DDR4 sticks? `free -g` post-boot shows 31 GB usable)
 - **Storage — HP Smart Array P440ar:**
   - Array A: logicaldrive 1 (119.21 GB, RAID 0) — SATA SSD `1I:0:1` → `/dev/sda` (boot + `/` on LVM `ubuntu-vg/ubuntu-lv`, 58 GB used / 116 GB VG headroom)
   - Array B: logicaldrive 2 (273.40 GB, RAID 0) — 2× 146 GB SAS HDD `1I:0:2,1I:0:3` striped → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4, fstab-persisted, owned by rob, UUID `0661ff58-9086-432e-b70b-51bc8a271cf1`)
@@ -245,6 +250,7 @@
   - **Total: 80 GB DDR3 ECC RDIMM.** 16GB sticks in outer slots (farthest from CPU), 8GB on inside. Different channels per letter — no same-channel size mixing.
 - **FANS BLOCKER — waiting for 2× replacement fans.** Dual-CPU DL380p Gen 8 requires **6 fans** in bays 1-6. Rob currently has 4 (bays 1, 2, 5, 6 — split 2+2 across both sides for airflow). Bays 3 + 4 empty. Will boot with warnings + non-redundant cooling, WILL throttle under sweep load. **Ordered 2× HP 662520-001 from Interbyte Computers (eBay) AU$4 each + $11 postage. Est. delivery Mon 27 Apr – Mon 4 May 2026.** Seller asked re: combined postage.
 - **Gen 8 powered OFF under house** until fans arrive. No access needed meantime.
+- **Always-on once fans arrive (Session 72h/73 HARD RULE).** Auto-shutdown cron to be disabled when Gen 8 comes back online.
 - BIOS: HP P70 (Feb 2014) — supports E5-2697 v2 ✅, no update needed
 - **RAM: DDR3 ECC RDIMM** — NOT DDR4! Cannot share DIMMs with Gen 9 or R630.
 - SSH: socket disabled, service enabled, `ssh-recover.service` at 25s, `@reboot sleep 45` root cron fallback
@@ -263,7 +269,7 @@
 - Credentials: rob / Ubuntu123
 - **Threads: 88** (dual E5-2699 v4, 44C/88T)
 - **Storage:** 838 GB SSD, LVM expanded to 823 GB root (778 GB free)
-- SSH: socket disabled, service enabled, `ssh-recover.service` active, auto-shutdown cron, ARP flush + SSH fallback @reboot crons
+- SSH: socket disabled, service enabled, `ssh-recover.service` active, ARP flush + SSH fallback @reboot crons. **Auto-shutdown cron TO BE DISABLED** per Session 72h/73 always-on HARD RULE (pending implementation).
 - WOL: MAC **ec:f4:bb:ed:bf:00** (eno1), netplan wakeonlan set, `wake-r630.bat` on Latitude + `wake-r630.sh` on c240
 - **Session 67 rework:**
   - `~/.ssh/config` written (was empty) — c240/c240-ts/gen8/gen8-ts/latitude/x1 aliases
@@ -348,7 +354,7 @@
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
 5. **Gen 8 CPU install DONE (Session 72g).** 2× E5-2697 v2 + heat sinks installed. RAM re-balanced 40GB per CPU (see Gen 8 section). **Now blocked on 2 missing fans (bays 3-4)** — ordered HP 662520-001 from Interbyte Computers eBay AU$19 total, est. Mon 27 Apr - Mon 4 May 2026. Gen 8 OFF under house until fans arrive. Do NOT power on with 4 fans under sweep load — will throttle.
-6. ~~**g9 NETWORK FAULT post-move — RESOLVED 2026-04-21.**~~ Cable was in wrong port. eno1 up at 192.168.68.50, Tailscale live. Hermes back online.
+6. **Disable auto-shutdown crons on gen8 + r630.** Required to implement Session 72h/73 always-on HARD RULE. Remove any cron entry that powers down on idle. Verify by leaving machines idle for 2+ hours and confirming they stay up. R630: action next convenient SSH session. Gen 8: action when it comes back online post-fans.
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline** — also need to verify laptop SSH isolation when back online (inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` — no server pubkeys should be present).
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
@@ -634,6 +640,7 @@ C240 CIMC: on dedicated port via DHCP, MAC 00:A3:8E:8E:B3:84, IP TBD — default
 ```
 
 ## Key Principles
+- **ALL SERVERS ALWAYS ON — DO NOT SHUT DOWN ANY SERVER UNDER ANY CIRCUMSTANCES.** c240, g9, gen8, r630 run 24/7 permanently. No WOL cycles, no auto-shutdown, no suspend/hibernate, no "just this once". Power cycles only for planned hardware installs or unplanned outages. Solar + off-peak rates make idle cost irrelevant; reliability of the cluster is the binding constraint. (Session 72h/73 HARD RULE.)
 - Always use Desktop Commander before Windows MCP (Windows MCP hangs)
 - **Server timing:** see "Server Timing Notes" — Gen 8 needs 5 min post-boot, R630 often needs 2 WOL bursts, give all SSH 30s after reboot
 - Full fixes only — no patches
