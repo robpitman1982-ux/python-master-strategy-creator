@@ -1,5 +1,5 @@
 # HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-21 (Session 72g: CPU installs done on g9 + gen8. gen8 waiting for 2 fans. g9 network FAULT after move under house — OS up, NIC dead, iLO works. r630 ES 5m sweep OOM'd at 9h18m (82 workers × 5m dataset = 62GB RAM exhausted) — 14 promoted candidates salvageable. Hermes offline while g9 NIC unresolved.)
+# Last updated: 2026-04-21 (Session 73: g9 NIC FIXED — cable was in wrong port, eno1 now up at 192.168.68.50, Tailscale live. betfair-trader onboarded to Hermes — local clone on g9, 4 skills, 3 crons, Telegram batcher live. Hermes monitoring back online.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
 
 ---
@@ -65,18 +65,10 @@
 - **Role:** Standalone autonomous-business host. NOT a backtesting cluster member. Runs Hermes + OpenClaw agent workloads. Always on.
 - **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
 - **Session 72g (2026-04-21): SECOND CPU INSTALLED.** Rob installed E5-2650 v4 into CPU2 socket after fixing bent pins with pencil-spacer trick. Heat sink mounted. Pre-boot BIOS verification done (HT enabled, power profile = Maximum Performance, both CPUs should show in Processor Information). **Physical state: under house in final position.**
-- **Session 72g NETWORK FAULT — UNRESOLVED.** After under-house move g9's main NIC (eno1) is not coming up despite:
-  - iLO accessible at 192.168.68.69 (HPE MAC `98:F2:B3:35:67:AA`) — old Gen 9 iLO creds `Administrator / PVPT6M5H` STILL WORK
-  - `chassis status` = "System Power: on" ✓
-  - Swapped to g8's known-good network cable — still no link → rules out cable + switch port
-  - Swapped to g8's known-good power cable (now in PSU2 slot, 140W) — rules out outlet + power cable
-  - SEL shows no reboot or fault events during swap — system ran through cable changes without cycling
-  - Tailscale `100.71.141.89 g9` offline >1 hour, repeatedly
-  - **Remaining suspects (ranked):** (1) cable in wrong physical NIC port (DL360 has 4 ports — should be port 1 = eno1), (2) eno1 disabled in BIOS RBSU, (3) OS hung during boot, (4) eno1 hardware fault
-  - **Next step on Rob's to-do when under house:** verify cable in leftmost/topmost "1" port. If that fails, try ports 2/3/4 — they'd be eno2/3/4 which have no OS config yet but link light tells us NIC chip is alive.
+- **Session 72g NETWORK FAULT — RESOLVED 2026-04-21.** Cable was in wrong NIC port. Moved to port 1 (leftmost), eno1 came up immediately. LAN IP: 192.168.68.50, Tailscale 100.71.141.89 online. Hermes Telegram bot and reconcile cron back online.
 - **Hostname:** `g9`
 - **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
-- **LAN IP:** `192.168.68.50/22` on `eno1` (DHCP lease changed from .75 → .50 after Session 71b relocation/power-cycle; stale .75 no longer valid). **Session 72g: no DHCP lease confirmed — NIC silent.**
+- **LAN IP:** `192.168.68.50/22` on `eno1`. **Session 73: NIC fixed, DHCP lease confirmed.**
 - **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`). Session 72: `sudo tailscale up --reset` applied to fix stale offline state; `--ssh` disabled to avoid browser-auth dependency for regular OpenSSH
 - **CPU:** 1× Xeon E5-2650 v4 @ 2.20 GHz = **12 cores / 12 threads** (single socket, HT off)
 - **RAM:** 16 GB + 4 GB swap
@@ -356,7 +348,7 @@
 3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
 4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
 5. **Gen 8 CPU install DONE (Session 72g).** 2× E5-2697 v2 + heat sinks installed. RAM re-balanced 40GB per CPU (see Gen 8 section). **Now blocked on 2 missing fans (bays 3-4)** — ordered HP 662520-001 from Interbyte Computers eBay AU$19 total, est. Mon 27 Apr - Mon 4 May 2026. Gen 8 OFF under house until fans arrive. Do NOT power on with 4 fans under sweep load — will throttle.
-6. **g9 NETWORK FAULT post-move (Session 72g, UNRESOLVED).** Main NIC (eno1) not coming up after physical relocation under house. iLO accessible at 192.168.68.69 (old Gen 9 iLO creds `Administrator / PVPT6M5H` confirmed still work). System Power=ON, PSU2 delivering 140W. Already ruled out: network cable (swapped to g8's known-good cable), outlet/power cable (swapped to g8's), switch port (g8 worked on it). **First physical check when next under house:** cable in leftmost "port 1" — Gen 9 DL360 has 4 LAN ports. If wrong port, 30sec fix. If right port, next suspects are BIOS disable, OS hung, or NIC hardware failure. **Hermes offline until this resolves.**
+6. ~~**g9 NETWORK FAULT post-move — RESOLVED 2026-04-21.**~~ Cable was in wrong port. eno1 up at 192.168.68.50, Tailscale live. Hermes back online.
 7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
 8. **X1 Carbon offline** — also need to verify laptop SSH isolation when back online (inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` — no server pubkeys should be present).
 9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
