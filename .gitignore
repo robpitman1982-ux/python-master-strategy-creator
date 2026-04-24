@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .vscode/
 Outputs/
+output/
 Data/
 paste.md
 .llm-context-history/

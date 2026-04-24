@@ -1,6 +1,7 @@
 # HANDOVER.md — Session Continuity Document
 # Last updated: 2026-04-21 (Session 73/72h: **ALL-SERVERS-ALWAYS-ON policy adopted — HARD RULE, no more shutdowns.** g9 back online — Rob reseated SAS drives + verified cable in correct port; root-cause attribution (drives vs cable) unresolved but both were actioned. g9 post-boot specs: 48 threads (HT on), 32 GB RAM (was 16 GB — needs audit). Hermes PID 1846, 260 MB RSS, reconcile cron healthy.)
 # Auto-updated by Claude at end of each session, pushed to GitHub
+# Session 74 addendum (2026-04-24): X1 Carbon now runs a parallel Claude Remote Control hub for `python-master-strategy-creator` from `C:\Users\rob_p\Documents\GIT Repos\python-master-strategy-creator`, with ops files in `C:\Users\rob_p\strategy-ops\`, startup via `StrategyHubWatchdog.vbs`, and scheduled pulls via `StrategyRepoPull`.
 
 ---
 
@@ -59,6 +60,10 @@
 - Windows 10 Pro, IP 192.168.68.70, Tailscale 100.86.154.65
 - In a drawer, lid down, permanently connected to home LAN
 - Always-on Claude.ai + Desktop Commander endpoint
+- **Dual Remote Control hubs live here now:** `betfair-trader` and `python-master-strategy-creator` run side-by-side as separate Claude Remote Control sessions. They do not share state.
+- **Strategy hub paths (Session 74, 2026-04-24):** `C:\Users\rob_p\strategy-ops\strategy-hub-watchdog.ps1`, `C:\Users\rob_p\strategy-ops\logs\strategy-hub.log`, Startup entry `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\StrategyHubWatchdog.vbs`, scheduled pull task `StrategyRepoPull`, repo mirror `C:\Users\rob_p\Documents\GIT Repos\python-master-strategy-creator`.
+- **Strategy pull automation:** `C:\Users\rob_p\strategy-ops\pull-repo.ps1` plus `pull-repo.bat` run every 5 minutes via Task Scheduler, but bail if the repo is dirty or not on `main`.
+- **Dispatch path:** Claude mobile app -> X1 Carbon strategy hub -> SSH/Git actions -> c240/r630/gen8. Heavy compute stays on Linux; the X1 is only the control plane.
 - SSH config at C:\Users\rob_p\.ssh\config with aliases: gen9, gen9-ts, gen8, gen8-ts, homepc, contabo
 - WOL scripts: wake-gen9.bat, wake-gen8.bat, wake-all.bat in C:\Users\rob_p\
 - Port 22 firewall opened for inbound SSH
@@ -478,6 +483,7 @@ Latitude (main control, home + field, SSH via Tailscale)
 - Workers crunch sweeps, rsync results to C240 over LAN
 - Portfolio selector runs on C240 (or R630), reads from local SAS
 - C240 NEVER sleeps. Workers sleep when idle.
+- **Session 74 control-plane update:** the X1 now exposes two independent Claude Remote Control entry points from Rob's phone: one for `betfair-trader`, one for `python-master-strategy-creator`. The strategy hub is dispatcher-only and should be treated as a parallel control path, not a shared session.
 
 ---
 
@@ -558,6 +564,14 @@ ssh c240          # Cisco C240 M4 — LAN 192.168.68.53, Tailscale 100.120.11.35
 ssh gen8          # Gen 8 Tailscale (100.76.227.12) — LAN 192.168.68.71
 ssh r630          # Dell R630 Tailscale (100.85.102.4) — LAN 192.168.68.78
 ssh x1            # X1 Carbon Tailscale (100.86.154.65)
+#
+# X1 strategy hub control plane (Session 74)
+# C:\Users\rob_p\strategy-ops\strategy-hub-watchdog.ps1   # watchdog loop for Claude Remote Control in python-master-strategy-creator
+# C:\Users\rob_p\strategy-ops\pull-repo.ps1               # main-only fast-forward pull helper
+# C:\Users\rob_p\strategy-ops\pull-repo.bat               # Task Scheduler wrapper for the pull helper
+# C:\Users\rob_p\strategy-ops\logs\strategy-hub.log       # watchdog exit log
+# StrategyRepoPull                                        # scheduled task, every 5 min, IgnoreNew, battery-safe
+# %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\StrategyHubWatchdog.vbs   # minimized-but-visible startup launcher
 ssh g9            # Gen 9 autonomous business host — LAN 192.168.68.50 via ProxyJump c240 (was .75 pre-72)
 ssh g9-ts         # Gen 9 Tailscale direct (100.71.141.89) — works from anywhere
 
