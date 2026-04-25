@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-04-26 [Hermes decommission] Full Hermes + OpenClaw teardown (g9 + cluster)
+Status: OK
+What: Operator decided to retire the Hermes/OpenClaw experiment after 1 week. Claude Code + X1 Carbon Claude Remote Control hub replaces the agent-driven ops layer. Executed full teardown:
+  - On g9: stopped/killed any hermes+openclaw processes, removed `/etc/cron.d/sync-handover`, `/etc/sudoers.d/agents`, `/usr/local/bin/sync-handover`, `/usr/local/bin/sync-betfair-handover`, `/usr/local/bin/ingest-handover` (already retired but checked). Wiped `/data/hermes/` (~1.5 GB), `/data/openclaw/`, `/data/shared/` (entire tree). `userdel -r hermes` + `userdel -r openclaw` + `groupdel agents` — all clean. /home/ now only contains rob.
+  - On c240, gen8, r630: removed `hermes-agent@g9-cluster` line from `/home/rob/.ssh/authorized_keys` via sed against unique `JvbVaj` fingerprint. Backups taken to `~/.ssh/authorized_keys.bak-pre-hermes-removal-YYYYMMDD` on each host. Verified rob's own SSH still works to all three hosts post-edit (load avg 50-60 — confirmed Rob's parallel betfair sweeps are untouched).
+  - In repo: rewrote Gen 9 section in MASTER_HANDOVER.md (removed ~115 lines of Hermes/OpenClaw config docs, replaced with leaner compute-worker section + decommission audit trail). Updated Open Issues, On the Horizon, Connection Quick Reference. Renumbered Open Issues. Deleted `scripts/sync-handover.sh` and `docs/HANDOVER_RENAME_MIGRATION.md` (both obsolete now). Updated header status line to reflect Session 75.
+Outcome: Server-side, repo-side, and cluster authorized_keys all clean. Hermes is gone from infrastructure. Operator-side cleanup remaining (manual): GitHub deploy keys on python-master-strategy-creator + betfair-trader repos, Telegram bot `@pitmans_heremes_bot` via @BotFather, Hermes Anthropic API key. g9 is now a 48-thread/32GB compute worker, but repo clone + market_data + sweep scripts not yet set up — added as Open Issue #10.
+Files: MASTER_HANDOVER.md (Gen 9 section rewrite + scattered Hermes ref removal), LOG.md (this entry), deleted scripts/sync-handover.sh and docs/HANDOVER_RENAME_MIGRATION.md.
+Next: Operator does the external retirement (deploy keys, Telegram bot, API key) when convenient. Compute-cluster onboarding for g9 is next major work item.
+
 ### 2026-04-26 [handover rename] HANDOVER.md → MASTER_HANDOVER.md across repo
 Status: OK
 What: Renamed `HANDOVER.md` to `MASTER_HANDOVER.md` to avoid filename collision with other projects' handover files (e.g. `BETFAIR_HANDOVER.md`) when Hermes or future agents load multi-project memories. Updated all in-repo references in MASTER_HANDOVER.md (Hermes protocol section, sync paths, embedded server-side path docs), LOG.md, scripts/sync-handover.sh, docs/CFD_SWEEP_SETUP.md, docs/AUDIT_REPORT.md. Updated global `~/.claude/CLAUDE.md` rule to require project-named handover. Wrote server-side migration checklist at docs/HANDOVER_RENAME_MIGRATION.md covering g9 symlink repoint, sync-handover script redeploy, retired Session 72b path cleanup, Hermes skills update, Latitude PowerShell update, and rollback steps.

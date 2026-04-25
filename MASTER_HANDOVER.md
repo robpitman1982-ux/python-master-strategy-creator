@@ -1,5 +1,5 @@
 Last updated: 2026-04-26
-Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as HARD RULE — no more shutdowns; g9 back online with 48 threads / 32 GB RAM after Rob reseated SAS drives + verified cable; Hermes PID 1846 healthy). Session 74 addendum (2026-04-24): X1 Carbon now runs a parallel Claude Remote Control hub for python-master-strategy-creator from `C:\Users\rob_p\Documents\GIT Repos\python-master-strategy-creator`, ops files in `C:\Users\rob_p\strategy-ops\`, startup via `StrategyHubWatchdog.vbs`, scheduled pulls via `StrategyRepoPull`. Session 75 (2026-04-26): repo file `HANDOVER.md` renamed to `MASTER_HANDOVER.md` for project-scoped naming; server-side migration checklist at `docs/HANDOVER_RENAME_MIGRATION.md` covers the g9 symlink repoint and Latitude PowerShell update still pending. GCS buckets deleted manually by operator (cloud infrastructure now decommissioned). Auto-updated by Claude at session end and pushed to GitHub.
+Current status: Session 75 (2026-04-26): Hermes + OpenClaw fully decommissioned and removed from g9 — users deleted, /data/hermes + /data/openclaw + /data/shared wiped (~1.5 GB), cron + scripts + sudoers removed, Hermes SSH pubkey purged from c240/gen8/r630 authorized_keys (backups taken). Operator must still revoke GitHub deploy keys (both `python-master-strategy-creator` and `betfair-trader` repos), Telegram bot, and Hermes Anthropic API key. g9 is now a compute worker (48 threads, 32 GB RAM) like the rest of the cluster — repo clone + market_data + sweep scripts not yet set up. Earlier in session: `HANDOVER.md` renamed to `MASTER_HANDOVER.md` for project-scoped naming; GCS buckets deleted manually by operator (cloud infrastructure decommissioned). Prior Session 73/72h: ALL-SERVERS-ALWAYS-ON policy is HARD RULE; g9 back online via SAS reseat + cable verify. Prior Session 74: X1 Carbon runs parallel Claude Remote Control hub for python-master-strategy-creator (ops at `C:\Users\rob_p\strategy-ops\`).
 
 ---
 
@@ -69,17 +69,17 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
 - **Samba drive** mapped to `\\192.168.68.69\data`
 - **Back online** (2026-04-14) — power supply had died, replaced
 
-#### Gen 9 (DL360, `g9`) — ALWAYS-ON AUTONOMOUS BUSINESS HOST (Hermes/OpenClaw)
-- **Role:** Standalone autonomous-business host. NOT a backtesting cluster member. Runs Hermes + OpenClaw agent workloads. Always on.
+#### Gen 9 (DL360, `g9`) — COMPUTE WORKER (joining cluster)
+- **Role (Session 75):** Compute worker, like c240/gen8/r630. Crunches sweeps when needed. Hermes/OpenClaw fully decommissioned and removed 2026-04-26.
 - **Revived Session 71b (2026-04-19)** — bent CPU pins straightened, fresh Ubuntu install on new 128 GB SATA SSD boot drive.
-- **Session 72g (2026-04-21): SECOND CPU INSTALLED.** Rob installed E5-2650 v4 into CPU2 socket after fixing bent pins with pencil-spacer trick. Heat sink mounted. Pre-boot BIOS verification done (HT enabled, power profile = Maximum Performance, both CPUs should show in Processor Information). **Physical state: under house in final position.**
-- **Session 72g/73 NETWORK FAULT — RESOLVED 2026-04-21.** Both possible root causes were actioned during the same trip: (a) Rob reseated the 2× SAS drives in Array B (had come partially unseated during under-house move; P440ar RAID controller can hang POST when unable to enumerate drives), and (b) cable position verified in leftmost port (eno1). Attributing definitively to one or the other is not possible without a deliberate regression test; both were needed fixes regardless. Verified post-resolution 2026-04-21 04:00 UTC via `ssh g9-ts`: 5-min uptime, eno1 UP on 192.168.68.50, Tailscale 100.71.141.89 responding (0% packet loss), `/data` mounted intact (1.4 GB used of 269 GB), Hermes gateway active (PID 1846, 260 MB RSS). iLO remains reachable at 192.168.68.69 (`Administrator / PVPT6M5H`). **Lesson for next time:** after a physical move, reseat storage *and* verify cable positions before blaming the network stack — symptoms overlap.
+- **Session 72g (2026-04-21):** Second CPU installed (E5-2650 v4 into CPU2 socket, bent pins fixed with pencil-spacer). Heat sink mounted. **Physical state: under house in final position.**
+- **Session 72g/73 NETWORK FAULT — RESOLVED 2026-04-21.** Both possible root causes were actioned during the same trip: (a) Rob reseated the 2× SAS drives in Array B (had come partially unseated during under-house move; P440ar RAID controller can hang POST when unable to enumerate drives), and (b) cable position verified in leftmost port (eno1). **Lesson:** after a physical move, reseat storage *and* verify cable positions before blaming the network stack — symptoms overlap.
 - **Hostname:** `g9`
 - **OS:** Ubuntu 24.04.4 LTS, kernel 6.8.0-110
-- **LAN IP:** `192.168.68.50/22` on `eno1`. **Session 73: NIC fixed, DHCP lease confirmed.**
-- **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`). Session 72: `sudo tailscale up --reset` applied to fix stale offline state; `--ssh` disabled to avoid browser-auth dependency for regular OpenSSH
-- **CPU:** 2× Xeon E5-2650 v4 @ 2.20 GHz = **24 cores / 48 threads** (dual socket, Hyperthreading ON). Session 72g installed CPU2 with bent-pin fix; Session 72h/73 verified post-boot: `nproc` = 48.
-- **RAM:** 32 GB + 4 GB swap (doubled from 16 GB between Sessions 72g and 72h/73 — needs audit: did Rob add 2× 8 GB DDR4 sticks? `free -g` post-boot shows 31 GB usable)
+- **LAN IP:** `192.168.68.50/22` on `eno1` (DHCP)
+- **Tailscale IP:** `100.71.141.89` (device name `g9`, auth user `robpitman1982@`)
+- **CPU:** 2× Xeon E5-2650 v4 @ 2.20 GHz = **24 cores / 48 threads** (dual socket, Hyperthreading ON). `nproc` = 48.
+- **RAM:** 32 GB + 4 GB swap (Session 72h/73; needs audit — was 16 GB before, mechanism of doubling unclear)
 - **Storage — HP Smart Array P440ar:**
   - Array A: logicaldrive 1 (119.21 GB, RAID 0) — SATA SSD `1I:0:1` → `/dev/sda` (boot + `/` on LVM `ubuntu-vg/ubuntu-lv`, 58 GB used / 116 GB VG headroom)
   - Array B: logicaldrive 2 (273.40 GB, RAID 0) — 2× 146 GB SAS HDD `1I:0:2,1I:0:3` striped → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4, fstab-persisted, owned by rob, UUID `0661ff58-9086-432e-b70b-51bc8a271cf1`)
@@ -88,104 +88,32 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
   - Direct LAN SSH from Latitude Wi-Fi fails (client-isolation/ARP quirk) — use `ProxyJump c240` via `ssh g9` alias, or direct over Tailscale via `ssh g9-ts`.
   - `Host g9` in `C:\Users\Rob\.ssh\config` uses `ProxyJump c240`; `Host g9-ts` points at Tailscale IP.
   - Latitude `strategy-engine` pubkey in `~/.ssh/authorized_keys` on g9.
-- **SSH services:** `ssh.socket` masked, `ssh.service` enabled + active, `ssh-recover.service` (25s delayed restart) enabled — matches cluster pattern even though g9 is not a cluster member.
-- **Always-on posture:** `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target` all **masked**; `systemd-logind.conf.d/no-sleep.conf` sets lid/suspend/idle = ignore.
+- **SSH services:** `ssh.socket` masked, `ssh.service` enabled + active, `ssh-recover.service` (25s delayed restart) enabled.
+- **Always-on posture (per HARD RULE Session 73):** `sleep.target`, `suspend.target`, `hibernate.target`, `hybrid-sleep.target` all **masked**; `systemd-logind.conf.d/no-sleep.conf` sets lid/suspend/idle = ignore.
 - **ARP-flush-on-boot:** `@reboot /usr/sbin/ip -s -s neigh flush all` in root crontab.
-- **SSH keypair:** `~/.ssh/id_ed25519` (`rob@g9`) — pubkey installed on c240 `authorized_keys` for admin peer access (c240 can ssh to g9; g9→c240 not yet configured, intentionally minimal).
+- **SSH keypair:** `~/.ssh/id_ed25519` (`rob@g9`) — pubkey installed on c240 `authorized_keys` for admin peer access.
 - **Toolchain installed (Session 71b):**
   - Docker 29.1.3 (`docker.io` + `docker-compose-v2`, `rob` in `docker` group, daemon enabled)
-  - Node.js v24.14.1 + npm 11.11.0 (via NodeSource `setup_lts.x`)
-  - Python 3.12.3 + venv at `~/venv` (latest pip/setuptools/wheel)
+  - Node.js v24.14.1 + npm 11.11.0
+  - Python 3.12.3 + venv at `~/venv`
   - Tailscale 1.96.4
-  - ssacli 6.45-8.0 (HP Smart Storage CLI, from HPE MCP repo with `[trusted=yes]` — GPG key `E3FE26E774C3A4A2` not in published keyfiles, bypass is intentional)
-  - rclone v1.60.1-DEV (config not yet done — see Open Issues)
-  - Base: `build-essential`, `git`, `curl`, `wget`, `jq`, `unzip`, `tmux`, `htop`, `iotop`, `net-tools`, `nfs-common`, `cifs-utils`, `wakeonlan`, `etherwake`, `ipmitool`, `ca-certificates`, `gnupg`, `software-properties-common`
-- **/data layout (expanded Session 72):**
+  - ssacli 6.45-8.0 (HP Smart Storage CLI)
+  - rclone v1.60.1-DEV (config not done — see Open Issues)
+  - Base: build-essential, git, curl, wget, jq, unzip, tmux, htop, iotop, net-tools, nfs-common, cifs-utils, wakeonlan, etherwake, ipmitool, ca-certificates, gnupg, software-properties-common
+- **/data layout (Session 75 post-decommission):**
   ```
   /data/                          (269 GB ext4, noatime)
-  ├── hermes/                     (hermes:agents — Hermes Agent install + state)
-  │   ├── hermes-agent/           git clone NousResearch/hermes-agent + uv venv Python 3.11
-  │   ├── agents/  state/  logs/  workspace/  skills_cache/
-  ├── openclaw/                   (openclaw:agents — dormant backup)
-  │   ├── venv/  logs/  workspace/  sandbox/
-  ├── shared/                     (hermes:agents, setgid 2775 — cross-agent workspace)
-  │   ├── credentials/            (openclaw_gateway_token, mode 640)
-  │   └── logs/ skills/ task_queue/ results/ artifacts/
+  ├── betfair-historical/         (rob — betfair sweep data, owned by rob)
   ├── backups/
   ├── logs/
   └── lost+found/                 (root:root, expected)
   ```
-- **Backup: DISABLED Session 72** — rclone user cron removed per Rob's decision ("no backup until we know what we're doing"). Script preserved at `/usr/local/bin/backup_to_gdrive.sh`, rclone config at `~/.config/rclone/rclone.conf` still valid. Re-enable after Phase 1 Hermes validation (~1–2 weeks) once retention semantics are settled.
-- **Not installed deliberately:** Samba (not a data-sharing cluster member), sweep scripts, market_data, `dukascopy-python`, repo clone, `psc-activate` alias. g9 is isolated from backtesting workflow.
-- **Env marker:** `.bashrc` exports `G9_ROLE="hermes_autonomous_host"` + alias `venv-activate` (sources `~/venv/bin/activate`).
-- **iLO:** not yet configured (DHCP on management port expected).
-- **Audit log:** `/tmp/g9_audit.log` on box, full final state.
-- **Session 72 additions (2026-04-20) — Hermes + OpenClaw deployment:**
-  - **Hermes Agent LIVE** — systemd user service `hermes-gateway.service` under `user@1001.service` (linger enabled for hermes). Auto-starts on boot.
-    - Source: `git clone --recurse-submodules https://github.com/NousResearch/hermes-agent /data/hermes/hermes-agent` → `uv venv venv --python 3.11` → `uv pip install -e ".[all]"` (45s install, includes python-telegram-bot, faster-whisper, sounddevice).
-    - Wrapper patched: `/data/hermes/hermes-agent/hermes` shebang set to `#!/data/hermes/hermes-agent/venv/bin/python` (system python3.12 grab avoided). Symlink `~hermes/.local/bin/hermes`.
-    - Config: `~hermes/.hermes/config.yaml` (model=claude-sonnet-4-6, tts.provider=edge, stt.provider=local). `.env` (mode 600, 283 bytes) has `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`.
-    - Brain: Claude Sonnet 4.6 via Anthropic API. STT: local faster-whisper (CPU). TTS: Edge TTS (Microsoft cloud, free, no key). Telegram bot: `@pitmans_heremes_bot` (typo in handle is intentional at this point — created with it, not renaming).
-    - Project manifest: `/home/hermes/.hermes/memories/PROJECT_MANIFEST.md` (26 KB, hermes:hermes 640) — full project briefing; Hermes absorbed into MEMORY.md + USER.md via voice/text command.
-    - Voice roundtrip VALIDATED — Rob sent voice memo, Hermes transcribed, replied as audio.
-  - **OpenClaw STOPPED + DISABLED** (installed, onboarded, then stopped):
-    - Install: `npm install -g openclaw@latest` as openclaw user (npm prefix `~/.npm-global`). Onboarded loopback-bind / token-auth / Anthropic API key flow.
-    - Config: `/home/openclaw/.openclaw/openclaw.json`. Gateway token at `/data/shared/credentials/openclaw_gateway_token` (hermes:agents, 640).
-    - Service unit: `/etc/systemd/system/openclaw-gateway.service` (root-owned, **system-level** — chosen over `systemctl --user` because OpenClaw's Node wrapper dropped bus context on re-spawn, "Permission denied" errors. System-level bypasses `systemctl --user` entirely). User=openclaw, Group=agents. Logs to `/data/openclaw/logs/gateway.{stdout,stderr}.log`.
-    - Smoke test passed before stop: gateway reachable on `ws://127.0.0.1:18789`, probe 72 ms, 5 plugins loaded (acpx, browser, device-pair, phone-control, talk-voice).
-    - Re-enable: `sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service`.
-    - **Known fix needed if re-enabled:** default model is `anthropic/claude-opus-4-7` but SDK warmup fails "Unknown model". Change to `anthropic/claude-sonnet-4-6` via `openclaw config set agents.defaults.model.primary anthropic/claude-sonnet-4-6` before re-starting.
-  - **Users/dirs:** users `hermes` (uid 1001) + `openclaw` (uid 1002), both in group `agents` (gid 1001) + `docker`. Passwords: `Ubuntu123`. `loginctl enable-linger` for both — user systemd managers persist across logout.
-  - **Scoped sudoers:** `/etc/sudoers.d/agents` — hermes + openclaw NOPASSWD on `systemctl start/stop/restart/status` of their own services only.
-  - **Decision:** running Hermes solo for Phase 1 (1–2 weeks). OpenClaw dormant as hot-swap backup. Re-evaluate based on real usage — Hermes has native `delegation`, `terminal`, `code_execution`, `cronjob`, `skills` tools which may be sufficient. See Phase plan in PROJECT_MANIFEST.md section 12.
-- **Session 72b additions (2026-04-20) — Handover → Hermes auto-ingest:**
-  - Goal: MASTER_HANDOVER.md content flows to Hermes automatically so conversations started with Claude (desktop/road) carry over to the next Hermes chat.
-  - Ingest script: `/usr/local/bin/ingest-handover` (root:root 0755) — repo-tracked at `scripts/ingest-handover.sh`. Overwrites `/data/shared/handover/MASTER_HANDOVER.md` (hermes:agents 640) and refreshes symlink `/home/hermes/.hermes/memories/MASTER_HANDOVER.md` → canonical.
-  - Trigger: last step of handover PowerShell on Latitude is now `scp MASTER_HANDOVER.md g9-ts:/tmp/MASTER_HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"` after `git push`.
-  - Auto-load: file lives inside hermes's `~/.hermes/memories/` so it becomes part of context on next Hermes session start — no manual "read the handover" prompt needed.
-  - Policy: latest-only, overwrite each time. No archive dir. Re-evaluate if history becomes useful.
-  - Verified end-to-end Session 72b: `sudo -u hermes cat /home/hermes/.hermes/memories/MASTER_HANDOVER.md` returns full file through the symlink.
-- **Session 72c additions (2026-04-20) — Bidirectional handover + Hermes cluster SSH:**
-  - **Hermes can now write to MASTER_HANDOVER.md + push to GitHub.** Clone at `/data/hermes/psc-handover/` (hermes:agents, setgid 2775). Git remote set to SSH: `git@github.com:robpitman1982-ux/python-master-strategy-creator.git`. git user = "Hermes Agent <hermes-agent@g9.local>".
-  - **Deploy key on GitHub:** repo Settings → Deploy keys → "Hermes Agent (g9)" with write access. Pubkey `ssh-ed25519 AAAAC3...EawZR hermes-agent@g9` at `/home/hermes/.ssh/id_ed25519_github`. Confirmed via `ssh -T git@github.com` → "Hi robpitman1982-ux/python-master-strategy-creator!".
-  - **Symlink repointed:** `/home/hermes/.hermes/memories/MASTER_HANDOVER.md` → `/data/hermes/psc-handover/MASTER_HANDOVER.md` (was → `/data/shared/handover/` in 72b, now → the live git clone).
-  - **Old ingest retired.** `/usr/local/bin/ingest-handover` removed. Replaced by `/usr/local/bin/sync-handover` (repo-tracked at `scripts/sync-handover.sh`) which does `git fetch` + `git merge --ff-only origin/main`. Old `scripts/ingest-handover.sh` deleted from repo.
-  - **Sync triggers:**
-    - Explicit (Latitude after Claude pushes): `ssh g9-ts "sudo /usr/local/bin/sync-handover"`
-    - Safety net (root cron): `/etc/cron.d/sync-handover` runs `*/5 * * * *` with `--quiet`, logs to `/var/log/sync-handover.log`.
-  - **Hermes cluster SSH (Phase 2 gate crossed):** generated separate `/home/hermes/.ssh/id_ed25519_cluster` keypair. Pubkey `ssh-ed25519 AAAAC3...JvbVaj hermes-agent@g9-cluster` appended to rob's authorized_keys on c240, gen8, r630. Hermes's `~/.ssh/config` has `c240`/`gen8`/`r630` aliases (Tailscale IPs) — **deliberately no `latitude` or `x1` aliases.** Hermes logs in as rob (NOPASSWD sudo inherited). Tested: Hermes → c240 ✅, → gen8 ✅, → r630 ✅.
-  - **Laptop isolation verified:** Latitude's `administrators_authorized_keys` only contains Latitude's own key + X1 Carbon's key. No server pubkeys present. Empirical test — `sudo -u hermes ssh rob@100.79.72.125` → `Permission denied (publickey,password,keyboard-interactive)` ✅.
-  - **X1 Carbon unverified** (offline at audit time) — must inspect its `administrators_authorized_keys` and `~/.ssh/authorized_keys` next time it's online to confirm no server pubkeys present. See Open Issue #7.
-  - **Phase 1 validation scope changed.** Hermes now has repo-write + cluster SSH, which was scoped for "Phase 2" in the original plan. Trust level elevated at Rob's direction per Session 72c decision.
-- Hermes self-test passed 2026-04-20
-- **Hermes Protocol — READ THIS, HERMES (the agent reading its memories/MASTER_HANDOVER.md symlink):**
-  - You edit MASTER_HANDOVER.md directly. No buffer file. One source of truth, committed to git.
-  - Workflow every time you need to record a change:
-    1. `cd /data/hermes/psc-handover`
-    2. `git pull --ff-only` (pick up anything Claude/Rob pushed from Latitude)
-    3. Edit `MASTER_HANDOVER.md` — update "Last updated" line in the header, update the relevant section, update Open Issues / On The Horizon if applicable. Preserve existing structure.
-    4. `git add MASTER_HANDOVER.md`
-    5. `git commit -m "hermes: <concise summary of what changed>"`
-    6. `git push`
-  - Commit messages: always prefix with `hermes:` so Rob/Claude can see who made the change in `git log`.
-  - If `git push` is rejected (someone else pushed meanwhile): `git pull --rebase origin main`, resolve conflicts if any, retry `git push`.
-  - Never commit anything other than MASTER_HANDOVER.md via this clone without asking Rob first. This clone is scoped to handover maintenance, not full development.
-  - When you make infrastructure changes on c240/gen8/r630 (packages installed, configs changed, services started), update the relevant server section in MASTER_HANDOVER.md. That's how Rob's next Claude chat stays current on what you've done.
-  - Do not modify `MASTER_HANDOVER.md` during conversations unless something concrete happened worth recording. Casual chats don't need handover entries.
-- **Session 72d additions (2026-04-20) — Hermes skills + reconcile cron + memory filter discovered:**
-  - **Two skills created by Hermes** in `/home/hermes/.hermes/skills/productivity/`:
-    - `handover-update/SKILL.md` (4 KB) — documents the pull → edit → commit → push workflow, commit-message conventions, what-to-edit decision table, pitfalls. Invoke when updating HANDOVER from a Hermes session.
-    - `handover-memory-reconcile/SKILL.md` (4.8 KB) — SHA-based skip logic, section-focused reading strategy, memory-filter workaround documented, state-file path. Invoked by the hourly cron below.
-  - **Cron job `3fbca7f44580`** registered via Hermes's native `cronjob` tool at `/home/hermes/.hermes/cron/jobs.json`. Runs `handover-memory-reconcile` skill every 60 minutes, reports to Rob's Telegram only if MEMORY needed updating (silent on no-op). Reads `/data/shared/handover/LAST_CHANGE` (written by sync-handover when git repo fast-forwards) and compares against `/home/hermes/.hermes/state/last_reconciled_sha`. First run: 09:43 UTC 2026-04-20.
-  - **Memory tool security filter — BY DESIGN, not a bug.** `tools/memory_tool.py` has a regex blocklist on all memory writes:
-    - `authorized_keys` → tagged `ssh_backdoor`
-    - `~/.ssh` or `$HOME/.ssh` → tagged `ssh_access`
-    - `~/.hermes/.env` → tagged `hermes_env`
-    Intent: prevent the LLM-managed memory store from ever holding pointers to credential artifacts. If memory leaks via context stuffing or cross-session carry-over, no credential locations go with it. **Workaround (the intended pattern):** keep memory entries high-level and abstract ("Hermes can SSH to cluster servers as rob with sudo"), and put key paths / credential-bearing specifics in MASTER_HANDOVER.md only. MASTER_HANDOVER.md loads fresh each session via the symlink, so detail is always current without needing durable memory.
-  - **MEMORY.md drift fixed.** Session 72c changes (cluster SSH, deploy key, bidirectional flow) are now reflected in the 4-entry memory store (1343 bytes total, ~60% of budget). The stale "Phase 1 NOW: no SSH to cluster" line is gone.
-  - **LAST_CHANGE marker wired into sync-handover.** When `sync-handover` detects a real fast-forward (not a no-op pull), it writes `/data/shared/handover/LAST_CHANGE` with fields `sha`, `timestamp`, `previous_sha`. hermes:agents 640. Enables both Hermes's cron and future external triggers to know what actually changed via `git diff --name-only $previous_sha $sha`.
-  - **First cross-agent git sync verified.** Hermes commit `485e3a1` (self-test) was pulled by Latitude before Claude pushed `5c71e28`/`5ba9235`. Round-trip works both directions. No conflicts.
-  - **Session still `memory_flushed: false`** in sessions.json — Hermes's periodic LLM-driven flush hasn't fired (needs ≥6 turns at current config). Not blocking: the explicit `+memory:` tool calls captured what mattered.
+- **Pending compute-worker setup (Session 75 TODO):** repo clone, market_data sync, sweep scripts, samba membership, post_sweep.sh — not yet in place. g9 was never a backtesting member; the work to make it one is queued.
+- **Hermes/OpenClaw decommission audit trail (Session 75 — 2026-04-26):**
+  - Users `hermes` (uid 1001) and `openclaw` (uid 1002) deleted via `userdel -r`. Group `agents` (gid 1001) deleted.
+  - Removed: `/data/hermes/` (~1.5 GB), `/data/openclaw/`, `/data/shared/` (entire tree), `/etc/cron.d/sync-handover`, `/etc/sudoers.d/agents`, `/usr/local/bin/sync-handover`, `/usr/local/bin/sync-betfair-handover`.
+  - Hermes's pubkey `hermes-agent@g9-cluster` (fingerprint ending `JvbVaj`) removed from `rob@authorized_keys` on c240, gen8, r630. Backups taken to `~/.ssh/authorized_keys.bak-pre-hermes-removal-YYYYMMDD` on each host.
+  - Also retire externally (operator manual): GitHub deploy key "Hermes Agent (g9)" on `python-master-strategy-creator` repo, deploy key on `betfair-trader` repo, Telegram bot `@pitmans_heremes_bot`, Anthropic API key that was in `/home/hermes/.hermes/.env`.
 
 #### Cisco C240 M4 (c240) — ALWAYS-ON DATA HUB + COMPUTE (Gen 9 replacement)
 - Ubuntu 24.04.4 LTS, kernel 6.8.0-110, hostname `c240`
@@ -294,7 +222,7 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
 ### Network
 - **New ISP:** Carbon Comms, 500/50 Mbps NBN, **static IP** (being connected)
 - **Router:** XE75 Pro at 192.168.68.1
-- Static IP enables: direct SSH from field, Hermes webhooks, dashboard access, Contabo push-to-home
+- Static IP enables: direct SSH from field, dashboard access, Contabo push-to-home
 - Recommendation: Keep Tailscale as primary remote access. Use static IP for specific services only.
 
 ### Cloud Infrastructure (DELETED — Session 69)
@@ -350,20 +278,19 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
 
 ## Open Issues (Priority Order)
 
-1. **Phase 1 Hermes validation period (1–2 weeks from 2026-04-20).** Drive with Hermes daily. Report: voice roundtrip reliability, task extraction quality, context retention across days, skill auto-promotion (target: ≥3 skills). Go/no-go for Phase 2 (cluster SSH) based on real use.
-2. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
+1. **Delete Latitude's TDS source copy** (~33 GB) now that c240 has a verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/` (130,239 files, matching source count). Free up Latitude disk:
    - Verify: `(Get-ChildItem 'C:\Users\Rob\Downloads\Tick Data Suite\Dukascopy' -Recurse -File).Count` should match `find /data/market_data/cfds/ticks_dukascopy_tds -type f \| wc -l` (130,238) + 121 top-level in ohlc/
    - Then: `Remove-Item 'C:\Users\Rob\Downloads\Tick Data Suite' -Recurse -Force`
-3. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48, from abandoned Hermes pivot) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
-4. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
-5. **Gen 8 CPU install DONE (Session 72g).** 2× E5-2697 v2 + heat sinks installed. RAM re-balanced 40GB per CPU (see Gen 8 section). **Now blocked on 2 missing fans (bays 3-4)** — ordered HP 662520-001 from Interbyte Computers eBay AU$19 total, est. Mon 27 Apr - Mon 4 May 2026. Gen 8 OFF under house until fans arrive. Do NOT power on with 4 fans under sweep load — will throttle.
-6. **Disable auto-shutdown crons on gen8 + r630.** Required to implement Session 72h/73 always-on HARD RULE. Remove any cron entry that powers down on idle. Verify by leaving machines idle for 2+ hours and confirming they stay up. R630: action next convenient SSH session. Gen 8: action when it comes back online post-fans.
-7. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
-8. **X1 Carbon offline** — also need to verify laptop SSH isolation when back online (inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` — no server pubkeys should be present).
-9. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
-10. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
-11. **Hermes cost tracking shows $0.00 / "unknown" in sessions.json.** Token counters aren't populating despite real paid API calls. Upstream NousResearch fix pending. Until then, https://console.anthropic.com/settings/usage is authoritative.
-12. **r630 5m sweep OOM'd with 82 workers (Session 72g).** See "r630 ES 5m sweep OOM postmortem" section in Strategy Engine Status. Need: (a) per-worker RAM measurement, (b) nested-pool audit in engine, (c) safe worker count derivation, (d) decide if `configs/local_sweeps/ES_5m.yaml` gets workers dropped from 82 → e.g. 20, or whether sweep needs to move to c240 (64 GiB same constraint) or r630 RAM gets upgraded. 14 promoted candidates from partial run ARE usable — don't discard.
+2. **Clean up stale Tailscale device.** Old `c240` entry (100.104.66.48) still in tailnet. Remove via [Tailscale admin console](https://login.tailscale.com/admin/machines).
+3. **CIMC network config for C240.** CIMC on dedicated port via DHCP; IP not captured. Check router ARP for MAC `00:A3:8E:8E:B3:84` or `nmap -sn 192.168.68.0/22`.
+4. **Gen 8 CPU install DONE (Session 72g).** 2× E5-2697 v2 + heat sinks installed. RAM re-balanced 40GB per CPU (see Gen 8 section). **Now blocked on 2 missing fans (bays 3-4)** — ordered HP 662520-001 from Interbyte Computers eBay AU$19 total, est. Mon 27 Apr - Mon 4 May 2026. Gen 8 OFF under house until fans arrive. Do NOT power on with 4 fans under sweep load — will throttle.
+5. **Disable auto-shutdown crons on gen8 + r630.** Required to implement Session 72h/73 always-on HARD RULE. Remove any cron entry that powers down on idle. Verify by leaving machines idle for 2+ hours and confirming they stay up. R630: action next convenient SSH session. Gen 8: action when it comes back online post-fans.
+6. **R630 stale DHCP lease.** `eno1` shows both `192.168.68.78/22` (static) and `192.168.68.75/22` (stale DHCP). Clean via netplan when convenient — `sudo netplan try` to drop the DHCP lease.
+7. **X1 Carbon offline** — also need to verify laptop SSH isolation when back online (inspect `C:\ProgramData\ssh\administrators_authorized_keys` AND `C:\Users\rob_p\.ssh\authorized_keys` — no server pubkeys should be present).
+8. **CFD swap costs NOT modeled in MC simulator.** Must implement before trusting funding timelines. Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector.
+9. **Dashboard Live Monitor broken.** Engine log and Promoted Candidates sections don't work during active runs.
+10. **g9 not yet a compute-cluster member.** Repo clone, market_data, sweep scripts, samba membership, post_sweep.sh all need to be set up before g9 can take cluster work.
+11. **r630 5m sweep OOM'd with 82 workers (Session 72g).** See "r630 ES 5m sweep OOM postmortem" section in Strategy Engine Status. Need: (a) per-worker RAM measurement, (b) nested-pool audit in engine, (c) safe worker count derivation, (d) decide if `configs/local_sweeps/ES_5m.yaml` gets workers dropped from 82 → e.g. 20, or whether sweep needs to move to c240 (64 GiB same constraint) or r630 RAM gets upgraded. 14 promoted candidates from partial run ARE usable — don't discard.
 
 ---
 
@@ -438,7 +365,7 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
   - c240 physically relocated under house. Powered back on cleanly — health check confirms all services, /data mount, rclone config, cron, tailscale intact. No RAID or disk errors.
 - **Session 71 (2026-04-19):** Dukascopy conversion scale-out. All 120 TDS CSVs converted to engine format via `scripts/convert_tds_batch.py` on c240. Full CFD OHLC dataset engine-ready at `/data/market_data/cfds/ohlc_engine/`.
 - **Session 71b (2026-04-19):** Gen 9 revived as standalone **autonomous business host** (`g9` at 192.168.68.75, Tailscale 100.71.141.89). Fresh Ubuntu 24.04.4 on new 128 GB SATA SSD boot drive. 2× 146 GB SAS drives configured as RAID0 logical drive via ssacli 6.45-8.0 → `/dev/sdb` → LVM `data-vg/data-lv` → `/data` (269 GB ext4). Installed: Docker 29.1.3, Node.js v24.14.1, Tailscale 1.96.4, Python 3.12.3 venv, ssacli, rclone. SSH via ProxyJump c240 (Latitude Wi-Fi ARP quirk) + direct Tailscale. NOPASSWD sudo, ssh-recover.service, ARP-flush cron, sleep/suspend/hibernate masked (always-on). `/data/{hermes,openclaw,backups,logs}/` layout. Backup script + 02:45 cron in place; rclone gdrive OAuth completed end-to-end (verified via test-marker sync). **g9 is NOT a backtesting cluster member** — deliberately isolated from sweep workflow.
-- **Session 72 (2026-04-20):** Hermes + OpenClaw deployed on g9. g9 brought back from offline state (21h last-seen on Tailscale) via `sudo tailscale up --reset`; LAN IP moved .75 → .50 post-relocation DHCP lease change. Users + dirs created: hermes (1001), openclaw (1002), group agents, /data/{hermes,openclaw,shared}/ tree with setgid shared workspace. Hermes Agent installed from `NousResearch/hermes-agent` via uv venv Python 3.11, brain = Claude Sonnet 4.6, STT = local faster-whisper, TTS = Edge TTS, Telegram bot `@pitmans_heremes_bot`. Voice roundtrip validated. Project manifest (26 KB) absorbed into MEMORY.md + USER.md. OpenClaw installed via npm, system-level systemd unit (not user-level — Node wrapper dropped bus context), 5 plugins ran (acpx, browser, device-pair, phone-control, talk-voice), then stopped+disabled. Phase 1 = Hermes solo for 1–2 weeks; OpenClaw dormant backup. Backup disabled (rclone cron removed, config preserved).
+- **Session 72 (2026-04-20) — RETIRED:** Hermes + OpenClaw deployed on g9 with full handover sync, deploy keys, Telegram bot, cluster SSH. **Fully decommissioned Session 75 (2026-04-26).** Transition path: Claude Code + Claude Remote Control replaced Hermes for ops; g9 redirected to compute-worker role.
 
 ### Key Architectural Decisions Made Along the Way
 - **Fixed position sizing** (Session 45): initial_capital only, no compounding — matches prop firm rules
@@ -448,7 +375,8 @@ Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as
 - **Block bootstrap MC** (Session 58): preserves crisis clustering vs naive shuffle
 - **3-layer correlation** (Session 58): active-day + DD-state + tail co-loss replaces simple Pearson
 - **Dukascopy for discovery, The5ers for validation** (Session 63): tick data architecture separates strategy discovery (deep Dukascopy history) from execution validation (The5ers real spreads)
-- **Local cluster replaces cloud** (Session 65): `run_local_sweep.py` + `run_cluster_sweep.py` replace GCP SPOT runners. Zero cloud dependencies. ~200 threads available locally (C240: 80, Gen 8: 12→48 post-CPU-upgrade, R630: 88). Note: g9 is NOT in this pool — it's the standalone autonomous business host.
+- **Local cluster replaces cloud** (Session 65): `run_local_sweep.py` + `run_cluster_sweep.py` replace GCP SPOT runners. Zero cloud dependencies. ~248 threads available locally once g9 joins (C240: 80, Gen 8: 48 post-CPU-upgrade, R630: 88, g9: 48 — Session 75 decommissioned Hermes and reassigned g9 to compute).
+- **Hermes/OpenClaw decommissioned** (Session 75): one-week experiment retired. Claude Code + Claude Remote Control hub on X1 Carbon replaced agent-driven ops. Simpler, no API costs, no security surface from agent SSH access.
 
 ---
 
@@ -533,23 +461,19 @@ ssh gen8 "sudo ipmitool -I lanplus -H 192.168.68.76 -U Administrator -P <pw> pow
 
 ## On the Horizon
 
-- **Session 73 PRIORITY (still deferred): ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Runs on c240 alone (~30–60 min), no WOL needed. Gated on: (a) g9 NIC fix so Hermes monitoring is live, (b) worker review completion so we don't repeat the r630 OOM mistake at c240 scale. If clean: Session 74 fans out to 23 markets × 4 TFs.
+- **Session 73 PRIORITY (still deferred): ES sanity-check sweep across 4 TFs (daily / 60m / 30m / 15m). ES-only, no 5m.** Runs on c240 alone (~30–60 min), no WOL needed. Gated on worker review completion so we don't repeat the r630 OOM mistake at c240 scale. If clean: Session 74 fans out to 23 markets × 4 TFs.
 - **Finish the r630 worker review** (carried over from Session 72g). Specifically: run `mem_probe.py` on r630 to get per-TF per-worker footprint, grep engine modules for nested ProcessPool, confirm whether 15m previously succeeded, then decide workers-per-machine (drop ES_5m.yaml workers from 82 to something safe, OR upgrade r630 RAM from 62 GiB → 128 GiB).
-- **Resolve g9 NIC fault** — blocking Hermes and all cross-agent workflows. Rob needs to physically check port number first.
+- **Bring g9 into the compute cluster** — clone repo, set up venv, sync market_data + configs from c240, install post_sweep.sh, decide on samba role.
+- **Operator-side Hermes external retirement** — revoke GitHub deploy keys (both repos), revoke Telegram bot @pitmans_heremes_bot via @BotFather, revoke Hermes Anthropic API key. (Server-side cleanup done Session 75.)
 - **Delete Latitude TDS source** (`C:\Users\Rob\Downloads\Tick Data Suite\`, ~33 GB) — c240 has verified full mirror at `/data/market_data/cfds/ticks_dukascopy_tds/`.
 - **Capture C240 CIMC IP** — check router ARP for MAC `00:A3:8E:8E:B3:84`.
 - **Clean up stale Tailscale `c240` device** (100.104.66.48) via admin console.
 - **Gen 8 CPU install** — 2× E5-2697 v2 arrived, install under house, verify 48 threads.
 - **R630 netplan cleanup** — drop stale `192.168.68.75` DHCP lease from eno1.
-- **Full 24-market sweep (Session 74)** — `python run_cluster_sweep.py` (all markets × 4 TFs = 92 sweeps, 5m excluded) on c240 orchestrating gen8 + r630. Gated on Session 73 ES validation passing.
+- **Full 24-market sweep (Session 74)** — `python run_cluster_sweep.py` (all markets × 4 TFs = 92 sweeps, 5m excluded) on c240 orchestrating gen8 + r630 + g9. Gated on Session 73 ES validation passing.
 - Implement CFD swap/overnight cost modeling in MC simulator (cost profiles in `configs/cfd_markets.yaml`).
 - **Challenge vs Funded mode** — implement spec in `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
 - Static IP port forwarding setup once new ISP connected.
-- **Hermes cluster SSH — DONE Session 72c:** Hermes now has direct SSH to c240/gen8/r630 as rob user (NOPASSWD sudo). Phase 2 trust level elevated ahead of original 1–2-week Phase 1 validation window per Rob's direction. No scoped `hermes-agent-runner` allowlist wrapper — full shell access. Laptops remain isolated.
-- **OpenClaw re-enable decision** — defer until specific need emerges (sandboxed untrusted code execution, a plugin Hermes lacks). Unit at `/etc/systemd/system/openclaw-gateway.service`, currently disabled. Fix default model to `anthropic/claude-sonnet-4-6` before restart.
-- **External memory provider decision** — FTS5 keyword session search is built-in and working. Supermemory/Honcho/Mem0 only if Phase 1 shows need.
-- **Set spend cap on Anthropic API key** at https://console.anthropic.com/settings/limits — belt-and-braces against runaway Hermes cost (currently no hard ceiling). Rob's stated Hermes budget is $30/mo. Set the cap slightly above that to avoid accidental cutoffs during legitimate high-context sessions.
-- **Multi-LLM panel-review skill for Hermes.** Already supported by hermes-agent — `hermes_cli/providers.py` uses models.dev catalog (109+ providers) + user overlays. Plan: add OpenAI + Gemini API keys to `~/.hermes/.env`, add provider entries in `~/.hermes/config.yaml`, build `panel-review` skill at `~/.hermes/skills/research/panel-review/` that calls Claude + GPT + Gemini in parallel on a given question and synthesises three perspectives + a reconciliation. Fit: big architectural calls, risky code changes, strategy direction. Cheap (~$0.05/question × 3 providers). Rob already does this manually via ChatGPT and Gemini web — automating via Hermes removes copy-paste. Defer until after Hermes Phase 1 validation settles.
 - Strategy templates to reduce search space.
 
 ---
@@ -601,26 +525,7 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 /usr/local/bin/wake-r630.sh     # MAC ec:f4:bb:ed:bf:00
 /usr/local/bin/wake-all.sh      # both
 
-# Hermes / OpenClaw management (on g9)
-# Hermes status   : sudo -u hermes bash -l -c 'hermes gateway status'
-# Hermes logs     : sudo tail -f /home/hermes/.hermes/logs/agent.log
-# Hermes restart  : sudo -u hermes env XDG_RUNTIME_DIR=/run/user/1001 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1001/bus systemctl --user restart hermes-gateway.service
-# Telegram bot    : @pitmans_heremes_bot (voice memo in, audio out)
-# Hermes repo     : /data/hermes/psc-handover/ (hermes:agents, git remote=SSH, deploy key Hermes Agent (g9) on GitHub)
-# Hermes cluster  : sudo -u hermes ssh c240 / gen8 / r630 (logs in as rob, NOPASSWD sudo)
-# Handover sync   : ssh g9-ts "sudo /usr/local/bin/sync-handover"   # called by Latitude after every git push of MASTER_HANDOVER.md
-#                   -> /data/hermes/psc-handover/MASTER_HANDOVER.md  (canonical, hermes:agents, git-tracked)
-#                   -> /home/hermes/.hermes/memories/MASTER_HANDOVER.md  (symlink, auto-loaded next Hermes session)
-#                   -> /data/shared/handover/LAST_CHANGE  (sha+timestamp marker, read by Hermes reconcile cron)
-#                   Safety-net cron /etc/cron.d/sync-handover runs every 5 min, logs to /var/log/sync-handover.log
-# Hermes cron jobs: /home/hermes/.hermes/cron/jobs.json  (managed by Hermes's `cronjob` tool)
-#   Active: 3fbca7f44580 (handover-memory-reconcile, every 60m)
-#   Inspect: sudo cat /home/hermes/.hermes/cron/jobs.json | python3 -m json.tool
-#   Pause:  ask Hermes "pause cron 3fbca7f44580" via Telegram
-# Hermes skills   : /home/hermes/.hermes/skills/productivity/handover-{update,memory-reconcile}/SKILL.md
-# OpenClaw start  : sudo systemctl start openclaw-gateway.service && sudo systemctl enable openclaw-gateway.service
-# OpenClaw stop   : sudo systemctl stop openclaw-gateway.service && sudo systemctl disable openclaw-gateway.service (current state)
-# OpenClaw logs   : sudo tail -f /data/openclaw/logs/gateway.stdout.log
+# Hermes / OpenClaw — DECOMMISSIONED Session 75 (2026-04-26). All Hermes/OpenClaw users, data, scripts, cron, sudoers, and SSH keys removed from g9 and cluster. Replaced by Claude Code + X1 Carbon Claude Remote Control hub.
 
 # Server creds: rob / Ubuntu123 (all servers)
 # C240 sudo: NOPASSWD via /etc/sudoers.d/rob-nopasswd
