@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-26 [Hermes decommission] External retirement complete
+Status: OK
+What: Operator confirmed all 4 manual external-cleanup items done: GitHub deploy keys revoked on `python-master-strategy-creator` repo, GitHub deploy key revoked on `betfair-trader` repo, Telegram bot `@pitmans_heremes_bot` deleted via @BotFather, Hermes Anthropic API key revoked in Anthropic console.
+Outcome: Hermes is now fully gone — no server-side state, no SSH access anywhere, no GitHub access, no Telegram presence, no API ability. Updated MASTER_HANDOVER.md (header status line + decommission audit trail line) and removed the "Operator-side Hermes external retirement" item from On the Horizon.
+Files: MASTER_HANDOVER.md, LOG.md.
+Next: g9 onboarding to compute cluster (Open Issue #10).
+
 ### 2026-04-26 [Hermes decommission] Full Hermes + OpenClaw teardown (g9 + cluster)
 Status: OK
 What: Operator decided to retire the Hermes/OpenClaw experiment after 1 week. Claude Code + X1 Carbon Claude Remote Control hub replaces the agent-driven ops layer. Executed full teardown:
