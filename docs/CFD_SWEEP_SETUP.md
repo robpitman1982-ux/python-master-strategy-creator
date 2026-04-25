@@ -63,7 +63,7 @@ The engine's `dollars_per_point` and `tick_value` **must match the data's price 
 ### Also critical for CFDs
 - `commission_per_contract`: 0 for indices, 0.001% for metals — from `cfd_mapping.py`
 - `slippage_ticks`: indices have floating spread, typically 0.4–1.0 pt on SP500 during RTH. Use **conservative 1.0** for now.
-- Swap costs (`cfd_swap_long`, `cfd_swap_short`): NOT YET modeled in MC simulator (known gap #9 in HANDOVER). Will be session 69+.
+- Swap costs (`cfd_swap_long`, `cfd_swap_short`): NOT YET modeled in MC simulator (known gap #9 in MASTER_HANDOVER). Will be session 69+.
 
 ### Decision for Session 68
 The `ES_daily_cfd_v1.yaml` config currently has **futures** engine params (`dollars_per_point: 50.0`). This is a bug, not a feature. Task 3 rewrites it with CFD params.
@@ -161,7 +161,7 @@ python run_local_sweep.py \
 
 ## 7. Known gaps acknowledged but deferred
 
-1. **Swap costs not in MC simulator** (HANDOVER issue #9). First CFD sweep will produce strategies; MC pass rates against The5ers will be optimistic until swaps land. Don't deploy anything live off Session 68 output.
+1. **Swap costs not in MC simulator** (MASTER_HANDOVER issue #9). First CFD sweep will produce strategies; MC pass rates against The5ers will be optimistic until swaps land. Don't deploy anything live off Session 68 output.
 2. **Only ES daily Dukascopy data converted.** 23 more markets × 4 TFs pending TDS export + conversion. Scale plan is Session 69+.
 3. **Dashboard Live Monitor broken** — not touched this session.
 4. **Session 61 test failure** — not touched.
@@ -178,7 +178,7 @@ The sweep is "working" when ALL of the following are true:
 4. ✅ `Outputs/es_daily_dukascopy_v1/` contains `leaderboard.csv` with > 0 rows
 5. ✅ Sampled strategy has plausible P&L — check one strategy manually: `net_pnl`, `profit_factor`, `total_trades` in sensible ranges (NOT 50× inflated like the bug would produce)
 6. ✅ No orphan child processes on c240 after completion
-7. ✅ HANDOVER.md updated, one commit per task, pushed to GitHub
+7. ✅ MASTER_HANDOVER.md updated, one commit per task, pushed to GitHub
 
 If any of 1–6 fail, stop and leave diagnostic output for next session. Don't force-fix.
 
@@ -186,7 +186,7 @@ If any of 1–6 fail, stop and leave diagnostic output for next session. Don't f
 
 ## 9. References
 
-- `HANDOVER.md` — live ops state (as of Session 67)
+- `MASTER_HANDOVER.md` — live ops state (as of Session 67)
 - `modules/cfd_mapping.py` — verified CFD symbol + cost mapping
 - `scripts/convert_tds_to_engine.py` — TDS → engine format converter
 - `configs/cfd_markets.yaml` — 24-market master config (used by sweep config generator)

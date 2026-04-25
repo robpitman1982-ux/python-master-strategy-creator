@@ -1,7 +1,5 @@
-# HANDOVER.md — Session Continuity Document
-# Last updated: 2026-04-21 (Session 73/72h: **ALL-SERVERS-ALWAYS-ON policy adopted — HARD RULE, no more shutdowns.** g9 back online — Rob reseated SAS drives + verified cable in correct port; root-cause attribution (drives vs cable) unresolved but both were actioned. g9 post-boot specs: 48 threads (HT on), 32 GB RAM (was 16 GB — needs audit). Hermes PID 1846, 260 MB RSS, reconcile cron healthy.)
-# Auto-updated by Claude at end of each session, pushed to GitHub
-# Session 74 addendum (2026-04-24): X1 Carbon now runs a parallel Claude Remote Control hub for `python-master-strategy-creator` from `C:\Users\rob_p\Documents\GIT Repos\python-master-strategy-creator`, with ops files in `C:\Users\rob_p\strategy-ops\`, startup via `StrategyHubWatchdog.vbs`, and scheduled pulls via `StrategyRepoPull`.
+Last updated: 2026-04-26
+Current status: Session 73/72h complete (ALL-SERVERS-ALWAYS-ON policy adopted as HARD RULE — no more shutdowns; g9 back online with 48 threads / 32 GB RAM after Rob reseated SAS drives + verified cable; Hermes PID 1846 healthy). Session 74 addendum (2026-04-24): X1 Carbon now runs a parallel Claude Remote Control hub for python-master-strategy-creator from `C:\Users\rob_p\Documents\GIT Repos\python-master-strategy-creator`, ops files in `C:\Users\rob_p\strategy-ops\`, startup via `StrategyHubWatchdog.vbs`, scheduled pulls via `StrategyRepoPull`. Session 75 (2026-04-26): repo file `HANDOVER.md` renamed to `MASTER_HANDOVER.md` for project-scoped naming; server-side migration checklist at `docs/HANDOVER_RENAME_MIGRATION.md` covers the g9 symlink repoint and Latitude PowerShell update still pending. GCS buckets deleted manually by operator (cloud infrastructure now decommissioned). Auto-updated by Claude at session end and pushed to GitHub.
 
 ---
 
@@ -141,16 +139,16 @@
   - **Scoped sudoers:** `/etc/sudoers.d/agents` — hermes + openclaw NOPASSWD on `systemctl start/stop/restart/status` of their own services only.
   - **Decision:** running Hermes solo for Phase 1 (1–2 weeks). OpenClaw dormant as hot-swap backup. Re-evaluate based on real usage — Hermes has native `delegation`, `terminal`, `code_execution`, `cronjob`, `skills` tools which may be sufficient. See Phase plan in PROJECT_MANIFEST.md section 12.
 - **Session 72b additions (2026-04-20) — Handover → Hermes auto-ingest:**
-  - Goal: HANDOVER.md content flows to Hermes automatically so conversations started with Claude (desktop/road) carry over to the next Hermes chat.
-  - Ingest script: `/usr/local/bin/ingest-handover` (root:root 0755) — repo-tracked at `scripts/ingest-handover.sh`. Overwrites `/data/shared/handover/HANDOVER.md` (hermes:agents 640) and refreshes symlink `/home/hermes/.hermes/memories/HANDOVER.md` → canonical.
-  - Trigger: last step of handover PowerShell on Latitude is now `scp HANDOVER.md g9-ts:/tmp/HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"` after `git push`.
+  - Goal: MASTER_HANDOVER.md content flows to Hermes automatically so conversations started with Claude (desktop/road) carry over to the next Hermes chat.
+  - Ingest script: `/usr/local/bin/ingest-handover` (root:root 0755) — repo-tracked at `scripts/ingest-handover.sh`. Overwrites `/data/shared/handover/MASTER_HANDOVER.md` (hermes:agents 640) and refreshes symlink `/home/hermes/.hermes/memories/MASTER_HANDOVER.md` → canonical.
+  - Trigger: last step of handover PowerShell on Latitude is now `scp MASTER_HANDOVER.md g9-ts:/tmp/MASTER_HANDOVER.md ; ssh g9-ts "sudo /usr/local/bin/ingest-handover"` after `git push`.
   - Auto-load: file lives inside hermes's `~/.hermes/memories/` so it becomes part of context on next Hermes session start — no manual "read the handover" prompt needed.
   - Policy: latest-only, overwrite each time. No archive dir. Re-evaluate if history becomes useful.
-  - Verified end-to-end Session 72b: `sudo -u hermes cat /home/hermes/.hermes/memories/HANDOVER.md` returns full file through the symlink.
+  - Verified end-to-end Session 72b: `sudo -u hermes cat /home/hermes/.hermes/memories/MASTER_HANDOVER.md` returns full file through the symlink.
 - **Session 72c additions (2026-04-20) — Bidirectional handover + Hermes cluster SSH:**
-  - **Hermes can now write to HANDOVER.md + push to GitHub.** Clone at `/data/hermes/psc-handover/` (hermes:agents, setgid 2775). Git remote set to SSH: `git@github.com:robpitman1982-ux/python-master-strategy-creator.git`. git user = "Hermes Agent <hermes-agent@g9.local>".
+  - **Hermes can now write to MASTER_HANDOVER.md + push to GitHub.** Clone at `/data/hermes/psc-handover/` (hermes:agents, setgid 2775). Git remote set to SSH: `git@github.com:robpitman1982-ux/python-master-strategy-creator.git`. git user = "Hermes Agent <hermes-agent@g9.local>".
   - **Deploy key on GitHub:** repo Settings → Deploy keys → "Hermes Agent (g9)" with write access. Pubkey `ssh-ed25519 AAAAC3...EawZR hermes-agent@g9` at `/home/hermes/.ssh/id_ed25519_github`. Confirmed via `ssh -T git@github.com` → "Hi robpitman1982-ux/python-master-strategy-creator!".
-  - **Symlink repointed:** `/home/hermes/.hermes/memories/HANDOVER.md` → `/data/hermes/psc-handover/HANDOVER.md` (was → `/data/shared/handover/` in 72b, now → the live git clone).
+  - **Symlink repointed:** `/home/hermes/.hermes/memories/MASTER_HANDOVER.md` → `/data/hermes/psc-handover/MASTER_HANDOVER.md` (was → `/data/shared/handover/` in 72b, now → the live git clone).
   - **Old ingest retired.** `/usr/local/bin/ingest-handover` removed. Replaced by `/usr/local/bin/sync-handover` (repo-tracked at `scripts/sync-handover.sh`) which does `git fetch` + `git merge --ff-only origin/main`. Old `scripts/ingest-handover.sh` deleted from repo.
   - **Sync triggers:**
     - Explicit (Latitude after Claude pushes): `ssh g9-ts "sudo /usr/local/bin/sync-handover"`
@@ -160,20 +158,20 @@
   - **X1 Carbon unverified** (offline at audit time) — must inspect its `administrators_authorized_keys` and `~/.ssh/authorized_keys` next time it's online to confirm no server pubkeys present. See Open Issue #7.
   - **Phase 1 validation scope changed.** Hermes now has repo-write + cluster SSH, which was scoped for "Phase 2" in the original plan. Trust level elevated at Rob's direction per Session 72c decision.
 - Hermes self-test passed 2026-04-20
-- **Hermes Protocol — READ THIS, HERMES (the agent reading its memories/HANDOVER.md symlink):**
-  - You edit HANDOVER.md directly. No buffer file. One source of truth, committed to git.
+- **Hermes Protocol — READ THIS, HERMES (the agent reading its memories/MASTER_HANDOVER.md symlink):**
+  - You edit MASTER_HANDOVER.md directly. No buffer file. One source of truth, committed to git.
   - Workflow every time you need to record a change:
     1. `cd /data/hermes/psc-handover`
     2. `git pull --ff-only` (pick up anything Claude/Rob pushed from Latitude)
-    3. Edit `HANDOVER.md` — update "Last updated" line in the header, update the relevant section, update Open Issues / On The Horizon if applicable. Preserve existing structure.
-    4. `git add HANDOVER.md`
+    3. Edit `MASTER_HANDOVER.md` — update "Last updated" line in the header, update the relevant section, update Open Issues / On The Horizon if applicable. Preserve existing structure.
+    4. `git add MASTER_HANDOVER.md`
     5. `git commit -m "hermes: <concise summary of what changed>"`
     6. `git push`
   - Commit messages: always prefix with `hermes:` so Rob/Claude can see who made the change in `git log`.
   - If `git push` is rejected (someone else pushed meanwhile): `git pull --rebase origin main`, resolve conflicts if any, retry `git push`.
-  - Never commit anything other than HANDOVER.md via this clone without asking Rob first. This clone is scoped to handover maintenance, not full development.
-  - When you make infrastructure changes on c240/gen8/r630 (packages installed, configs changed, services started), update the relevant server section in HANDOVER.md. That's how Rob's next Claude chat stays current on what you've done.
-  - Do not modify `HANDOVER.md` during conversations unless something concrete happened worth recording. Casual chats don't need handover entries.
+  - Never commit anything other than MASTER_HANDOVER.md via this clone without asking Rob first. This clone is scoped to handover maintenance, not full development.
+  - When you make infrastructure changes on c240/gen8/r630 (packages installed, configs changed, services started), update the relevant server section in MASTER_HANDOVER.md. That's how Rob's next Claude chat stays current on what you've done.
+  - Do not modify `MASTER_HANDOVER.md` during conversations unless something concrete happened worth recording. Casual chats don't need handover entries.
 - **Session 72d additions (2026-04-20) — Hermes skills + reconcile cron + memory filter discovered:**
   - **Two skills created by Hermes** in `/home/hermes/.hermes/skills/productivity/`:
     - `handover-update/SKILL.md` (4 KB) — documents the pull → edit → commit → push workflow, commit-message conventions, what-to-edit decision table, pitfalls. Invoke when updating HANDOVER from a Hermes session.
@@ -183,7 +181,7 @@
     - `authorized_keys` → tagged `ssh_backdoor`
     - `~/.ssh` or `$HOME/.ssh` → tagged `ssh_access`
     - `~/.hermes/.env` → tagged `hermes_env`
-    Intent: prevent the LLM-managed memory store from ever holding pointers to credential artifacts. If memory leaks via context stuffing or cross-session carry-over, no credential locations go with it. **Workaround (the intended pattern):** keep memory entries high-level and abstract ("Hermes can SSH to cluster servers as rob with sudo"), and put key paths / credential-bearing specifics in HANDOVER.md only. HANDOVER.md loads fresh each session via the symlink, so detail is always current without needing durable memory.
+    Intent: prevent the LLM-managed memory store from ever holding pointers to credential artifacts. If memory leaks via context stuffing or cross-session carry-over, no credential locations go with it. **Workaround (the intended pattern):** keep memory entries high-level and abstract ("Hermes can SSH to cluster servers as rob with sudo"), and put key paths / credential-bearing specifics in MASTER_HANDOVER.md only. MASTER_HANDOVER.md loads fresh each session via the symlink, so detail is always current without needing durable memory.
   - **MEMORY.md drift fixed.** Session 72c changes (cluster SSH, deploy key, bidirectional flow) are now reflected in the 4-entry memory store (1343 bytes total, ~60% of budget). The stale "Phase 1 NOW: no SSH to cluster" line is gone.
   - **LAST_CHANGE marker wired into sync-handover.** When `sync-handover` detects a real fast-forward (not a no-op pull), it writes `/data/shared/handover/LAST_CHANGE` with fields `sha`, `timestamp`, `previous_sha`. hermes:agents 640. Enables both Hermes's cron and future external triggers to know what actually changed via `git diff --name-only $previous_sha $sha`.
   - **First cross-agent git sync verified.** Hermes commit `485e3a1` (self-test) was pulled by Latitude before Claude pushed `5c71e28`/`5ba9235`. Round-trip works both directions. No conflicts.
@@ -610,9 +608,9 @@ C:\Users\Rob\wake-gen8.bat      # MAC ac:16:2d:6e:74:2c — 5 min POST delay nor
 # Telegram bot    : @pitmans_heremes_bot (voice memo in, audio out)
 # Hermes repo     : /data/hermes/psc-handover/ (hermes:agents, git remote=SSH, deploy key Hermes Agent (g9) on GitHub)
 # Hermes cluster  : sudo -u hermes ssh c240 / gen8 / r630 (logs in as rob, NOPASSWD sudo)
-# Handover sync   : ssh g9-ts "sudo /usr/local/bin/sync-handover"   # called by Latitude after every git push of HANDOVER.md
-#                   -> /data/hermes/psc-handover/HANDOVER.md  (canonical, hermes:agents, git-tracked)
-#                   -> /home/hermes/.hermes/memories/HANDOVER.md  (symlink, auto-loaded next Hermes session)
+# Handover sync   : ssh g9-ts "sudo /usr/local/bin/sync-handover"   # called by Latitude after every git push of MASTER_HANDOVER.md
+#                   -> /data/hermes/psc-handover/MASTER_HANDOVER.md  (canonical, hermes:agents, git-tracked)
+#                   -> /home/hermes/.hermes/memories/MASTER_HANDOVER.md  (symlink, auto-loaded next Hermes session)
 #                   -> /data/shared/handover/LAST_CHANGE  (sha+timestamp marker, read by Hermes reconcile cron)
 #                   Safety-net cron /etc/cron.d/sync-handover runs every 5 min, logs to /var/log/sync-handover.log
 # Hermes cron jobs: /home/hermes/.hermes/cron/jobs.json  (managed by Hermes's `cronjob` tool)

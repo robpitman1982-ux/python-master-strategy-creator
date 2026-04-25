@@ -25,7 +25,7 @@
 | `master_strategy_engine.py` | file | 60 KB | Main orchestrator | Active, largest .py |
 | `dashboard.py` | file | 56 KB | Streamlit dashboard | Active |
 | `dashboard_utils.py` | file | 44 KB | Dashboard helpers | Active |
-| `HANDOVER.md` | file | 40 KB | Ops handover doc | Active |
+| `MASTER_HANDOVER.md` | file | 40 KB | Ops handover doc | Active |
 | `CLAUDE.md` | file | 32 KB | Project instructions | Active |
 | `CHANGELOG_DEV.md` | file | 72 KB | Dev changelog | Active, very large |
 | `config.yaml` | file | 4 KB | Pipeline config | Active |
@@ -341,7 +341,7 @@ All cloud code can be deleted in a single Session 69 commit. No modules become o
 | STRATEGY_ENGINE_ANALYSIS.md | 448 | 2026-04-04 | Current — engine deep dive |
 | PROJECT_STATE_REVIEW.md | 372 | 2026-04-19 | Current — written this session |
 | CHALLENGE_VS_FUNDED_SPEC.md | 367 | 2026-04-17 | Current — challenge vs funded mode spec |
-| SESSION_HANDOFF_SUMMARY_3.md | 330 | 2026-04-04 | Stale — superseded by HANDOVER.md |
+| SESSION_HANDOFF_SUMMARY_3.md | 330 | 2026-04-04 | Stale — superseded by MASTER_HANDOVER.md |
 | ES_ALL_TIMEFRAMES_RESULTS_ANALYSIS.md | 295 | 2026-04-04 | Stale — futures-era analysis |
 | IMPROVEMENT_ROADMAP.md | 294 | 2026-04-04 | Stale — superseded by PROJECT_STATE_REVIEW |
 | PROJECT_SUMMARY_FOR_LLM.md | 279 | 2026-04-04 | Stale — old LLM context dump |
@@ -359,7 +359,7 @@ All cloud code can be deleted in a single Session 69 commit. No modules become o
 | Doc | Size | Status |
 |-----|------|--------|
 | CLAUDE.md | 32 KB | Current but needs cloud refs removed |
-| HANDOVER.md | 38 KB | Current — primary ops handover |
+| MASTER_HANDOVER.md | 38 KB | Current — primary ops handover |
 | CHANGELOG_DEV.md | 72 KB | Current but very large (1,500+ lines) |
 | README.md | 106 bytes | Minimal placeholder |
 
@@ -400,8 +400,8 @@ The codebase has remarkably few TODO/FIXME comments in Python code — only 1 hi
 | docs/CHALLENGE_VS_FUNDED_SPEC.md | 211 | TODO | validate spreads against live The5ers via MT5 exports | Active — needed before trusting CFD cost model |
 | docs/CHALLENGE_VS_FUNDED_SPEC.md | 236 | TODO | populate FTMO config when account active | Deferred — no FTMO account yet |
 | docs/CHALLENGE_VS_FUNDED_SPEC.md | 243 | TODO | populate Darwinex config when account active | Deferred — no Darwinex account yet |
-| HANDOVER.md | 173 | DEPRECATED | Cloud infrastructure section | Session 69 cleanup target |
-| HANDOVER.md | 178 | DEPRECATED | Cloud files pending deletion | Session 69 cleanup target |
+| MASTER_HANDOVER.md | 173 | DEPRECATED | Cloud infrastructure section | Session 69 cleanup target |
+| MASTER_HANDOVER.md | 178 | DEPRECATED | Cloud files pending deletion | Session 69 cleanup target |
 
 ### Implicit debt (not marked in code)
 

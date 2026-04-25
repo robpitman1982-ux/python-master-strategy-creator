@@ -2,7 +2,7 @@
 # sync-handover.sh
 # Installed on g9 at /usr/local/bin/sync-handover (mode 755, root-owned).
 #
-# Purpose: pulls latest HANDOVER.md (and any other repo changes) into Hermes's
+# Purpose: pulls latest MASTER_HANDOVER.md (and any other repo changes) into Hermes's
 # working clone so the file Hermes reads is always current.
 #
 # Invoked by:
@@ -55,7 +55,7 @@ if [ "${LOCAL}" = "${BASE}" ]; then
   sudo -u hermes git merge --ff-only origin/main --quiet
   NEW_SHA=$(sudo -u hermes git rev-parse main)
   log "OK: fast-forwarded to ${NEW_SHA:0:8}"
-  log "    HANDOVER.md now at $(stat -c%s HANDOVER.md) bytes, $(stat -c%y HANDOVER.md)"
+  log "    MASTER_HANDOVER.md now at $(stat -c%s MASTER_HANDOVER.md) bytes, $(stat -c%y MASTER_HANDOVER.md)"
 
   # Write marker file so Hermes's reconcile skill knows something changed.
   # Only written when a real update happened (not on no-op syncs).
