@@ -13,6 +13,26 @@ from pathlib import Path
 
 import pandas as pd
 
+from modules.statistics import annotate_dataframe_with_dsr
+
+
+def _count_sweep_trials(subdir: Path, strategy_type: str) -> int:
+    """Count rows in the family's sweep results CSV (= number of combos tested).
+
+    Returns 0 if the file does not exist; caller should treat 0 as "unknown"
+    and fall back to a default trial count.
+    """
+    csv_path = subdir / f"{strategy_type}_filter_combination_sweep_results.csv"
+    if not csv_path.exists():
+        return 0
+    try:
+        # Cheap line count — header + rows
+        with open(csv_path, encoding="utf-8") as f:
+            n_lines = sum(1 for _ in f)
+        return max(n_lines - 1, 0)  # subtract header
+    except OSError:
+        return 0
+
 
 def aggregate_master_leaderboard(
     outputs_root: str | Path = "Outputs",
@@ -67,6 +87,16 @@ def aggregate_master_leaderboard(
         df = df.copy()
         df["market"] = market
         df["timeframe"] = timeframe
+
+        # Per-leader trial count: number of combos in the family's sweep CSV.
+        # Falls back to 100 (a conservative default) if the sweep CSV is missing.
+        if "strategy_type" in df.columns:
+            df["n_trials_in_search"] = df["strategy_type"].apply(
+                lambda st: _count_sweep_trials(subdir, str(st)) or 100
+            )
+        else:
+            df["n_trials_in_search"] = 100
+
         all_rows.append(df)
 
     if not all_rows:
@@ -94,6 +124,16 @@ def aggregate_master_leaderboard(
     combined = combined.reset_index(drop=True)
     combined.insert(0, "rank", range(1, len(combined) + 1))
 
+    # Add Deflated Sharpe Ratio per leader. Trial count comes from the sweep
+    # CSV row count populated above.
+    if "leader_pf" in combined.columns and "leader_trades" in combined.columns:
+        annotate_dataframe_with_dsr(
+            combined,
+            pf_col="leader_pf",
+            n_trades_col="leader_trades",
+            n_trials_col="n_trials_in_search",
+        )
+
     preferred_cols = [
         "rank",
         "market",
@@ -108,6 +148,9 @@ def aggregate_master_leaderboard(
         "leader_trades_per_year",
         "leader_win_rate",
         "bootcamp_score",
+        "deflated_sharpe_ratio",
+        "sharpe_per_trade",
+        "n_trials_in_search",
         "is_pf",
         "oos_pf",
         "recent_12m_pf",

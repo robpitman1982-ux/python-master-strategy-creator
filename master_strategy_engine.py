@@ -27,6 +27,7 @@ from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
 from modules.portfolio_evaluator import evaluate_portfolio
 from modules.progress import ProgressTracker
+from modules.statistics import annotate_dataframe_with_pvalues
 from modules.strategy_types import get_strategy_type, list_strategy_types
 
 # =============================================================================
@@ -239,8 +240,15 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
     require_positive_net_pnl = bool(promotion_gate.get("require_positive_net_pnl", False))
     min_trades = int(promotion_gate.get("min_trades", 0))
     min_trades_per_year = float(promotion_gate.get("min_trades_per_year", 0.0))
+    bh_fdr_alpha_raw = promotion_gate.get("bh_fdr_alpha", None)
+    bh_fdr_alpha = float(bh_fdr_alpha_raw) if bh_fdr_alpha_raw is not None else None
 
-    promoted = combo_results_df.copy()
+    # Annotate the FULL family with p-values + (optional) BH-FDR adjustment
+    # before any filtering, so the family size for FDR matches the full sweep.
+    annotated = combo_results_df.copy()
+    annotate_dataframe_with_pvalues(annotated, bh_fdr_alpha=bh_fdr_alpha)
+
+    promoted = annotated
 
     if "profit_factor" in promoted.columns:
         promoted = promoted[promoted["profit_factor"] >= min_pf]
@@ -253,6 +261,10 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
 
     if "trades_per_year" in promoted.columns:
         promoted = promoted[promoted["trades_per_year"] >= min_trades_per_year]
+
+    # BH-FDR significance gate (opt-in via promotion_gate.bh_fdr_alpha)
+    if bh_fdr_alpha is not None and "bh_fdr_passes" in promoted.columns:
+        promoted = promoted[promoted["bh_fdr_passes"]]
 
     if promoted.empty:
         return promoted
@@ -295,6 +307,9 @@ def apply_promotion_gate(combo_results_df: pd.DataFrame, promotion_gate: dict[st
 def print_promotion_gate_report(strategy_type_name: str, promotion_gate: dict[str, Any], promoted_df: pd.DataFrame) -> None:
     print(f"\nPromotion Gate Results for strategy type: {strategy_type_name}")
     print(f"Minimum PF required: {promotion_gate.get('min_profit_factor', 0.0):.2f}")
+    bh_alpha = promotion_gate.get("bh_fdr_alpha", None)
+    if bh_alpha is not None:
+        print(f"BH-FDR family-aware gate ACTIVE at alpha={float(bh_alpha):.4f} (multiple-testing correction)")
 
     if promoted_df.empty:
         print("\nNo candidates passed the promotion gate.")

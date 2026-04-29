@@ -5,6 +5,16 @@
 
 ---
 
+### 2026-04-30 [Sessions 76-78 partial] Throughput investigation, BH-FDR gate, DSR on leaderboard
+Status: OK
+What: Sessions 76-78 partially executed under Option C (no cluster work — betfair Claude is using cluster for sweeps).
+  - **Throughput investigation:** Read `run_cluster_sweep.py` + `run_local_sweep.py`. Confirmed AND extended the betfair Claude's claim. The "cluster" runner is misleadingly named — it's a single-host sequential batch runner that loops 92 jobs on whatever machine launched it. Other 3 cluster hosts sit idle. Bug shape is worse than predicted: 0 processes on 3/4 hosts, not "1 process per host with combos serialised." On 24-market sweep, this means ~15-25h on c240 alone vs ~4-6h with per-host dispatch. Refactor needed — deferred to clean cluster window.
+  - **BH-FDR gate:** Added `modules/statistics.py` with `pf_to_pvalue` (Lo 2002 t-stat from PF + N), `apply_bh_fdr` (Benjamini-Hochberg multiple-testing correction), and `annotate_dataframe_with_pvalues`. Wired into `apply_promotion_gate` in `master_strategy_engine.py`: always annotates `pf_pvalue` column on results, optional FDR filter via `promotion_gate.bh_fdr_alpha` config (default disabled = no behavioural change). When enabled, family-aware over the full sweep.
+  - **DSR on leaderboard:** Extended `modules/statistics.py` with Bailey & Lopez de Prado (2014) Deflated Sharpe Ratio: `expected_max_sharpe_under_null` (using Euler-Mascheroni + Phi^-1), `sharpe_estimator_std` (Mertens variance with skew/kurt), `deflated_sharpe_ratio` (probability that observed SR exceeds expected-max-null), `pf_to_sharpe`, `annotate_dataframe_with_dsr`. Wired into `modules/master_leaderboard.py`: per-leader trial count sourced from row count of `<strategy_type>_filter_combination_sweep_results.csv` in each subdir; falls back to 100 if missing. New columns on `master_leaderboard.csv`: `deflated_sharpe_ratio`, `sharpe_per_trade`, `n_trials_in_search`.
+Outcome: 42 new tests in `tests/test_statistics.py` (all pass). Full test suite: 257/257 pass, zero regressions. The realistic-family integration test confirms BH-FDR cleanly separates real edges from noise (≥4/5 real candidates pass, ≤5/45 noise candidates pass at alpha=0.05). DSR test confirms strong-signal-with-few-trials passes (>0.95) and weak-signal-with-many-trials fails (<0.5).
+Files: modules/statistics.py (new, 333 lines), tests/test_statistics.py (new, 42 tests), master_strategy_engine.py (BH-FDR wiring), modules/master_leaderboard.py (DSR + trial-count plumbing).
+Next: Sessions 79-83 — walk-forward replacing fixed IS/OOS, random-flip null at promotion, EXTERNAL_LLM_BRIEFING.md + cross-LLM consult round, sprint-architecture-with-frozen-grids upgrade. Cluster work (g9 onboarding + throughput refactor) waits for clean window.
+
 ### 2026-04-26 [Hermes decommission] External retirement complete
 Status: OK
 What: Operator confirmed all 4 manual external-cleanup items done: GitHub deploy keys revoked on `python-master-strategy-creator` repo, GitHub deploy key revoked on `betfair-trader` repo, Telegram bot `@pitmans_heremes_bot` deleted via @BotFather, Hermes Anthropic API key revoked in Anthropic console.
