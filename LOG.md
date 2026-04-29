@@ -5,6 +5,21 @@
 
 ---
 
+### 2026-04-30 [Prop firm config audit + fixes] All three programs verified against website, multiple bugs patched
+Status: OK
+What: Operator supplied screenshots of all three target programs (Bootcamp, High Stakes, Pro Growth) from The5ers website. Audited code factories against verified rules and patched five distinct issues:
+  1. **Engine daily-DD recalculation formula bug** (sequential path, prop_firm_simulator.py line 389): was `max(balance, step_balance)` which gave the trader more headroom than rules allow during drawdown. Per The5ers rule: "5% of the starting equity of the day OR the starting balance of the day (the highest between them)" — both are day-level. Fixed to use just `balance` (= day-start equity in our no-overnight-positions model).
+  2. **Vectorized simulate_challenge_batch did not honour daily_dd_recalculates at all** — used a fixed `step_balance * pct` for the whole step. Patched to compute per-day daily DD limit from end-of-prior-day cumulative balance, with vectorised broadcast to per-trade comparison.
+  3. **Bootcamp step balances wrong for $20K and $100K tracks**: factory used 40/60/80 for all targets, but $20K and $100K tracks use 25/50/75 per the website. Only $250K is 40/60/80. Patched with track-specific branching.
+  4. **Bootcamp $20K fees wrong**: $45→$22 entry, $55→$50 funded.
+  5. **Pro Growth $10K fee wrong**: $150→$140. Added missing $20K track ($270).
+  6. **High Stakes fee_map** populated for all 6 verified tracks ($2.5K=$22, $5K=$39, $10K=$78, $25K=$195, $50K=$309, $100K=$545).
+  Test suite: stale assertion for Pro Growth $10K fee fixed ($150→$140) and $20K coverage added.
+  Created `docs/the5ers_program_rules.md` as canonical source-of-truth with verified-as-of date stamp and full rule tables for all three programs. Includes account combination caps, news trading restriction (High Stakes only), profitable-day exact definition, things-not-modeled list with risk-to-MC.
+Outcome: 287/287 tests pass. All three program factories now match the website verbatim where verified.
+Files: modules/prop_firm_simulator.py (factory + simulator changes), tests/test_smoke.py (assertion fix + $20K coverage), docs/the5ers_program_rules.md (new, canonical reference).
+Next: Codex picks up handover. CFD swap costs into MC simulator (Open Issue #8) is the highest-leverage next item before any candidate is promoted to live deployment.
+
 ### 2026-04-30 [Sessions 79-83] Walk-forward + random-flip null + EXTERNAL_LLM_BRIEFING + sprint architecture
 Status: OK
 What: Sessions 79-83 executed in sequence (still under Option C — no cluster work).

@@ -101,23 +101,46 @@ def The5ersBootcampConfig(target: float = 250_000.0) -> PropFirmConfig:
     """
     Factory for The5ers Bootcamp configuration.
 
-    Supports $20K, $100K, and $250K tracks.
-    Step balances scale proportionally with target.
+    Verified 2026-04-30 from The5ers website.
 
-    $250K track: $100K -> $150K -> $200K -> $250K funded
-    $100K track: $40K -> $60K -> $80K -> $100K funded
-    $20K track:  $8K -> $12K -> $16K -> $20K funded
+    Step balances differ by track:
+        $250K: $100K (40%) -> $150K (60%) -> $200K (80%) -> $250K funded
+        $100K: $25K  (25%) -> $50K  (50%) -> $75K  (75%) -> $100K funded
+        $20K:  $5K   (25%) -> $10K  (50%) -> $15K  (75%) -> $20K funded
+
+    Costs (one-time, with Hub Credit reward on Step 1 + funded fee on success):
+        $250K: $225 entry / $350 funded ($10 Hub Credit reward)
+        $100K: $95 entry  / $205 funded ($5 Hub Credit reward)
+        $20K:  $22 entry  / $50 funded  ($2 Hub Credit reward)
+
+    Account combination cap: 1x$250K + 1x$100K + 2x$20K = 4 max,
+    each must use a different trading method.
     """
-    # Step balances are 40%, 60%, 80% of target
+    # Track-specific step balance scaling. The5ers $250K track uses 40/60/80;
+    # $100K and $20K tracks use 25/50/75.
+    if target == 250_000:
+        step_balances = [target * 0.40, target * 0.60, target * 0.80]
+        entry_fee = 225.0
+        funded_fee = 350.0
+    elif target == 100_000:
+        step_balances = [target * 0.25, target * 0.50, target * 0.75]
+        entry_fee = 95.0
+        funded_fee = 205.0
+    elif target == 20_000:
+        step_balances = [target * 0.25, target * 0.50, target * 0.75]
+        entry_fee = 22.0
+        funded_fee = 50.0
+    else:
+        # Unknown track — assume 25/50/75 pattern (matches the smaller tracks)
+        step_balances = [target * 0.25, target * 0.50, target * 0.75]
+        entry_fee = 0.0
+        funded_fee = 0.0
+
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="Bootcamp",
         n_steps=3,
-        step_balances=[
-            target * 0.40,  # Step 1: $100K for $250K track
-            target * 0.60,  # Step 2: $150K for $250K track
-            target * 0.80,  # Step 3: $200K for $250K track
-        ],
+        step_balances=step_balances,
         target_balance=target,
         profit_target_pct=0.06,
         max_drawdown_pct=0.05,
@@ -135,8 +158,8 @@ def The5ersBootcampConfig(target: float = 250_000.0) -> PropFirmConfig:
         profit_split_start_pct=0.50,
         profit_split_max_pct=1.00,
         leverage=30.0,
-        entry_fee=225.0 if target == 250_000 else 95.0 if target == 100_000 else 45.0,
-        funded_fee=350.0 if target == 250_000 else 205.0 if target == 100_000 else 55.0,
+        entry_fee=entry_fee,
+        funded_fee=funded_fee,
         dollars_per_point=50.0,
         contracts_per_trade=1,
     )
@@ -144,15 +167,41 @@ def The5ersBootcampConfig(target: float = 250_000.0) -> PropFirmConfig:
 
 def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
     """
-    Factory for The5ers High Stakes (NEW program).
+    Factory for The5ers High Stakes — Classic version (verified 2026-04-30).
 
-    $100K track: $100K Step 1 -> $100K Step 2 -> $100K Funded
-    Also available: $2.5K, $5K, $10K, $25K, $50K tracks.
-    Rules:
+    Six tracks: $2.5K, $5K, $10K, $25K, $50K, $100K. Same balance both steps.
+    Rules (identical across tracks):
     - Step 1: 8% profit target, 10% max loss, 5% daily loss, 3 min profitable days
     - Step 2: 5% profit target, 10% max loss, 5% daily loss, 3 min profitable days
-    - Funded: 80-100% profit split, refund of entry fee
+    - Funded: 10% scaling target, 80-100% profit split, refund of entry fee on
+      Step 2 completion
+    - Daily DD recalculates per day at MT5 server time:
+      "5% of starting equity of the day OR starting balance of the day
+      (the highest between them)"
+    - Leverage 1:100
+    - News trading: NO orders within 2 minutes before/after high-impact news
+      (NOT modeled in our simulator — treat MC pass rates as upper bound)
+    - Account combination caps (Classic):
+      1x$2.5K + 1x$5K + 1x($10K or $25K) + 1x($50K or $100K) max,
+      plus 3 Bootcamp accounts and 4 Instant Funding accounts.
+    - Scaling up to $500,000.
     """
+    fee_map = {
+        2_500: 22.0,
+        5_000: 39.0,
+        10_000: 78.0,
+        25_000: 195.0,
+        50_000: 309.0,
+        100_000: 545.0,
+    }
+    step_1_reward_map = {
+        2_500: 2.0,
+        5_000: 5.0,
+        10_000: 10.0,
+        25_000: 15.0,
+        50_000: 25.0,
+        100_000: 40.0,
+    }
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="HighStakes",
@@ -163,7 +212,7 @@ def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
         step_profit_targets=[0.08, 0.05],  # Step 1 = 8%, Step 2 = 5%
         max_drawdown_pct=0.10,   # 10% max loss
         drawdown_type="static",
-        max_daily_drawdown_pct=0.05,  # 5% daily loss limit
+        max_daily_drawdown_pct=0.05,  # 5% daily loss limit (recalculates daily)
         max_risk_per_trade_pct=0.02,
         mandatory_stop_loss=True,
         max_violations=5,
@@ -176,8 +225,8 @@ def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
         profit_split_start_pct=0.80,
         profit_split_max_pct=1.00,
         leverage=100.0,
-        entry_fee=545.0 if target == 100_000 else 0.0,
-        funded_fee=0.0,  # Refund
+        entry_fee=fee_map.get(int(target), 0.0),
+        funded_fee=0.0,  # Refund of entry fee on Step 2 completion
         daily_dd_recalculates=True,
         dollars_per_point=50.0,
         contracts_per_trade=1,
@@ -225,12 +274,28 @@ def The5ersHyperGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
 
 def The5ersProGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
     """
-    Factory for The5ers Pro Growth program.
+    Factory for The5ers Pro Growth program (verified 2026-04-30).
 
-    Same rules as Hyper Growth but lower entry fee.
-    1 step, $5K/$10K accounts.
-    10% profit target, 6% stop out, 3% daily pause.
+    1 step, $5K / $10K / $20K tracks.
+    - 10% evaluation target (same in funded scaling)
+    - 6% stop-out level
+    - 3% daily loss = PAUSE (not terminate); resumes next day at 00:00
+      MT5 Server Time
+    - 3 minimum profitable days for evaluation
+    - Leverage 1:30
+    - Time limit unlimited (30-day inactivity expires account)
+    - News trading allowed
+    - Weekend holds allowed (indices carry high swap)
+    - Profit split up to 100%
+    - Max combined eval capital per trader: $40,000 (e.g., 1x$20K + 1x$10K +
+      2x$5K, or 2x$20K, etc.)
+    - Scaling up to $4M
     """
+    fee_map = {
+        5_000: 74.0,
+        10_000: 140.0,
+        20_000: 270.0,
+    }
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="ProGrowth",
@@ -254,7 +319,7 @@ def The5ersProGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
         profit_split_max_pct=1.00,
         leverage=30.0,
         daily_dd_is_pause=True,
-        entry_fee=74.0 if target == 5_000 else 150.0,
+        entry_fee=fee_map.get(int(target), 74.0),
         funded_fee=0.0,
         dollars_per_point=50.0,
         contracts_per_trade=1,
@@ -352,10 +417,15 @@ def simulate_single_step(
     drawdown_floor = step_balance * (1.0 - config.max_drawdown_pct)
 
     # Daily DD tracking
+    # The5ers rule (verified 2026-04-30 from website): "Daily loss is X% of the
+    # starting equity of the day OR the starting balance of the day (the highest
+    # between them) at MT5 Server Time." Both terms are day-level. In our model
+    # we don't simulate overnight open positions, so equity == balance at each
+    # day boundary, and the rule reduces to `balance * pct`.
     daily_dd_limit = None
     day_start_balance = step_balance
     if config.max_daily_drawdown_pct is not None:
-        daily_dd_limit = max(step_balance, day_start_balance) * config.max_daily_drawdown_pct
+        daily_dd_limit = day_start_balance * config.max_daily_drawdown_pct
     trades_per_day_group = max(1, math.ceil(trades_per_day))
     daily_pnl_accumulator = 0.0
     paused_until_next_day = False  # True when daily DD pause is active
@@ -384,9 +454,13 @@ def simulate_single_step(
             daily_pnl_accumulator = 0.0
             paused_until_next_day = False
             day_start_balance = balance
-            # Recalculate daily DD limit if configured
+            # Recalculate daily DD limit if configured.
+            # Per The5ers rule (verified 2026-04-30): daily limit is X% of the
+            # day-start balance (= day-start equity in our model). Comparing to
+            # step_balance was a bug — it gave the trader more headroom than
+            # the rules allow when the account was in drawdown.
             if daily_dd_limit is not None and config.daily_dd_recalculates:
-                daily_dd_limit = max(balance, step_balance) * config.max_daily_drawdown_pct
+                daily_dd_limit = balance * config.max_daily_drawdown_pct
 
         # Skip trades if paused for the rest of this day
         if paused_until_next_day:
@@ -731,29 +805,51 @@ def simulate_challenge_batch(
         target_hit = equity >= target_balance
 
         # Daily DD check
+        # Per The5ers rule (verified 2026-04-30): when daily_dd_recalculates=True,
+        # the daily limit is X% of the day-start balance (= day-start equity in
+        # our no-overnight-positions model). Otherwise it's X% of the step's
+        # initial balance (a fixed per-step limit).
         daily_dd_breach_arr = np.zeros((n_active, max_remaining), dtype=bool)
         if config.max_daily_drawdown_pct is not None:
-            daily_dd_limit = step_balance * config.max_daily_drawdown_pct
             trades_per_day_group = max(1, int(np.ceil(trades_per_day)))
-            # Reshape into day groups and check daily PnL
             n_full_days = max_remaining // trades_per_day_group
             if n_full_days > 0:
                 trunc_len = n_full_days * trades_per_day_group
                 daily_shaped = step_trades[:, :trunc_len].reshape(n_active, n_full_days, trades_per_day_group)
                 daily_pnl = daily_shaped.sum(axis=2)  # (n_active, n_full_days)
-                # Cumulative within-day PnL for partial-day detection
                 daily_cum = np.cumsum(daily_shaped, axis=2)  # (n_active, n_full_days, tpd)
-                # Check if any within-day cumulative PnL breaches daily limit
-                day_breach = (daily_cum <= -daily_dd_limit).any(axis=2)  # (n_active, n_full_days)
+
+                # Per-day daily DD limit. For recalculating configs, this is
+                # X% of each day's starting balance (= step_balance + cumsum
+                # of completed prior-day PnL). For static configs, it's a
+                # constant X% of step_balance.
+                if config.daily_dd_recalculates:
+                    end_of_day_balance = step_balance + np.cumsum(daily_pnl, axis=1)  # (n_active, n_full_days)
+                    # Shift right by one: day d's start balance = end of day d-1.
+                    # Day 0's start balance = step_balance.
+                    day_start_balance = np.concatenate(
+                        [np.full((n_active, 1), step_balance), end_of_day_balance[:, :-1]],
+                        axis=1,
+                    )  # (n_active, n_full_days)
+                    daily_dd_limit_per_day = day_start_balance * config.max_daily_drawdown_pct
+                else:
+                    daily_dd_limit_per_day = np.full(
+                        (n_active, n_full_days), step_balance * config.max_daily_drawdown_pct
+                    )
+
+                # Compare each trade's within-day cumulative PnL to that day's
+                # specific limit. Broadcast (n_active, n_full_days, 1) over tpd.
+                limit_expanded = daily_dd_limit_per_day[:, :, None]
+                breach_per_trade = daily_cum <= -limit_expanded  # (n_active, n_full_days, tpd)
+                day_breach = breach_per_trade.any(axis=2)  # (n_active, n_full_days)
+
                 # Expand back to trade-level
                 for d in range(n_full_days):
                     if day_breach[:, d].any():
                         start_t = d * trades_per_day_group
-                        # Find first breach trade within the day
                         for t in range(trades_per_day_group):
                             idx = start_t + t
-                            breached_sims = daily_cum[:, d, t] <= -daily_dd_limit
-                            daily_dd_breach_arr[:, idx] |= breached_sims
+                            daily_dd_breach_arr[:, idx] |= breach_per_trade[:, d, t]
 
         # Combined breach: DD breach OR daily DD breach
         any_breach = dd_breach | daily_dd_breach_arr

@@ -897,9 +897,11 @@ def test_pro_growth_config():
     assert config.profit_target_pct == 0.10
     assert config.entry_fee == 74.0
 
-    # $10K variant has different fee
+    # Track-specific fees (verified 2026-04-30 from The5ers website)
     config_10k = The5ersProGrowthConfig(10_000)
-    assert config_10k.entry_fee == 150.0
+    assert config_10k.entry_fee == 140.0
+    config_20k = The5ersProGrowthConfig(20_000)
+    assert config_20k.entry_fee == 270.0
 
 
 # ---------------------------------------------------------------------------
