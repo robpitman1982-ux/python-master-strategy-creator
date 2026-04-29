@@ -1,6 +1,6 @@
 """Statistical utilities for strategy promotion and selection.
 
-Three related tools:
+Four related tools:
 
 1. p-value approximation from profit factor and trade count
    (used as the building block for multiple-testing correction)
@@ -12,10 +12,15 @@ Three related tools:
    (penalises observed Sharpe by the number of trials in the search;
     the more candidates tested, the higher the SR needs to clear)
 
+4. Random-flip null permutation test
+   (asks: under "trades are random direction draws," how often would we
+    see a profit factor at least this large? Robust to non-Gaussian PnL.)
+
 Reference:
 - Lo, A. (2002). The Statistics of Sharpe Ratios. Financial Analysts Journal.
 - Benjamini, Y. and Hochberg, Y. (1995). Controlling the False Discovery Rate.
 - Bailey, D. and Lopez de Prado, M. (2014). The Deflated Sharpe Ratio.
+- Efron, B. and Tibshirani, R. (1993). An Introduction to the Bootstrap. Chapman & Hall.
 """
 from __future__ import annotations
 
@@ -377,6 +382,145 @@ def annotate_dataframe_with_dsr(
     df[sr_col] = sr_list
     df[dsr_col] = dsr_list
     return df
+
+
+# =============================================================================
+# Random-flip null permutation test
+# =============================================================================
+
+def _safe_profit_factor(pnls: np.ndarray) -> float:
+    """Profit factor with safe handling of edge cases.
+
+    PF = sum(positive) / |sum(negative)|.
+    Returns NaN if there are no losses (or no wins) to define PF.
+    """
+    gross_profit = float(pnls[pnls > 0].sum())
+    gross_loss = float(-pnls[pnls < 0].sum())
+    if gross_loss <= 0.0:
+        # No losses → PF is undefined (or infinite). Treat as missing.
+        return float("nan") if gross_profit > 0 else 0.0
+    return gross_profit / gross_loss
+
+
+def random_flip_null_test(
+    pnls: list[float] | np.ndarray,
+    n_resamples: int = 5000,
+    seed: int = 42,
+) -> dict:
+    """Random-direction-flip permutation test for profit factor.
+
+    Under the null "this rule has no edge" (equivalently: trades have random
+    direction), randomly flip the sign of each trade's PnL and recompute the
+    profit factor. Repeat n_resamples times to build the null distribution.
+    Compare the observed PF against it.
+
+    The flip preserves trade magnitudes; only direction randomises. This
+    matches the betfair-trader-project-validated convention of using n=5000
+    resamples for the strict z >= 2.0 gate.
+
+    Args:
+        pnls: per-trade dollar PnL values (positive = win, negative = loss).
+        n_resamples: number of null permutations (recommended >= 5000).
+        seed: RNG seed for reproducibility.
+
+    Returns:
+        dict with:
+          observed_pf: float — observed profit factor
+          observed_z:  float — (observed - null_mean) / null_std
+          p_value:     float — one-sided P(null_pf >= observed_pf)
+          passes:      bool  — z >= 2.0 at n=5000
+          null_mean:   float — mean of null distribution
+          null_std:    float — std of null distribution
+          n_resamples: int   — actual count of valid resamples
+          n_trades:    int   — trade count of input
+
+        For degenerate inputs (n<5 or all-same-sign), returns a dict with
+        observed_z=0, passes=False, and notes the issue in the dict via
+        nan/zero fields.
+    """
+    arr = np.asarray(list(pnls), dtype=float)
+    n = arr.shape[0]
+
+    base = {
+        "observed_pf": float("nan"),
+        "observed_z": 0.0,
+        "p_value": 1.0,
+        "passes": False,
+        "null_mean": float("nan"),
+        "null_std": 0.0,
+        "n_resamples": 0,
+        "n_trades": int(n),
+    }
+
+    if n < 5:
+        return base
+
+    # Drop zeros (no-trade rows) and NaN
+    arr = arr[~np.isnan(arr)]
+    arr = arr[arr != 0.0]
+    n = arr.shape[0]
+    if n < 5:
+        base["n_trades"] = int(n)
+        return base
+
+    base["n_trades"] = int(n)
+
+    obs_pf = _safe_profit_factor(arr)
+    base["observed_pf"] = obs_pf
+    if not math.isfinite(obs_pf):
+        return base
+
+    abs_pnls = np.abs(arr)
+
+    # All-positive or all-negative input: under random flip the "wins" set
+    # and "losses" set are equally probable as either direction, so the
+    # null distribution still has structure. We just need to make sure
+    # _safe_profit_factor returns finite values for the flipped arrays.
+
+    rng = np.random.default_rng(seed)
+    # Vectorised: build (n_resamples, n) sign matrix; broadcast multiply.
+    signs = rng.choice([-1.0, 1.0], size=(n_resamples, n))
+    flipped = abs_pnls[None, :] * signs  # (n_resamples, n)
+
+    # Per-row profit / loss split
+    pos_mask = flipped > 0
+    gross_profits = np.where(pos_mask, flipped, 0.0).sum(axis=1)
+    gross_losses = np.where(~pos_mask & (flipped < 0), -flipped, 0.0).sum(axis=1)
+
+    valid = gross_losses > 0
+    null_pfs = np.full(n_resamples, np.nan, dtype=float)
+    null_pfs[valid] = gross_profits[valid] / gross_losses[valid]
+
+    valid_pfs = null_pfs[~np.isnan(null_pfs)]
+    n_valid = valid_pfs.shape[0]
+
+    if n_valid < 100:
+        # Not enough non-degenerate resamples to build a distribution
+        base["n_resamples"] = int(n_valid)
+        return base
+
+    null_mean = float(valid_pfs.mean())
+    null_std = float(valid_pfs.std(ddof=1))
+
+    if null_std <= 0.0 or not math.isfinite(null_std):
+        base["null_mean"] = null_mean
+        base["null_std"] = null_std
+        base["n_resamples"] = int(n_valid)
+        return base
+
+    z = (obs_pf - null_mean) / null_std
+    p = float((valid_pfs >= obs_pf).sum() / n_valid)
+
+    return {
+        "observed_pf": obs_pf,
+        "observed_z": z,
+        "p_value": p,
+        "passes": bool(z >= 2.0),
+        "null_mean": null_mean,
+        "null_std": null_std,
+        "n_resamples": int(n_valid),
+        "n_trades": int(n),
+    }
 
 
 def annotate_dataframe_with_pvalues(

@@ -5,6 +5,17 @@
 
 ---
 
+### 2026-04-30 [Sessions 79-83] Walk-forward + random-flip null + EXTERNAL_LLM_BRIEFING + sprint architecture
+Status: OK
+What: Sessions 79-83 executed in sequence (still under Option C — no cluster work).
+  - **Walk-forward validation module** (`modules/walk_forward.py`, 220 lines): rolling N-year-train / M-year-test windows, per-window t-statistic, aggregate mean/min/median test_t + train-test correlation, opt-in `passes_gate()` with configurable thresholds. `WalkForwardResult` dataclass + `compute_walk_forward()` (single strategy) + `annotate_dataframe_with_walk_forward()` (batch over leaderboard). 20 tests covering constant alpha, regime shift, decaying signal, pure noise, edge cases (empty, sparse, missing cols, short history), window math sanity, aggregation correctness, DataFrame annotation.
+  - **Random-flip null permutation test** (extension to `modules/statistics.py`): `random_flip_null_test(pnls, n_resamples=5000, seed=42)` — vectorized numpy implementation, builds null distribution by flipping each trade's sign independently with prob 0.5, returns z-statistic + one-sided p-value + binary pass at z>=2.0. 10 new tests including reproducibility, n_resamples scaling, zero-pnl filtering, pf-matching, null-mean centred at ~1.0 for symmetric magnitude distributions.
+  - **EXTERNAL_LLM_BRIEFING.md** at repo root: 1-page distilled project brief for ChatGPT/Gemini cross-LLM consultations. Covers elevator pitch, current state, recent additions, live trading, infra, known throughput bug, open questions, things-not-to-touch, architectural decisions, project rules, layered context pointers, anti-convergence heuristic, cross-project notes for betfair-trader.
+  - **Sprint architecture** (`sessions/SPRINT_TEMPLATE.md` + `sessions/README.md`): pre-registered sprint spec template with frozen-grid section, verdict semantics (NO EDGE / CANDIDATES / SUSPICIOUS / BLOCKED), methodology checklist, anti-convergence consultation slot, post-sprint result template. README.md explains the convention and why-pre-register.
+Outcome: 287/287 tests pass (up from 257). 30 new tests this round. All four Sessions 79-83 items delivered with full test coverage and clean integration.
+Files: modules/walk_forward.py (new, 220 lines), tests/test_walk_forward.py (new, 20 tests), modules/statistics.py (extended with random_flip_null_test + helpers), tests/test_statistics.py (extended with 10 random-flip tests), EXTERNAL_LLM_BRIEFING.md (new), sessions/SPRINT_TEMPLATE.md (new), sessions/README.md (new).
+Next: All shipping — operator may turn on any of the new gates via config, or pre-register the next sprint via SPRINT_TEMPLATE.md. Cluster work (g9 onboarding + throughput refactor) still waits for clean cluster window. Walk-forward gate threshold tuning needs real-data calibration when next leaderboard regenerates.
+
 ### 2026-04-30 [Sessions 76-78 partial] Throughput investigation, BH-FDR gate, DSR on leaderboard
 Status: OK
 What: Sessions 76-78 partially executed under Option C (no cluster work — betfair Claude is using cluster for sweeps).

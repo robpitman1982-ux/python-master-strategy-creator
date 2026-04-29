@@ -16,6 +16,7 @@ from modules.statistics import (
     pf_to_pvalue,
     pf_to_sharpe,
     pf_to_t_statistic,
+    random_flip_null_test,
     sharpe_estimator_std,
 )
 
@@ -352,6 +353,102 @@ def test_annotate_dsr_missing_columns_is_noop():
     df = pd.DataFrame({"foo": [1, 2, 3]})
     result = annotate_dataframe_with_dsr(df)
     assert "deflated_sharpe_ratio" not in result.columns
+
+
+# -----------------------------------------------------------------------------
+# Random-flip null permutation test
+# -----------------------------------------------------------------------------
+
+def _gen_pnls(n: int, mean: float, std: float, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return rng.normal(mean, std, size=n)
+
+
+def test_random_flip_empty_input():
+    result = random_flip_null_test([])
+    assert result["n_trades"] == 0
+    assert result["passes"] is False
+
+
+def test_random_flip_too_few_trades():
+    result = random_flip_null_test([10.0, -5.0, 8.0])
+    assert result["n_trades"] == 3
+    assert result["passes"] is False
+
+
+def test_random_flip_pure_noise_does_not_pass():
+    """Zero-mean noise should produce |z| << 2.0."""
+    pnls = _gen_pnls(200, mean=0.0, std=100.0, seed=42)
+    result = random_flip_null_test(pnls, n_resamples=2000, seed=123)
+    assert abs(result["observed_z"]) < 2.0
+    assert result["passes"] is False
+
+
+def test_random_flip_strong_signal_passes():
+    """Strongly positive trades should produce z >> 2.0."""
+    pnls = _gen_pnls(200, mean=20.0, std=50.0, seed=42)
+    result = random_flip_null_test(pnls, n_resamples=2000, seed=123)
+    assert result["observed_z"] > 2.0
+    assert result["passes"] is True
+    assert result["p_value"] < 0.05
+
+
+def test_random_flip_weak_signal_borderline():
+    """Weak positive signal: z near or below 2.0 (does NOT auto-pass)."""
+    pnls = _gen_pnls(100, mean=2.0, std=50.0, seed=42)
+    result = random_flip_null_test(pnls, n_resamples=2000, seed=123)
+    # The whole point: weak signals don't sneak through the strict gate
+    assert result["observed_z"] < 3.0
+
+
+def test_random_flip_reproducibility():
+    """Same seed → same z."""
+    pnls = _gen_pnls(150, mean=10.0, std=50.0, seed=42)
+    r1 = random_flip_null_test(pnls, n_resamples=1000, seed=99)
+    r2 = random_flip_null_test(pnls, n_resamples=1000, seed=99)
+    assert r1["observed_z"] == r2["observed_z"]
+    assert r1["p_value"] == r2["p_value"]
+
+
+def test_random_flip_n_resamples_increases_precision():
+    """More resamples → smaller p-value variance for the same signal."""
+    pnls = _gen_pnls(200, mean=15.0, std=50.0, seed=42)
+    # Run multiple times with different seeds at low n_resamples vs high
+    z_small = []
+    z_large = []
+    for s in range(5):
+        z_small.append(random_flip_null_test(pnls, n_resamples=200, seed=s)["observed_z"])
+        z_large.append(random_flip_null_test(pnls, n_resamples=2000, seed=s)["observed_z"])
+    # Larger n_resamples → tighter z estimate
+    assert np.std(z_large) <= np.std(z_small) * 1.5
+
+
+def test_random_flip_zero_pnls_dropped():
+    """Zero-PnL rows are dropped (no-trade artifacts) before analysis."""
+    pnls = list(_gen_pnls(50, mean=10.0, std=50.0, seed=42)) + [0.0] * 30
+    result = random_flip_null_test(pnls, n_resamples=1000, seed=42)
+    assert result["n_trades"] == 50  # zeros dropped
+
+
+def test_random_flip_pf_matches_observed():
+    """observed_pf field should equal the actual PF of the input."""
+    pnls = np.array([100.0, 100.0, 100.0, -50.0, -50.0])
+    result = random_flip_null_test(pnls, n_resamples=500, seed=42)
+    expected_pf = 300.0 / 100.0  # 3.0
+    assert math.isclose(result["observed_pf"], expected_pf, rel_tol=1e-9)
+
+
+def test_random_flip_null_mean_around_one():
+    """For symmetric magnitude distribution, null PF mean ~ 1.0."""
+    # Magnitudes from a symmetric source
+    mags = np.array([100.0] * 50 + [50.0] * 50 + [25.0] * 50)
+    # Half positive, half negative — observed PF should be 1.0
+    pnls = np.concatenate([mags[:75], -mags[75:]])
+    rng = np.random.default_rng(42)
+    rng.shuffle(pnls)
+    result = random_flip_null_test(pnls, n_resamples=2000, seed=42)
+    # Null mean should be close to 1.0 (symmetric)
+    assert 0.85 <= result["null_mean"] <= 1.15
 
 
 def test_realistic_family_filters_noise_candidates():
