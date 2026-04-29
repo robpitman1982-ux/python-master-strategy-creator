@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex handover] Session wrap — full handover doc written for Codex
+Status: OK
+What: Operator nearly out of Claude credits, switching to Codex for ~24 hours until Claude credits reload tomorrow evening (2026-05-01). Wrote `HANDOVER_FOR_CODEX.md` at repo root with: project elevator pitch, operating rules (standing rules + risk discipline + trigger phrases + saving knowledge), current state snapshot (code/live/infra/data), today's work summary with file locations, deferred items (g9 onboarding, throughput refactor, CFD swap costs in MC), open issues snapshot, outstanding operator questions (TDS data refresh, MT5 specs gap, Bootcamp/HS verification status), what Codex CAN safely work on vs what to defer, recommended cleanup tasks (low-risk high-value), test suite reference, file location map, what-to-do-at-session-end procedure, what-Claude-does-when-returning, goodwill notes about operator preferences.
+Outcome: Codex has a complete cold-start brief. Operator can hand it small tasks without state loss. Claude returns tomorrow evening to resume normal operations.
+Files: HANDOVER_FOR_CODEX.md (new, repo root), LOG.md (this entry).
+Next: Final commit + push of handover.
+
 ### 2026-04-30 [Prop firm config audit + fixes] All three programs verified against website, multiple bugs patched
 Status: OK
 What: Operator supplied screenshots of all three target programs (Bootcamp, High Stakes, Pro Growth) from The5ers website. Audited code factories against verified rules and patched five distinct issues:
