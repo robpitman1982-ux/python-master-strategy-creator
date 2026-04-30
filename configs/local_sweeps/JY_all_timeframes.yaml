@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: jy_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/JY_5m_2008_2026_dukascopy.csv
+- path: Data/JY_5m_dukascopy.csv
   market: JY
   timeframe: 5m
-- path: Data/JY_15m_2008_2026_dukascopy.csv
+- path: Data/JY_15m_dukascopy.csv
   market: JY
   timeframe: 15m
-- path: Data/JY_30m_2008_2026_dukascopy.csv
+- path: Data/JY_30m_dukascopy.csv
   market: JY
   timeframe: 30m
-- path: Data/JY_60m_2008_2026_dukascopy.csv
+- path: Data/JY_60m_dukascopy.csv
   market: JY
   timeframe: 60m
-- path: Data/JY_daily_2008_2026_dukascopy.csv
+- path: Data/JY_daily_dukascopy.csv
   market: JY
   timeframe: daily
 strategy_types: all

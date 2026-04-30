@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: brent_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/BRENT_5m_2008_2026_dukascopy.csv
+- path: Data/BRENT_5m_dukascopy.csv
   market: BRENT
   timeframe: 5m
-- path: Data/BRENT_15m_2008_2026_dukascopy.csv
+- path: Data/BRENT_15m_dukascopy.csv
   market: BRENT
   timeframe: 15m
-- path: Data/BRENT_30m_2008_2026_dukascopy.csv
+- path: Data/BRENT_30m_dukascopy.csv
   market: BRENT
   timeframe: 30m
-- path: Data/BRENT_60m_2008_2026_dukascopy.csv
+- path: Data/BRENT_60m_dukascopy.csv
   market: BRENT
   timeframe: 60m
-- path: Data/BRENT_daily_2008_2026_dukascopy.csv
+- path: Data/BRENT_daily_dukascopy.csv
   market: BRENT
   timeframe: daily
 strategy_types: all

@@ -27,6 +27,8 @@ from pathlib import Path
 
 import yaml
 
+from modules.instrument_universe import InstrumentUniverseError, validate_sweep_config
+
 
 def load_sweep_config(config_path: str) -> dict:
     """Load and validate a sweep config YAML."""
@@ -115,6 +117,17 @@ def run_sweep(config_path: str, data_dir: str | None = None, dry_run: bool = Fal
     for ds in datasets:
         print(f"    - {ds.get('market', '?')} {ds.get('timeframe', '?')}: {ds['path']}")
     print("=" * 60)
+
+    try:
+        universe = validate_sweep_config(
+            engine_cfg,
+            data_dir=None,
+            require_existing_data=not dry_run,
+        )
+        print(f"  Universe:   {universe}")
+    except InstrumentUniverseError as exc:
+        print(f"\nERROR: Instrument universe preflight failed:\n  {exc}")
+        return 1
 
     if dry_run:
         print("\n[DRY RUN] Would run engine with the above config. Exiting.")

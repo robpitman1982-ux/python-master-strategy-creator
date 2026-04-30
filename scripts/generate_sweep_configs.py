@@ -20,6 +20,10 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from modules.instrument_universe import CFD_DUKASCOPY, canonical_dukascopy_filename
+
 DEFAULT_MARKETS_CONFIG = REPO_ROOT / "configs" / "cfd_markets.yaml"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "configs" / "local_sweeps"
 ALL_TIMEFRAMES = ["5m", "15m", "30m", "60m", "daily"]
@@ -56,7 +60,7 @@ def generate_configs(
         for tf in tfs:
             if tf in data_files:
                 datasets.append({
-                    "path": f"{data_dir}/{data_files[tf]}",
+                    "path": f"{data_dir}/{canonical_dukascopy_filename(market, tf)}",
                     "market": market,
                     "timeframe": tf,
                 })
@@ -69,6 +73,8 @@ def generate_configs(
         oos_date = spec.get("oos_split_date", "2020-01-01")
 
         config = {
+            "instrument_universe": CFD_DUKASCOPY,
+            "price_source": "dukascopy",
             "sweep": {
                 "name": f"{market.lower()}_all_tf_cfd",
                 "output_dir": "Outputs",

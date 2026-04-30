@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex] Instrument universe guardrails for futures vs CFD sweeps
+Status: OK
+What: Operator paused sprint planning and asked to bulletproof the futures-vs-CFD pipeline before any The5ers CFD run. Added `modules/instrument_universe.py` with explicit `futures_tradestation` and `cfd_dukascopy` universes, source-path inference, canonical CFD filename checks, and known contract-economics validation for ES/NQ/YM/GC/SI/CL plus core futures specs. Wired preflight into `run_local_sweep.py`, `run_cluster_sweep.py`, and direct `master_strategy_engine.py --config ...`; batch dry-run now builds and validates every generated job config before reporting success. Corrected `configs/cfd_markets.yaml` for The5ers-mapped CFD economics, normalized Dukascopy data filenames to `{MARKET}_{TF}_dukascopy.csv`, regenerated all 24 local CFD sweep configs with explicit universe metadata, and documented the separation in `docs/INSTRUMENT_UNIVERSES.md`. Removed the uncommitted Sprint 84 draft after operator asked to hold sprint planning.
+Outcome: Futures and CFD sweeps now fail closed when data source and contract economics are mixed. The intended 96-job CFD plan (24 markets x daily/60m/30m/15m, no 5m) validates at dry-run config level. Tests: `python -m pytest tests/ --ignore=tests/test_engine_parity.py -q` -> 295 passed, 1 known date-parse warning.
+Files: modules/instrument_universe.py, tests/test_instrument_universe.py, run_local_sweep.py, run_cluster_sweep.py, master_strategy_engine.py, scripts/generate_sweep_configs.py, configs/cfd_markets.yaml, configs/local_sweeps/*.yaml, docs/INSTRUMENT_UNIVERSES.md, MASTER_HANDOVER.md, LOG.md.
+Next: Sync this repo state to c240 and workers, then run c240 ES daily dry-run/execution before any full cluster dispatch.
+
 ### 2026-04-30 [Codex handover] Session wrap — full handover doc written for Codex
 Status: OK
 What: Operator nearly out of Claude credits, switching to Codex for ~24 hours until Claude credits reload tomorrow evening (2026-05-01). Wrote `HANDOVER_FOR_CODEX.md` at repo root with: project elevator pitch, operating rules (standing rules + risk discipline + trigger phrases + saving knowledge), current state snapshot (code/live/infra/data), today's work summary with file locations, deferred items (g9 onboarding, throughput refactor, CFD swap costs in MC), open issues snapshot, outstanding operator questions (TDS data refresh, MT5 specs gap, Bootcamp/HS verification status), what Codex CAN safely work on vs what to defer, recommended cleanup tasks (low-risk high-value), test suite reference, file location map, what-to-do-at-session-end procedure, what-Claude-does-when-returning, goodwill notes about operator preferences.

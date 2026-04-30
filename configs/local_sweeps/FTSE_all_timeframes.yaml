@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: ftse_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/FTSE_5m_2012_2026_dukascopy.csv
+- path: Data/FTSE_5m_dukascopy.csv
   market: FTSE
   timeframe: 5m
-- path: Data/FTSE_15m_2012_2026_dukascopy.csv
+- path: Data/FTSE_15m_dukascopy.csv
   market: FTSE
   timeframe: 15m
-- path: Data/FTSE_30m_2012_2026_dukascopy.csv
+- path: Data/FTSE_30m_dukascopy.csv
   market: FTSE
   timeframe: 30m
-- path: Data/FTSE_60m_2012_2026_dukascopy.csv
+- path: Data/FTSE_60m_dukascopy.csv
   market: FTSE
   timeframe: 60m
-- path: Data/FTSE_daily_2012_2026_dukascopy.csv
+- path: Data/FTSE_daily_dukascopy.csv
   market: FTSE
   timeframe: daily
 strategy_types: all

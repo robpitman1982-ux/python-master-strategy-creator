@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: n225_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/N225_5m_2012_2026_dukascopy.csv
+- path: Data/N225_5m_dukascopy.csv
   market: N225
   timeframe: 5m
-- path: Data/N225_15m_2012_2026_dukascopy.csv
+- path: Data/N225_15m_dukascopy.csv
   market: N225
   timeframe: 15m
-- path: Data/N225_30m_2012_2026_dukascopy.csv
+- path: Data/N225_30m_dukascopy.csv
   market: N225
   timeframe: 30m
-- path: Data/N225_60m_2012_2026_dukascopy.csv
+- path: Data/N225_60m_dukascopy.csv
   market: N225
   timeframe: 60m
-- path: Data/N225_daily_2012_2026_dukascopy.csv
+- path: Data/N225_daily_dukascopy.csv
   market: N225
   timeframe: daily
 strategy_types: all

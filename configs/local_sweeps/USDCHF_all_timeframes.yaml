@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: usdchf_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/USDCHF_5m_2008_2026_dukascopy.csv
+- path: Data/USDCHF_5m_dukascopy.csv
   market: USDCHF
   timeframe: 5m
-- path: Data/USDCHF_15m_2008_2026_dukascopy.csv
+- path: Data/USDCHF_15m_dukascopy.csv
   market: USDCHF
   timeframe: 15m
-- path: Data/USDCHF_30m_2008_2026_dukascopy.csv
+- path: Data/USDCHF_30m_dukascopy.csv
   market: USDCHF
   timeframe: 30m
-- path: Data/USDCHF_60m_2008_2026_dukascopy.csv
+- path: Data/USDCHF_60m_dukascopy.csv
   market: USDCHF
   timeframe: 60m
-- path: Data/USDCHF_daily_2008_2026_dukascopy.csv
+- path: Data/USDCHF_daily_dukascopy.csv
   market: USDCHF
   timeframe: daily
 strategy_types: all

@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: btc_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/BTC_5m_2017_2026_dukascopy.csv
+- path: Data/BTC_5m_dukascopy.csv
   market: BTC
   timeframe: 5m
-- path: Data/BTC_15m_2017_2026_dukascopy.csv
+- path: Data/BTC_15m_dukascopy.csv
   market: BTC
   timeframe: 15m
-- path: Data/BTC_30m_2017_2026_dukascopy.csv
+- path: Data/BTC_30m_dukascopy.csv
   market: BTC
   timeframe: 30m
-- path: Data/BTC_60m_2017_2026_dukascopy.csv
+- path: Data/BTC_60m_dukascopy.csv
   market: BTC
   timeframe: 60m
-- path: Data/BTC_daily_2017_2026_dukascopy.csv
+- path: Data/BTC_daily_dukascopy.csv
   market: BTC
   timeframe: daily
 strategy_types: all

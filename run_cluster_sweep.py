@@ -32,6 +32,13 @@ from pathlib import Path
 
 import yaml
 
+from modules.instrument_universe import (
+    CFD_DUKASCOPY,
+    InstrumentUniverseError,
+    canonical_dukascopy_filename,
+    validate_sweep_config,
+)
+
 REPO_ROOT = Path(__file__).resolve().parent
 MANIFEST_PATH = REPO_ROOT / "sweep_manifest.json"
 MARKETS_CONFIG = REPO_ROOT / "configs" / "cfd_markets.yaml"
@@ -109,12 +116,14 @@ def build_single_config(
     oos_date = market_spec.get("oos_split_date", "2020-01-01")
 
     return {
+        "instrument_universe": CFD_DUKASCOPY,
+        "price_source": "dukascopy",
         "sweep": {
             "name": f"{market.lower()}_{timeframe}_cfd",
             "output_dir": "Outputs",
         },
         "datasets": [{
-            "path": f"{data_dir}/{data_files[timeframe]}",
+            "path": f"{data_dir}/{canonical_dukascopy_filename(market, timeframe)}",
             "market": market,
             "timeframe": timeframe,
         }],
@@ -231,6 +240,22 @@ def run_batch(
         print(f"  {i:3d}. {market} {tf}")
 
     if dry_run:
+        print("\n[DRY RUN] Validating generated job configs...")
+        validation_failed = 0
+        for market, tf in pending_jobs:
+            spec = all_markets[market]
+            config = build_single_config(market, tf, spec, data_dir, workers)
+            try:
+                validate_sweep_config(config, require_existing_data=False)
+                print(f"  OK {market} {tf}")
+            except InstrumentUniverseError as exc:
+                validation_failed += 1
+                print(f"  FAIL {market} {tf}: {exc}")
+
+        if validation_failed:
+            print(f"\n[DRY RUN] {validation_failed} config validation failure(s).")
+            return 1
+
         print("\n[DRY RUN] Would run the above jobs. Exiting.")
         return 0
 
@@ -254,6 +279,17 @@ def run_batch(
         if not config:
             print(f"  SKIP: no data file for {market} {tf}")
             manifest["jobs"][key]["status"] = "skipped"
+            save_manifest(manifest)
+            continue
+
+        try:
+            validate_sweep_config(config, require_existing_data=False)
+        except InstrumentUniverseError as exc:
+            print(f"  CONFIG ERROR: {exc}")
+            manifest["jobs"][key]["status"] = "failed"
+            manifest["jobs"][key]["exit_code"] = 1
+            manifest["jobs"][key]["failure_reason"] = str(exc)
+            failed += 1
             save_manifest(manifest)
             continue
 

@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: eth_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/ETH_5m_2017_2026_dukascopy.csv
+- path: Data/ETH_5m_dukascopy.csv
   market: ETH
   timeframe: 5m
-- path: Data/ETH_15m_2017_2026_dukascopy.csv
+- path: Data/ETH_15m_dukascopy.csv
   market: ETH
   timeframe: 15m
-- path: Data/ETH_30m_2017_2026_dukascopy.csv
+- path: Data/ETH_30m_dukascopy.csv
   market: ETH
   timeframe: 30m
-- path: Data/ETH_60m_2017_2026_dukascopy.csv
+- path: Data/ETH_60m_dukascopy.csv
   market: ETH
   timeframe: 60m
-- path: Data/ETH_daily_2017_2026_dukascopy.csv
+- path: Data/ETH_daily_dukascopy.csv
   market: ETH
   timeframe: daily
 strategy_types: all

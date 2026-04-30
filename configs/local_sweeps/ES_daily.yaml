@@ -1,3 +1,6 @@
+instrument_universe: "cfd_dukascopy"
+price_source: "dukascopy"
+
 sweep:
   name: "es_daily_dukascopy_v1"
   output_dir: "Outputs"

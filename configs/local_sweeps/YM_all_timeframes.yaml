@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: ym_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/YM_5m_2012_2026_dukascopy.csv
+- path: Data/YM_5m_dukascopy.csv
   market: YM
   timeframe: 5m
-- path: Data/YM_15m_2012_2026_dukascopy.csv
+- path: Data/YM_15m_dukascopy.csv
   market: YM
   timeframe: 15m
-- path: Data/YM_30m_2012_2026_dukascopy.csv
+- path: Data/YM_30m_dukascopy.csv
   market: YM
   timeframe: 30m
-- path: Data/YM_60m_2012_2026_dukascopy.csv
+- path: Data/YM_60m_dukascopy.csv
   market: YM
   timeframe: 60m
-- path: Data/YM_daily_2012_2026_dukascopy.csv
+- path: Data/YM_daily_dukascopy.csv
   market: YM
   timeframe: daily
 strategy_types: all
@@ -22,9 +24,9 @@ engine:
   initial_capital: 250000.0
   risk_per_trade: 0.01
   commission_per_contract: 0
-  slippage_ticks: 0
-  tick_value: 5.0
-  dollars_per_point: 5.0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
   use_vectorized_trades: true
 pipeline:
   max_workers_sweep: 36

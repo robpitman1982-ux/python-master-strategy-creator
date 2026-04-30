@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: gc_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/GC_5m_2008_2026_dukascopy.csv
+- path: Data/GC_5m_dukascopy.csv
   market: GC
   timeframe: 5m
-- path: Data/GC_15m_2008_2026_dukascopy.csv
+- path: Data/GC_15m_dukascopy.csv
   market: GC
   timeframe: 15m
-- path: Data/GC_30m_2008_2026_dukascopy.csv
+- path: Data/GC_30m_dukascopy.csv
   market: GC
   timeframe: 30m
-- path: Data/GC_60m_2008_2026_dukascopy.csv
+- path: Data/GC_60m_dukascopy.csv
   market: GC
   timeframe: 60m
-- path: Data/GC_daily_2008_2026_dukascopy.csv
+- path: Data/GC_daily_dukascopy.csv
   market: GC
   timeframe: daily
 strategy_types: all
@@ -23,7 +25,7 @@ engine:
   risk_per_trade: 0.01
   commission_per_contract: 0
   slippage_ticks: 0
-  tick_value: 10.0
+  tick_value: 1.0
   dollars_per_point: 100.0
   use_vectorized_trades: true
 pipeline:

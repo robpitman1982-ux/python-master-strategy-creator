@@ -25,6 +25,7 @@ from modules.bootcamp_scoring import add_bootcamp_scores
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
+from modules.instrument_universe import InstrumentUniverseError, validate_sweep_config
 from modules.portfolio_evaluator import evaluate_portfolio
 from modules.progress import ProgressTracker
 from modules.statistics import annotate_dataframe_with_pvalues
@@ -1191,6 +1192,12 @@ def _run_dataset(
 if __name__ == "__main__":
     args = parse_args()
     _cfg = load_config(args.config)
+
+    try:
+        universe = validate_sweep_config(_cfg, require_existing_data=True)
+        print(f"[OK] Instrument universe preflight: {universe}")
+    except InstrumentUniverseError as exc:
+        raise SystemExit(f"Instrument universe preflight failed: {exc}") from exc
 
     # Re-derive all constants from the loaded config
     CSV_PATH = Path(get_nested(_cfg, "datasets", default=[{}])[0].get("path", "Data/ES_60m_2008_2026_tradestation.csv"))

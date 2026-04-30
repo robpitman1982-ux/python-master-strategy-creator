@@ -2,6 +2,8 @@
 
 **Purpose:** Before running the first local cluster sweep, lock down the data/config/naming architecture so discovery sweeps produce correct P&L, match what trades on The5ers, and scale cleanly to 24 markets.
 
+**2026-04-30 update:** the active guardrail reference is now `docs/INSTRUMENT_UNIVERSES.md`. Converted CFD OHLC files use canonical no-year basenames (`{MARKET}_{TF}_dukascopy.csv`) and runner preflight rejects futures-vs-CFD contract mismatches before loading data.
+
 **Author:** Claude (architecture planning) → Claude Code (execution)
 **Scope of Session 68:** ES daily, c240 only, end-to-end validation. No workers, no multi-market.
 

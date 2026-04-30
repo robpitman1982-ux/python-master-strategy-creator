@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: ec_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/EC_5m_2008_2026_dukascopy.csv
+- path: Data/EC_5m_dukascopy.csv
   market: EC
   timeframe: 5m
-- path: Data/EC_15m_2008_2026_dukascopy.csv
+- path: Data/EC_15m_dukascopy.csv
   market: EC
   timeframe: 15m
-- path: Data/EC_30m_2008_2026_dukascopy.csv
+- path: Data/EC_30m_dukascopy.csv
   market: EC
   timeframe: 30m
-- path: Data/EC_60m_2008_2026_dukascopy.csv
+- path: Data/EC_60m_dukascopy.csv
   market: EC
   timeframe: 60m
-- path: Data/EC_daily_2008_2026_dukascopy.csv
+- path: Data/EC_daily_dukascopy.csv
   market: EC
   timeframe: daily
 strategy_types: all

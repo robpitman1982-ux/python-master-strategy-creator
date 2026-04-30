@@ -5,7 +5,7 @@
 # Key decisions:
 #   - slippage_ticks: 0 and commission: 0 for CFD sweeps (costs applied in portfolio selector)
 #   - oos_split_date: 2020-01-01 for indices (2012+ start), 2016-01-01 for FX/metals (2008+ start)
-#   - dollars_per_point: set per CFD contract (1 standard lot = 1 unit per point)
+#   - dollars_per_point: set per CFD contract, not futures contract
 #   - cost_profile: typical retail CFD spreads for post-sweep filtering
 
 # ============================================================================
@@ -17,16 +17,16 @@ ES:
   source: dukascopy
   tds_symbol: "USA_500_Index"
   data_files:
-    5m: "ES_5m_2012_2026_dukascopy.csv"
-    15m: "ES_15m_2012_2026_dukascopy.csv"
-    30m: "ES_30m_2012_2026_dukascopy.csv"
-    60m: "ES_60m_2012_2026_dukascopy.csv"
-    daily: "ES_daily_2012_2026_dukascopy.csv"
+    5m: "ES_5m_dukascopy.csv"
+    15m: "ES_15m_dukascopy.csv"
+    30m: "ES_30m_dukascopy.csv"
+    60m: "ES_60m_dukascopy.csv"
+    daily: "ES_daily_dukascopy.csv"
   engine:
-    tick_value: 12.50
-    dollars_per_point: 50.0
+    tick_value: 0.01
+    dollars_per_point: 1.0
     commission_per_contract: 0
-    slippage_ticks: 0
+    slippage_ticks: 1
   cost_profile:
     spread_pts: 0.50
     swap_per_micro_per_night: 0.10
@@ -38,16 +38,16 @@ NQ:
   source: dukascopy
   tds_symbol: "USA_100_Technical"
   data_files:
-    5m: "NQ_5m_2012_2026_dukascopy.csv"
-    15m: "NQ_15m_2012_2026_dukascopy.csv"
-    30m: "NQ_30m_2012_2026_dukascopy.csv"
-    60m: "NQ_60m_2012_2026_dukascopy.csv"
-    daily: "NQ_daily_2012_2026_dukascopy.csv"
+    5m: "NQ_5m_dukascopy.csv"
+    15m: "NQ_15m_dukascopy.csv"
+    30m: "NQ_30m_dukascopy.csv"
+    60m: "NQ_60m_dukascopy.csv"
+    daily: "NQ_daily_dukascopy.csv"
   engine:
-    tick_value: 5.00
-    dollars_per_point: 20.0
+    tick_value: 0.01
+    dollars_per_point: 1.0
     commission_per_contract: 0
-    slippage_ticks: 0
+    slippage_ticks: 1
   cost_profile:
     spread_pts: 1.50
     swap_per_micro_per_night: 0.15
@@ -59,16 +59,16 @@ YM:
   source: dukascopy
   tds_symbol: "USA_30_Index"
   data_files:
-    5m: "YM_5m_2012_2026_dukascopy.csv"
-    15m: "YM_15m_2012_2026_dukascopy.csv"
-    30m: "YM_30m_2012_2026_dukascopy.csv"
-    60m: "YM_60m_2012_2026_dukascopy.csv"
-    daily: "YM_daily_2012_2026_dukascopy.csv"
+    5m: "YM_5m_dukascopy.csv"
+    15m: "YM_15m_dukascopy.csv"
+    30m: "YM_30m_dukascopy.csv"
+    60m: "YM_60m_dukascopy.csv"
+    daily: "YM_daily_dukascopy.csv"
   engine:
-    tick_value: 5.00
-    dollars_per_point: 5.0
+    tick_value: 0.01
+    dollars_per_point: 1.0
     commission_per_contract: 0
-    slippage_ticks: 0
+    slippage_ticks: 1
   cost_profile:
     spread_pts: 2.00
     swap_per_micro_per_night: 0.12
@@ -80,11 +80,11 @@ RTY:
   source: dukascopy
   tds_symbol: "US_Small_Cap_2000"
   data_files:
-    5m: "RTY_5m_2012_2026_dukascopy.csv"
-    15m: "RTY_15m_2012_2026_dukascopy.csv"
-    30m: "RTY_30m_2012_2026_dukascopy.csv"
-    60m: "RTY_60m_2012_2026_dukascopy.csv"
-    daily: "RTY_daily_2012_2026_dukascopy.csv"
+    5m: "RTY_5m_dukascopy.csv"
+    15m: "RTY_15m_dukascopy.csv"
+    30m: "RTY_30m_dukascopy.csv"
+    60m: "RTY_60m_dukascopy.csv"
+    daily: "RTY_daily_dukascopy.csv"
   engine:
     tick_value: 5.00
     dollars_per_point: 50.0
@@ -105,11 +105,11 @@ DAX:
   source: dukascopy
   tds_symbol: "Germany_40_Index"
   data_files:
-    5m: "DAX_5m_2012_2026_dukascopy.csv"
-    15m: "DAX_15m_2012_2026_dukascopy.csv"
-    30m: "DAX_30m_2012_2026_dukascopy.csv"
-    60m: "DAX_60m_2012_2026_dukascopy.csv"
-    daily: "DAX_daily_2012_2026_dukascopy.csv"
+    5m: "DAX_5m_dukascopy.csv"
+    15m: "DAX_15m_dukascopy.csv"
+    30m: "DAX_30m_dukascopy.csv"
+    60m: "DAX_60m_dukascopy.csv"
+    daily: "DAX_daily_dukascopy.csv"
   engine:
     tick_value: 1.00
     dollars_per_point: 1.0
@@ -126,11 +126,11 @@ N225:
   source: dukascopy
   tds_symbol: "Japan_225"
   data_files:
-    5m: "N225_5m_2012_2026_dukascopy.csv"
-    15m: "N225_15m_2012_2026_dukascopy.csv"
-    30m: "N225_30m_2012_2026_dukascopy.csv"
-    60m: "N225_60m_2012_2026_dukascopy.csv"
-    daily: "N225_daily_2012_2026_dukascopy.csv"
+    5m: "N225_5m_dukascopy.csv"
+    15m: "N225_15m_dukascopy.csv"
+    30m: "N225_30m_dukascopy.csv"
+    60m: "N225_60m_dukascopy.csv"
+    daily: "N225_daily_dukascopy.csv"
   engine:
     tick_value: 5.00
     dollars_per_point: 5.0
@@ -147,11 +147,11 @@ FTSE:
   source: dukascopy
   tds_symbol: "UK_100_Index"
   data_files:
-    5m: "FTSE_5m_2012_2026_dukascopy.csv"
-    15m: "FTSE_15m_2012_2026_dukascopy.csv"
-    30m: "FTSE_30m_2012_2026_dukascopy.csv"
-    60m: "FTSE_60m_2012_2026_dukascopy.csv"
-    daily: "FTSE_daily_2012_2026_dukascopy.csv"
+    5m: "FTSE_5m_dukascopy.csv"
+    15m: "FTSE_15m_dukascopy.csv"
+    30m: "FTSE_30m_dukascopy.csv"
+    60m: "FTSE_60m_dukascopy.csv"
+    daily: "FTSE_daily_dukascopy.csv"
   engine:
     tick_value: 1.00
     dollars_per_point: 1.0
@@ -168,11 +168,11 @@ STOXX:
   source: dukascopy
   tds_symbol: "Europe_50_Index"
   data_files:
-    5m: "STOXX_5m_2012_2026_dukascopy.csv"
-    15m: "STOXX_15m_2012_2026_dukascopy.csv"
-    30m: "STOXX_30m_2012_2026_dukascopy.csv"
-    60m: "STOXX_60m_2012_2026_dukascopy.csv"
-    daily: "STOXX_daily_2012_2026_dukascopy.csv"
+    5m: "STOXX_5m_dukascopy.csv"
+    15m: "STOXX_15m_dukascopy.csv"
+    30m: "STOXX_30m_dukascopy.csv"
+    60m: "STOXX_60m_dukascopy.csv"
+    daily: "STOXX_daily_dukascopy.csv"
   engine:
     tick_value: 1.00
     dollars_per_point: 1.0
@@ -189,11 +189,11 @@ CAC:
   source: dukascopy
   tds_symbol: "France_40_Index"
   data_files:
-    5m: "CAC_5m_2012_2026_dukascopy.csv"
-    15m: "CAC_15m_2012_2026_dukascopy.csv"
-    30m: "CAC_30m_2012_2026_dukascopy.csv"
-    60m: "CAC_60m_2012_2026_dukascopy.csv"
-    daily: "CAC_daily_2012_2026_dukascopy.csv"
+    5m: "CAC_5m_dukascopy.csv"
+    15m: "CAC_15m_dukascopy.csv"
+    30m: "CAC_30m_dukascopy.csv"
+    60m: "CAC_60m_dukascopy.csv"
+    daily: "CAC_daily_dukascopy.csv"
   engine:
     tick_value: 1.00
     dollars_per_point: 1.0
@@ -214,13 +214,13 @@ GC:
   source: dukascopy
   tds_symbol: "XAUUSD"
   data_files:
-    5m: "GC_5m_2008_2026_dukascopy.csv"
-    15m: "GC_15m_2008_2026_dukascopy.csv"
-    30m: "GC_30m_2008_2026_dukascopy.csv"
-    60m: "GC_60m_2008_2026_dukascopy.csv"
-    daily: "GC_daily_2008_2026_dukascopy.csv"
+    5m: "GC_5m_dukascopy.csv"
+    15m: "GC_15m_dukascopy.csv"
+    30m: "GC_30m_dukascopy.csv"
+    60m: "GC_60m_dukascopy.csv"
+    daily: "GC_daily_dukascopy.csv"
   engine:
-    tick_value: 10.00
+    tick_value: 1.00
     dollars_per_point: 100.0
     commission_per_contract: 0
     slippage_ticks: 0
@@ -235,13 +235,13 @@ SI:
   source: dukascopy
   tds_symbol: "XAGUSD"
   data_files:
-    5m: "SI_5m_2008_2026_dukascopy.csv"
-    15m: "SI_15m_2008_2026_dukascopy.csv"
-    30m: "SI_30m_2008_2026_dukascopy.csv"
-    60m: "SI_60m_2008_2026_dukascopy.csv"
-    daily: "SI_daily_2008_2026_dukascopy.csv"
+    5m: "SI_5m_dukascopy.csv"
+    15m: "SI_15m_dukascopy.csv"
+    30m: "SI_30m_dukascopy.csv"
+    60m: "SI_60m_dukascopy.csv"
+    daily: "SI_daily_dukascopy.csv"
   engine:
-    tick_value: 25.00
+    tick_value: 5.00
     dollars_per_point: 5000.0
     commission_per_contract: 0
     slippage_ticks: 0
@@ -256,11 +256,11 @@ HG:
   source: dukascopy
   tds_symbol: "High_Grade_Copper"
   data_files:
-    5m: "HG_5m_2008_2026_dukascopy.csv"
-    15m: "HG_15m_2008_2026_dukascopy.csv"
-    30m: "HG_30m_2008_2026_dukascopy.csv"
-    60m: "HG_60m_2008_2026_dukascopy.csv"
-    daily: "HG_daily_2008_2026_dukascopy.csv"
+    5m: "HG_5m_dukascopy.csv"
+    15m: "HG_15m_dukascopy.csv"
+    30m: "HG_30m_dukascopy.csv"
+    60m: "HG_60m_dukascopy.csv"
+    daily: "HG_daily_dukascopy.csv"
   engine:
     tick_value: 12.50
     dollars_per_point: 25000.0
@@ -281,14 +281,14 @@ CL:
   source: dukascopy
   tds_symbol: "US_Light_Crude"
   data_files:
-    5m: "CL_5m_2008_2026_dukascopy.csv"
-    15m: "CL_15m_2008_2026_dukascopy.csv"
-    30m: "CL_30m_2008_2026_dukascopy.csv"
-    60m: "CL_60m_2008_2026_dukascopy.csv"
-    daily: "CL_daily_2008_2026_dukascopy.csv"
+    5m: "CL_5m_dukascopy.csv"
+    15m: "CL_15m_dukascopy.csv"
+    30m: "CL_30m_dukascopy.csv"
+    60m: "CL_60m_dukascopy.csv"
+    daily: "CL_daily_dukascopy.csv"
   engine:
-    tick_value: 10.00
-    dollars_per_point: 1000.0
+    tick_value: 1.00
+    dollars_per_point: 100.0
     commission_per_contract: 0
     slippage_ticks: 0
   cost_profile:
@@ -302,11 +302,11 @@ NG:
   source: dukascopy
   tds_symbol: "Natural_Gas"
   data_files:
-    5m: "NG_5m_2008_2026_dukascopy.csv"
-    15m: "NG_15m_2008_2026_dukascopy.csv"
-    30m: "NG_30m_2008_2026_dukascopy.csv"
-    60m: "NG_60m_2008_2026_dukascopy.csv"
-    daily: "NG_daily_2008_2026_dukascopy.csv"
+    5m: "NG_5m_dukascopy.csv"
+    15m: "NG_15m_dukascopy.csv"
+    30m: "NG_30m_dukascopy.csv"
+    60m: "NG_60m_dukascopy.csv"
+    daily: "NG_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 10000.0
@@ -323,11 +323,11 @@ BRENT:
   source: dukascopy
   tds_symbol: "US_Brent_Crude"
   data_files:
-    5m: "BRENT_5m_2008_2026_dukascopy.csv"
-    15m: "BRENT_15m_2008_2026_dukascopy.csv"
-    30m: "BRENT_30m_2008_2026_dukascopy.csv"
-    60m: "BRENT_60m_2008_2026_dukascopy.csv"
-    daily: "BRENT_daily_2008_2026_dukascopy.csv"
+    5m: "BRENT_5m_dukascopy.csv"
+    15m: "BRENT_15m_dukascopy.csv"
+    30m: "BRENT_30m_dukascopy.csv"
+    60m: "BRENT_60m_dukascopy.csv"
+    daily: "BRENT_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 1000.0
@@ -348,11 +348,11 @@ EC:
   source: dukascopy
   tds_symbol: "EURUSD"
   data_files:
-    5m: "EC_5m_2008_2026_dukascopy.csv"
-    15m: "EC_15m_2008_2026_dukascopy.csv"
-    30m: "EC_30m_2008_2026_dukascopy.csv"
-    60m: "EC_60m_2008_2026_dukascopy.csv"
-    daily: "EC_daily_2008_2026_dukascopy.csv"
+    5m: "EC_5m_dukascopy.csv"
+    15m: "EC_15m_dukascopy.csv"
+    30m: "EC_30m_dukascopy.csv"
+    60m: "EC_60m_dukascopy.csv"
+    daily: "EC_daily_dukascopy.csv"
   engine:
     tick_value: 6.25
     dollars_per_point: 125000.0
@@ -369,11 +369,11 @@ JY:
   source: dukascopy
   tds_symbol: "USDJPY"
   data_files:
-    5m: "JY_5m_2008_2026_dukascopy.csv"
-    15m: "JY_15m_2008_2026_dukascopy.csv"
-    30m: "JY_30m_2008_2026_dukascopy.csv"
-    60m: "JY_60m_2008_2026_dukascopy.csv"
-    daily: "JY_daily_2008_2026_dukascopy.csv"
+    5m: "JY_5m_dukascopy.csv"
+    15m: "JY_15m_dukascopy.csv"
+    30m: "JY_30m_dukascopy.csv"
+    60m: "JY_60m_dukascopy.csv"
+    daily: "JY_daily_dukascopy.csv"
   engine:
     tick_value: 6.25
     dollars_per_point: 125000.0
@@ -390,11 +390,11 @@ BP:
   source: dukascopy
   tds_symbol: "GBPUSD"
   data_files:
-    5m: "BP_5m_2008_2026_dukascopy.csv"
-    15m: "BP_15m_2008_2026_dukascopy.csv"
-    30m: "BP_30m_2008_2026_dukascopy.csv"
-    60m: "BP_60m_2008_2026_dukascopy.csv"
-    daily: "BP_daily_2008_2026_dukascopy.csv"
+    5m: "BP_5m_dukascopy.csv"
+    15m: "BP_15m_dukascopy.csv"
+    30m: "BP_30m_dukascopy.csv"
+    60m: "BP_60m_dukascopy.csv"
+    daily: "BP_daily_dukascopy.csv"
   engine:
     tick_value: 6.25
     dollars_per_point: 62500.0
@@ -411,11 +411,11 @@ AD:
   source: dukascopy
   tds_symbol: "AUDUSD"
   data_files:
-    5m: "AD_5m_2008_2026_dukascopy.csv"
-    15m: "AD_15m_2008_2026_dukascopy.csv"
-    30m: "AD_30m_2008_2026_dukascopy.csv"
-    60m: "AD_60m_2008_2026_dukascopy.csv"
-    daily: "AD_daily_2008_2026_dukascopy.csv"
+    5m: "AD_5m_dukascopy.csv"
+    15m: "AD_15m_dukascopy.csv"
+    30m: "AD_30m_dukascopy.csv"
+    60m: "AD_60m_dukascopy.csv"
+    daily: "AD_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 100000.0
@@ -432,11 +432,11 @@ USDCAD:
   source: dukascopy
   tds_symbol: "USDCAD"
   data_files:
-    5m: "USDCAD_5m_2008_2026_dukascopy.csv"
-    15m: "USDCAD_15m_2008_2026_dukascopy.csv"
-    30m: "USDCAD_30m_2008_2026_dukascopy.csv"
-    60m: "USDCAD_60m_2008_2026_dukascopy.csv"
-    daily: "USDCAD_daily_2008_2026_dukascopy.csv"
+    5m: "USDCAD_5m_dukascopy.csv"
+    15m: "USDCAD_15m_dukascopy.csv"
+    30m: "USDCAD_30m_dukascopy.csv"
+    60m: "USDCAD_60m_dukascopy.csv"
+    daily: "USDCAD_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 100000.0
@@ -453,11 +453,11 @@ USDCHF:
   source: dukascopy
   tds_symbol: "USDCHF"
   data_files:
-    5m: "USDCHF_5m_2008_2026_dukascopy.csv"
-    15m: "USDCHF_15m_2008_2026_dukascopy.csv"
-    30m: "USDCHF_30m_2008_2026_dukascopy.csv"
-    60m: "USDCHF_60m_2008_2026_dukascopy.csv"
-    daily: "USDCHF_daily_2008_2026_dukascopy.csv"
+    5m: "USDCHF_5m_dukascopy.csv"
+    15m: "USDCHF_15m_dukascopy.csv"
+    30m: "USDCHF_30m_dukascopy.csv"
+    60m: "USDCHF_60m_dukascopy.csv"
+    daily: "USDCHF_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 100000.0
@@ -474,11 +474,11 @@ NZDUSD:
   source: dukascopy
   tds_symbol: "NZDUSD"
   data_files:
-    5m: "NZDUSD_5m_2008_2026_dukascopy.csv"
-    15m: "NZDUSD_15m_2008_2026_dukascopy.csv"
-    30m: "NZDUSD_30m_2008_2026_dukascopy.csv"
-    60m: "NZDUSD_60m_2008_2026_dukascopy.csv"
-    daily: "NZDUSD_daily_2008_2026_dukascopy.csv"
+    5m: "NZDUSD_5m_dukascopy.csv"
+    15m: "NZDUSD_15m_dukascopy.csv"
+    30m: "NZDUSD_30m_dukascopy.csv"
+    60m: "NZDUSD_60m_dukascopy.csv"
+    daily: "NZDUSD_daily_dukascopy.csv"
   engine:
     tick_value: 10.00
     dollars_per_point: 100000.0
@@ -499,11 +499,11 @@ BTC:
   source: dukascopy
   tds_symbol: "Bitcoin_USD"
   data_files:
-    5m: "BTC_5m_2017_2026_dukascopy.csv"
-    15m: "BTC_15m_2017_2026_dukascopy.csv"
-    30m: "BTC_30m_2017_2026_dukascopy.csv"
-    60m: "BTC_60m_2017_2026_dukascopy.csv"
-    daily: "BTC_daily_2017_2026_dukascopy.csv"
+    5m: "BTC_5m_dukascopy.csv"
+    15m: "BTC_15m_dukascopy.csv"
+    30m: "BTC_30m_dukascopy.csv"
+    60m: "BTC_60m_dukascopy.csv"
+    daily: "BTC_daily_dukascopy.csv"
   engine:
     tick_value: 25.00
     dollars_per_point: 5.0
@@ -520,11 +520,11 @@ ETH:
   source: dukascopy
   tds_symbol: "Ether_USD"
   data_files:
-    5m: "ETH_5m_2017_2026_dukascopy.csv"
-    15m: "ETH_15m_2017_2026_dukascopy.csv"
-    30m: "ETH_30m_2017_2026_dukascopy.csv"
-    60m: "ETH_60m_2017_2026_dukascopy.csv"
-    daily: "ETH_daily_2017_2026_dukascopy.csv"
+    5m: "ETH_5m_dukascopy.csv"
+    15m: "ETH_15m_dukascopy.csv"
+    30m: "ETH_30m_dukascopy.csv"
+    60m: "ETH_60m_dukascopy.csv"
+    daily: "ETH_daily_dukascopy.csv"
   engine:
     tick_value: 0.05
     dollars_per_point: 1.0

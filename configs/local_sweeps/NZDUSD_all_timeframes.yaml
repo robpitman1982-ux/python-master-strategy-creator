@@ -1,20 +1,22 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
 sweep:
   name: nzdusd_all_tf_cfd
   output_dir: Outputs
 datasets:
-- path: Data/NZDUSD_5m_2008_2026_dukascopy.csv
+- path: Data/NZDUSD_5m_dukascopy.csv
   market: NZDUSD
   timeframe: 5m
-- path: Data/NZDUSD_15m_2008_2026_dukascopy.csv
+- path: Data/NZDUSD_15m_dukascopy.csv
   market: NZDUSD
   timeframe: 15m
-- path: Data/NZDUSD_30m_2008_2026_dukascopy.csv
+- path: Data/NZDUSD_30m_dukascopy.csv
   market: NZDUSD
   timeframe: 30m
-- path: Data/NZDUSD_60m_2008_2026_dukascopy.csv
+- path: Data/NZDUSD_60m_dukascopy.csv
   market: NZDUSD
   timeframe: 60m
-- path: Data/NZDUSD_daily_2008_2026_dukascopy.csv
+- path: Data/NZDUSD_daily_dukascopy.csv
   market: NZDUSD
   timeframe: daily
 strategy_types: all
