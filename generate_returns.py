@@ -23,6 +23,7 @@ from modules.portfolio_evaluator import _rebuild_strategy_from_leaderboard_row
 REPO_ROOT = Path(__file__).resolve().parent
 for candidate in (
     REPO_ROOT / "Outputs" / "ultimate_leaderboard_cfd.csv",
+    REPO_ROOT / "Outputs" / "ultimate_leaderboard_FUTURES.csv",
     REPO_ROOT / "Outputs" / "ultimate_leaderboard.csv",
     REPO_ROOT / "Outputs" / "ultimate_leaderboard_bootcamp.csv",
 ):

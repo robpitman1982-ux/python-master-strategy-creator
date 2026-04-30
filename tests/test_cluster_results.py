@@ -120,6 +120,7 @@ def test_finalize_cluster_run_writes_master_and_exports() -> None:
         assert (paths.outputs_dir / "master_leaderboard_cfd.csv").exists()
         assert (storage_root / "exports" / "master_leaderboard.csv").exists()
         assert (storage_root / "exports" / "master_leaderboard_cfd.csv").exists()
+        assert (storage_root / "exports" / "ultimate_leaderboard_FUTURES.csv").exists()
         assert (storage_root / "exports" / "ultimate_leaderboard.csv").exists()
         assert (storage_root / "exports" / "ultimate_leaderboard_cfd.csv").exists()
         assert (storage_root / "runs" / "LATEST_RUN.txt").read_text(encoding="utf-8").strip() == "run-2"
@@ -155,7 +156,7 @@ def test_partial_run_still_flows_into_ultimate() -> None:
         )
         result = finalize_cluster_run(run_id="run-nq-hg-15m", storage_root=storage_root)
 
-        ultimate = pd.read_csv(storage_root / "exports" / "ultimate_leaderboard.csv")
+        ultimate = pd.read_csv(storage_root / "exports" / "ultimate_leaderboard_FUTURES.csv")
         datasets = set(ultimate["dataset"].astype(str))
         assert "ES_5m_dukascopy" in datasets
         assert "NQ_15m_dukascopy" in datasets
@@ -187,6 +188,7 @@ def test_mirror_storage_to_backup_copies_exports_and_latest_run() -> None:
         assert result["latest_run_id"] == "run-mirror"
         assert (backup_root / "leaderboards" / "master_leaderboard.csv").exists()
         assert (backup_root / "leaderboards" / "master_leaderboard_cfd.csv").exists()
+        assert (backup_root / "leaderboards" / "ultimate_leaderboard_FUTURES.csv").exists()
         assert (backup_root / "leaderboards" / "ultimate_leaderboard.csv").exists()
         assert (backup_root / "leaderboards" / "ultimate_leaderboard_cfd.csv").exists()
         assert (backup_root / "sweep_results" / "LATEST_RUN.txt").read_text(encoding="utf-8").strip() == "run-mirror"

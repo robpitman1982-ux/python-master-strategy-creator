@@ -17,6 +17,10 @@ from typing import Any
 
 from modules.leaderboard_ranking import sort_aggregate_leaderboard
 
+FUTURES_ULTIMATE_FILENAME = "ultimate_leaderboard_FUTURES.csv"
+LEGACY_ULTIMATE_FILENAME = "ultimate_leaderboard.csv"
+CFD_ULTIMATE_FILENAME = "ultimate_leaderboard_cfd.csv"
+
 
 def _find_leaderboard_files(runs_root: Path, *, verbose: bool = False) -> list[tuple[str, Path]]:
     """Return (run_id, csv_path) pairs for all leaderboard CSVs under runs_root."""
@@ -92,7 +96,7 @@ def aggregate_ultimate_leaderboard(
     runs_root = storage_root / "runs"
 
     if output_path is None:
-        output_path = storage_root / "ultimate_leaderboard.csv"
+        output_path = storage_root / FUTURES_ULTIMATE_FILENAME
 
     discovered_at = datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -165,10 +169,24 @@ def aggregate_ultimate_leaderboard(
     # 4. Write
     # ------------------------------------------------------------------
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_csv(output_path, index=False)
+
+    output_targets: list[Path] = [output_path]
+    if output_path.name == FUTURES_ULTIMATE_FILENAME:
+        output_targets.append(output_path.parent / LEGACY_ULTIMATE_FILENAME)
+    elif output_path.name == LEGACY_ULTIMATE_FILENAME:
+        output_targets.append(output_path.parent / FUTURES_ULTIMATE_FILENAME)
+
+    written_paths: list[Path] = []
+    seen: set[Path] = set()
+    for target in output_targets:
+        if target in seen:
+            continue
+        seen.add(target)
+        combined.to_csv(target, index=False)
+        written_paths.append(target)
 
     if combined.apply(_looks_like_cfd_row, axis=1).all():
-        cfd_output_path = output_path.parent / "ultimate_leaderboard_cfd.csv"
+        cfd_output_path = output_path.parent / CFD_ULTIMATE_FILENAME
         combined.to_csv(cfd_output_path, index=False)
         if verbose:
             print(f"CFD ultimate leaderboard: {len(combined)} strategies -> {cfd_output_path}")
@@ -178,7 +196,11 @@ def aggregate_ultimate_leaderboard(
             f"\nUltimate leaderboard: {len(combined)} strategies "
             f"({duplicates_removed} duplicates removed from {total_raw} raw rows)"
         )
-        print(f"Written to: {output_path}")
+        print(f"Written to: {written_paths[0]}")
+        if len(written_paths) > 1:
+            print("Alias copies:")
+            for alias_path in written_paths[1:]:
+                print(f"  {alias_path}")
         cols_preview = ["rank", "strategy_type", "dataset", "quality_flag", pf_col or "—", "run_id"]
         preview_cols = [c for c in cols_preview if c in combined.columns]
         if preview_cols:
@@ -193,7 +215,7 @@ def aggregate_ultimate_leaderboard(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Aggregate accepted strategies from all runs into ultimate_leaderboard.csv"
+        description="Aggregate accepted strategies from all runs into the canonical ultimate leaderboard CSV"
     )
     parser.add_argument("--storage-root", type=Path, default=None, help="Override storage root path")
     parser.add_argument("--output", type=Path, default=None, help="Override output CSV path")

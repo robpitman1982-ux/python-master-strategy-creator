@@ -1,6 +1,8 @@
 # Strategy Discovery Engine — Full Project Summary
 ## For Cross-LLM Consultation | March 2026
 
+NOTE (2026-05-01): This file is a historical March-2026 architecture summary from the earlier futures/cloud era. For current local-cluster / CFD-era state, current leaderboard naming, Google Drive recovery notes, and active operator instructions, read `EXTERNAL_LLM_BRIEFING.md`, `MASTER_HANDOVER.md`, and `docs/PROJECT_REVIEW_2026-04-26.md` first. In particular, the old historical futures corpus is preserved at `Outputs/ultimate_leaderboard.csv` and in Drive as `ultimate_leaderboard_LEGACY_FUTURES_649rows_2026-04-04.csv`, while the current canonical generic export name is now `ultimate_leaderboard_FUTURES.csv` plus legacy alias `ultimate_leaderboard.csv`.
+
 ---
 
 ## What We Are Building

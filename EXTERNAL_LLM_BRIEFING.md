@@ -4,7 +4,7 @@
 > Refresh this file at every checkpoint or session-end ritual.
 > Paste the whole file into an external chat, then ask the consultation question.
 >
-> **Last refreshed:** 2026-04-30 (Codex CFD batch launch)
+> **Last refreshed:** 2026-05-01 (Codex handover + leaderboard recovery)
 > **Maintained by:** Claude Code on Latitude
 
 ---
@@ -17,22 +17,21 @@ It is **research, not a live trading system**. The output feeds Portfolio EAs de
 
 ---
 
-## Current state (2026-04-30)
+## Current state (2026-05-01)
 
 ### Code state
-- ~454 strategies in ultimate leaderboard (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
+- Historical futures corpus is preserved locally and in Drive: `Outputs/ultimate_leaderboard.csv` is a 649-row TradeStation futures archive, `Outputs/ultimate_leaderboard_bootcamp.csv` is the 526-row bootcamp-ranked subset, and Drive now keeps an explicit recovery copy at `ultimate_leaderboard_LEGACY_FUTURES_649rows_2026-04-04.csv`
 - 12 strategy families: 3 long base (trend, MR, breakout) + 3 short + 9 subtypes
 - Vectorized engine: 14-23x speedup, parity-tested at 1e-10 tolerance
-- Active research leaderboards are now neutral, not Bootcamp-ranked: futures use `family_leaderboard_results.csv` / `master_leaderboard.csv` / `ultimate_leaderboard.csv`, CFDs use `family_leaderboard_results.csv` / `master_leaderboard_cfd.csv` / `ultimate_leaderboard_cfd.csv`
+- Active research leaderboards are now neutral, not Bootcamp-ranked: generic/futures canonical exports use `family_leaderboard_results.csv` / `master_leaderboard.csv` / `ultimate_leaderboard_FUTURES.csv` plus legacy alias `ultimate_leaderboard.csv`; CFDs use `family_leaderboard_results.csv` / `master_leaderboard_cfd.csv` / `ultimate_leaderboard_cfd.csv`
 - Portfolio selector: 3-layer correlation + Expected Conditional Drawdown + block bootstrap MC + regime survival gate
 - 4 prop firm programs: Bootcamp $250K, High Stakes $100K, Pro Growth $5K, Hyper Growth $5K
-- Test suite: 257+ tests passing across smoke, subtypes, parity, portfolio, prop firm, MC
+- Focused tests for the latest naming/mirror work are green; broader suite was 287/287 earlier in the 2026-04-30 session block
 
-### In-flight batch
-- First real CFD cluster batch launched by Codex at `2026-04-30T16:25:25+10:00` from commit `9ed5648`
-- Scope: `ES` + `NQ`, timeframes `daily`, `60m`, `30m`
-- Host assignments: c240 `ES:30m` (72 workers), gen8 `ES:60m` (44), r630 `ES:daily NQ:daily NQ:60m` (80), g9 `NQ:30m` (28)
-- Logs: `/tmp/psc_logs/psc_9ed5648_es_nq_{c240,gen8,r630,g9}.log` on cluster hosts
+### In-flight / latest cluster state
+- The validated CFD run `2026-04-30_es_nq_validation` is finalized on c240 and mirrored into Drive with full run artifacts
+- A later overnight ES full batch was monitored ad hoc across the cluster; `r630` was confirmed healthy but CPU-bound on the heavy `ES:5m` load, and `ES:daily` was manually moved onto `g9` to shorten the critical path
+- Practical takeaway: compute is healthy, but the batch runner/orchestration layer still needs cleanup to make host-level work allocation less manual
 
 ### Recent additions (Sessions 76-83, this week)
 - **BH-FDR family-aware promotion gate** (Benjamini-Hochberg multiple-testing correction over the sweep family) — opt-in via `promotion_gate.bh_fdr_alpha`
@@ -57,8 +56,9 @@ It is **research, not a live trading system**. The output feeds Portfolio EAs de
 - Latitude (Windows) is the dev machine; Claude Code in VS Code is the primary interface
 - X1 Carbon hosts a parallel Claude Remote Control hub from phone
 
-### Known throughput bug (uncovered Session 76)
-`run_cluster_sweep.py` is misleadingly named — it's a single-host sequential batch runner. 3/4 cluster hosts sit idle during sweeps. Estimated 24-market sweep on c240 alone: 15-25h vs 4-6h with proper per-host dispatch. **Refactor needed before next big sweep.**
+### Known orchestration / naming bugs
+1. `run_cluster_sweep.py` is misleadingly named — it's a single-host sequential batch runner. 3/4 cluster hosts can sit idle during sweeps unless work is manually split. Estimated 24-market sweep on c240 alone: 15-25h vs 4-6h with proper per-host dispatch. **Refactor needed before next big sweep.**
+2. The Drive mirror originally overwrote an ambiguous historical `ultimate_leaderboard.csv` with the new canonical CFD-era export. This is now corrected by explicit naming plus a restored archival copy, but future work should continue avoiding ambiguous generic filenames in backups.
 
 ---
 

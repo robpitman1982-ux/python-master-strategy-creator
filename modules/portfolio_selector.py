@@ -95,6 +95,7 @@ def _resolve_leaderboard_path(leaderboard_path: str | os.PathLike[str]) -> str:
     candidates = [
         requested,
         requested.parent / "ultimate_leaderboard_cfd.csv",
+        requested.parent / "ultimate_leaderboard_FUTURES.csv",
         requested.parent / "ultimate_leaderboard.csv",
         requested.parent / "ultimate_leaderboard_bootcamp.csv",
     ]

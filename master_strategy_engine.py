@@ -1308,7 +1308,7 @@ if __name__ == "__main__":
                 selector_leaderboard = (
                     OUTPUTS_DIR / "ultimate_leaderboard_cfd.csv"
                     if emit_cfd_alias
-                    else OUTPUTS_DIR / "ultimate_leaderboard.csv"
+                    else OUTPUTS_DIR / "ultimate_leaderboard_FUTURES.csv"
                 )
                 run_portfolio_selection(
                     leaderboard_path=str(selector_leaderboard),

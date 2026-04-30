@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Iterable
 
 from modules.master_leaderboard import write_master_leaderboards
-from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+from modules.ultimate_leaderboard import (
+    FUTURES_ULTIMATE_FILENAME,
+    LEGACY_ULTIMATE_FILENAME,
+    CFD_ULTIMATE_FILENAME,
+    aggregate_ultimate_leaderboard,
+)
 from paths import EXPORTS_DIR, RUNS_DIR
 
 
@@ -235,12 +240,15 @@ def finalize_cluster_run(
 
     ultimate_df = aggregate_ultimate_leaderboard(
         storage_root=storage_root,
-        output_path=exports_dir / "ultimate_leaderboard.csv",
+        output_path=exports_dir / FUTURES_ULTIMATE_FILENAME,
         verbose=False,
     )
-    exported_files.append(str(exports_dir / "ultimate_leaderboard.csv"))
-    if (exports_dir / "ultimate_leaderboard_cfd.csv").exists():
-        exported_files.append(str(exports_dir / "ultimate_leaderboard_cfd.csv"))
+    if (exports_dir / FUTURES_ULTIMATE_FILENAME).exists():
+        exported_files.append(str(exports_dir / FUTURES_ULTIMATE_FILENAME))
+    if (exports_dir / LEGACY_ULTIMATE_FILENAME).exists():
+        exported_files.append(str(exports_dir / LEGACY_ULTIMATE_FILENAME))
+    if (exports_dir / CFD_ULTIMATE_FILENAME).exists():
+        exported_files.append(str(exports_dir / CFD_ULTIMATE_FILENAME))
 
     (storage_root / "runs" / "LATEST_RUN.txt").write_text(f"{run_id}\n", encoding="utf-8")
 
