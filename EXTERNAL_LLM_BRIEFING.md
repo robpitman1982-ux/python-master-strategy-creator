@@ -4,7 +4,7 @@
 > Refresh this file at every checkpoint or session-end ritual.
 > Paste the whole file into an external chat, then ask the consultation question.
 >
-> **Last refreshed:** 2026-04-30 (Session 79-83)
+> **Last refreshed:** 2026-04-30 (Codex CFD batch launch)
 > **Maintained by:** Claude Code on Latitude
 
 ---
@@ -23,9 +23,16 @@ It is **research, not a live trading system**. The output feeds Portfolio EAs de
 - ~454 strategies in ultimate leaderboard (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
 - 12 strategy families: 3 long base (trend, MR, breakout) + 3 short + 9 subtypes
 - Vectorized engine: 14-23x speedup, parity-tested at 1e-10 tolerance
+- Active research leaderboards are now neutral, not Bootcamp-ranked: futures use `family_leaderboard_results.csv` / `master_leaderboard.csv` / `ultimate_leaderboard.csv`, CFDs use `family_leaderboard_results.csv` / `master_leaderboard_cfd.csv` / `ultimate_leaderboard_cfd.csv`
 - Portfolio selector: 3-layer correlation + Expected Conditional Drawdown + block bootstrap MC + regime survival gate
 - 4 prop firm programs: Bootcamp $250K, High Stakes $100K, Pro Growth $5K, Hyper Growth $5K
 - Test suite: 257+ tests passing across smoke, subtypes, parity, portfolio, prop firm, MC
+
+### In-flight batch
+- First real CFD cluster batch launched by Codex at `2026-04-30T16:25:25+10:00` from commit `9ed5648`
+- Scope: `ES` + `NQ`, timeframes `daily`, `60m`, `30m`
+- Host assignments: c240 `ES:30m` (72 workers), gen8 `ES:60m` (44), r630 `ES:daily NQ:daily NQ:60m` (80), g9 `NQ:30m` (28)
+- Logs: `/tmp/psc_logs/psc_9ed5648_es_nq_{c240,gen8,r630,g9}.log` on cluster hosts
 
 ### Recent additions (Sessions 76-83, this week)
 - **BH-FDR family-aware promotion gate** (Benjamini-Hochberg multiple-testing correction over the sweep family) — opt-in via `promotion_gate.bh_fdr_alpha`

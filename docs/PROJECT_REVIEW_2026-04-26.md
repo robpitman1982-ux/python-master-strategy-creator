@@ -110,6 +110,7 @@ Bulletproof SPOT runner `run_spot_resilient.py` (Session 59): queue-based, multi
 - **Portfolio selector** with 3-layer correlation, ECD, block bootstrap MC, regime survival gate; now owns program-specific ranking directly rather than inheriting `bootcamp_score` from any leaderboard layer
 - **4 prop firm programs** configured with daily DD enforcement (Bootcamp, High Stakes, Pro Growth, Hyper Growth)
 - **Test suite**: 261+ tests passing (smoke, subtypes, parity, portfolio selector, prop firm configs, cross-dataset evaluator)
+- **In-flight validation batch (2026-04-30):** first real ES/NQ CFD cluster sweep launched across c240/gen8/r630/g9 for `daily`, `60m`, and `30m`, with neutral CFD aggregates intentionally starting empty
 
 ### Live trading state
 - **Portfolio #3 EA** on Contabo VPS (89.117.72.49, Windows Server, US East): NQ Daily MR + YM Daily Short Trend + GC Daily MR + NQ 15m MR (all 0.01 lots). Projected 99.6% pass rate, 6.9% DD, ~13.4 months to fund.
