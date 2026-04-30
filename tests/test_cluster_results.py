@@ -191,6 +191,10 @@ def test_mirror_storage_to_backup_copies_exports_and_latest_run() -> None:
         assert (backup_root / "leaderboards" / "ultimate_leaderboard_FUTURES.csv").exists()
         assert (backup_root / "leaderboards" / "ultimate_leaderboard.csv").exists()
         assert (backup_root / "leaderboards" / "ultimate_leaderboard_cfd.csv").exists()
+        assert (backup_root / "recovery" / "README.txt").exists()
+        assert (backup_root / "recovery" / "recovery_manifest.json").exists()
+        assert (backup_root / "recovery" / "ultimate_leaderboard_FUTURES_recovery.csv").exists()
+        assert (backup_root / "recovery" / "ultimate_leaderboard_cfd_recovery.csv").exists()
         assert (backup_root / "sweep_results" / "LATEST_RUN.txt").read_text(encoding="utf-8").strip() == "run-mirror"
         assert (backup_root / "sweep_results" / "runs" / "run-mirror" / "cluster_run_manifest.json").exists()
     finally:

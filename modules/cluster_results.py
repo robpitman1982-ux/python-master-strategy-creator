@@ -17,6 +17,43 @@ from modules.ultimate_leaderboard import (
 from paths import EXPORTS_DIR, RUNS_DIR
 
 
+RECOVERY_COLUMNS = [
+    "rank",
+    "market",
+    "timeframe",
+    "dataset",
+    "strategy_type",
+    "leader_strategy_name",
+    "best_refined_strategy_name",
+    "best_combo_strategy_name",
+    "quality_flag",
+    "accepted_final",
+    "leader_source",
+    "best_combo_filter_class_names",
+    "best_combo_filters",
+    "leader_hold_bars",
+    "leader_stop_distance_atr",
+    "leader_min_avg_range",
+    "leader_momentum_lookback",
+    "leader_exit_type",
+    "leader_trailing_stop_atr",
+    "leader_profit_target_atr",
+    "leader_signal_exit_reference",
+    "oos_pf",
+    "recent_12m_pf",
+    "calmar_ratio",
+    "deflated_sharpe_ratio",
+    "leader_pf",
+    "leader_avg_trade",
+    "leader_net_pnl",
+    "leader_max_drawdown",
+    "leader_trades",
+    "run_id",
+    "source_file",
+    "discovered_at",
+]
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -76,6 +113,81 @@ def _iter_export_files(exports_dir: Path) -> Iterable[Path]:
     if not exports_dir.exists():
         return []
     return sorted(path for path in exports_dir.iterdir() if path.is_file())
+
+
+def export_recovery_artifacts(*, backup_root: Path) -> dict:
+    import pandas as pd
+
+    backup_root = Path(backup_root)
+    leaderboards_dir = backup_root / "leaderboards"
+    recovery_dir = backup_root / "recovery"
+    recovery_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_files: list[str] = []
+    manifest_entries: list[dict[str, object]] = []
+
+    readme_path = recovery_dir / "README.txt"
+    readme_text = (
+        "Recovery exports for strategy reconstruction support.\n"
+        "\n"
+        "Each *_recovery.csv file keeps the strategy-defining fields from the source leaderboard:\n"
+        "- market / timeframe / dataset\n"
+        "- strategy family and strategy name\n"
+        "- filter class names\n"
+        "- refined parameters such as hold bars and ATR stop\n"
+        "- ranking and robustness metrics\n"
+        "\n"
+        "These files are intentionally small and suitable for Google Drive backup.\n"
+        "They improve disaster recovery, but they do NOT replace the repo/code for exact rebuild parity.\n"
+    )
+    readme_path.write_text(readme_text, encoding="utf-8")
+    copied_files.append(str(readme_path))
+
+    if leaderboards_dir.exists():
+        for csv_path in sorted(leaderboards_dir.glob("ultimate_leaderboard*.csv")):
+            try:
+                df = pd.read_csv(csv_path)
+            except Exception as exc:
+                manifest_entries.append(
+                    {
+                        "source": str(csv_path),
+                        "error": str(exc),
+                    }
+                )
+                continue
+
+            selected_columns = [col for col in RECOVERY_COLUMNS if col in df.columns]
+            recovery_df = df[selected_columns].copy()
+            recovery_path = recovery_dir / f"{csv_path.stem}_recovery.csv"
+            recovery_df.to_csv(recovery_path, index=False)
+            copied_files.append(str(recovery_path))
+            manifest_entries.append(
+                {
+                    "source": str(csv_path),
+                    "recovery_file": str(recovery_path),
+                    "rows": int(len(recovery_df)),
+                    "columns": selected_columns,
+                }
+            )
+
+    manifest_path = recovery_dir / "recovery_manifest.json"
+    _write_json(
+        manifest_path,
+        {
+            "generated_utc": _utc_now(),
+            "backup_root": str(backup_root),
+            "leaderboards_dir": str(leaderboards_dir),
+            "recovery_dir": str(recovery_dir),
+            "files": manifest_entries,
+        },
+    )
+    copied_files.append(str(manifest_path))
+
+    return {
+        "backup_root": str(backup_root),
+        "recovery_dir": str(recovery_dir),
+        "copied_files": copied_files,
+    }
 
 
 @dataclass(frozen=True)
@@ -319,9 +431,12 @@ def mirror_storage_to_backup(
         _copy_path(run_src, run_dst)
         copied_runs.append(str(run_dst))
 
+    recovery_result = export_recovery_artifacts(backup_root=backup_root)
+
     return {
         "backup_root": str(backup_root),
         "copied_exports": copied_exports,
         "copied_runs": copied_runs,
         "latest_run_id": latest_run_id,
+        "recovery_files": recovery_result["copied_files"],
     }

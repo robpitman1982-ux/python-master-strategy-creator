@@ -4,7 +4,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from modules.cluster_results import finalize_cluster_run, ingest_host_results, mirror_storage_to_backup
+from modules.cluster_results import (
+    export_recovery_artifacts,
+    finalize_cluster_run,
+    ingest_host_results,
+    mirror_storage_to_backup,
+)
 from run_cluster_sweep import parse_job_specs
 
 
@@ -59,6 +64,18 @@ def _cmd_mirror_backup(args: argparse.Namespace) -> int:
         print(f"  Export: {path_text}")
     for path_text in result["copied_runs"]:
         print(f"  Run: {path_text}")
+    for path_text in result.get("recovery_files", []):
+        print(f"  Recovery: {path_text}")
+    return 0
+
+
+def _cmd_export_recovery(args: argparse.Namespace) -> int:
+    result = export_recovery_artifacts(
+        backup_root=Path(args.backup_root).expanduser(),
+    )
+    print(f"Recovery exports written to: {result['recovery_dir']}")
+    for path_text in result["copied_files"]:
+        print(f"  Recovery: {path_text}")
     return 0
 
 
@@ -94,6 +111,13 @@ def main() -> int:
     mirror.add_argument("--run-id", help="Specific run to mirror. Defaults to LATEST_RUN.txt when omitted.")
     mirror.add_argument("--include-all-runs", action="store_true", help="Mirror every run under runs/ instead of just one.")
     mirror.set_defaults(func=_cmd_mirror_backup)
+
+    recovery = subparsers.add_parser(
+        "export-recovery",
+        help="Build compact strategy recovery CSVs from leaderboard files already sitting in a backup root.",
+    )
+    recovery.add_argument("--backup-root", required=True, help="Backup root, e.g. G:\\My Drive\\strategy-data-backup")
+    recovery.set_defaults(func=_cmd_export_recovery)
 
     args = parser.parse_args()
     return args.func(args)
