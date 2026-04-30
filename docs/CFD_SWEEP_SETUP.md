@@ -2,6 +2,29 @@
 
 **Purpose:** Before running the first local cluster sweep, lock down the data/config/naming architecture so discovery sweeps produce correct P&L, match what trades on The5ers, and scale cleanly to 24 markets.
 
+**2026-04-30 distributed-run update:** `run_cluster_sweep.py` now supports exact job lists with `--jobs MARKET:TIMEFRAME ...`, and `run_distributed_sweep.py` builds capacity-weighted per-host plans from those exact jobs. Use the distributed planner for whole-cluster dry runs so host assignments cannot accidentally expand into a market/timeframe cross-product.
+
+Example whole-cluster CFD plan, no remote work started:
+
+```bash
+python run_distributed_sweep.py \
+  --hosts c240:36 gen8:24 r630:32 g9:16 \
+  --timeframes daily 60m 30m 15m \
+  --data-dir /data/market_data/cfds/ohlc_engine \
+  --remote-root /tmp/psc_DIST \
+  --dry-run-commands
+```
+
+Example exact local runner dry run:
+
+```bash
+python run_cluster_sweep.py \
+  --jobs ES:daily NQ:60m \
+  --data-dir /data/market_data/cfds/ohlc_engine \
+  --workers 36 \
+  --dry-run
+```
+
 **2026-04-30 update:** the active guardrail reference is now `docs/INSTRUMENT_UNIVERSES.md`. Converted CFD OHLC files use canonical no-year basenames (`{MARKET}_{TF}_dukascopy.csv`) and runner preflight rejects futures-vs-CFD contract mismatches before loading data.
 
 **Author:** Claude (architecture planning) → Claude Code (execution)

@@ -63,6 +63,56 @@ def job_key(market: str, timeframe: str) -> str:
     return f"{market}_{timeframe}"
 
 
+def parse_job_specs(job_specs: list[str]) -> list[tuple[str, str]]:
+    """Parse exact job specs in MARKET:TIMEFRAME form."""
+    jobs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for spec in job_specs:
+        if ":" not in spec:
+            raise ValueError(f"Invalid job spec '{spec}'. Use MARKET:TIMEFRAME, e.g. ES:daily")
+        market, timeframe = (part.strip() for part in spec.split(":", 1))
+        if not market or not timeframe:
+            raise ValueError(f"Invalid job spec '{spec}'. Use MARKET:TIMEFRAME, e.g. ES:daily")
+        job = (market.upper(), timeframe)
+        if job not in seen:
+            jobs.append(job)
+            seen.add(job)
+    return jobs
+
+
+def build_job_list(
+    all_markets: dict,
+    markets: list[str] | None,
+    timeframes: list[str] | None,
+    explicit_jobs: list[tuple[str, str]] | None = None,
+) -> list[tuple[str, str]]:
+    """Build and validate the exact sweep job list."""
+    if explicit_jobs is not None:
+        candidate_jobs = explicit_jobs
+    else:
+        if markets is None or timeframes is None:
+            raise ValueError("markets and timeframes are required without explicit jobs")
+        candidate_jobs = [(market, tf) for market in markets for tf in timeframes]
+
+    valid_jobs: list[tuple[str, str]] = []
+    errors: list[str] = []
+    for market, tf in candidate_jobs:
+        if market not in all_markets:
+            errors.append(f"{market}:{tf} unknown market")
+            continue
+        if tf not in all_markets[market].get("data_files", {}):
+            errors.append(f"{market}:{tf} unavailable timeframe")
+            continue
+        valid_jobs.append((market, tf))
+
+    if errors:
+        available = ", ".join(sorted(all_markets.keys()))
+        details = "; ".join(errors)
+        raise ValueError(f"Invalid jobs: {details}. Available markets: {available}")
+
+    return valid_jobs
+
+
 def show_status() -> None:
     """Print current sweep status from manifest."""
     manifest = load_manifest()
@@ -169,6 +219,7 @@ def run_batch(
     workers: int = 36,
     dry_run: bool = False,
     resume: bool = False,
+    explicit_jobs: list[tuple[str, str]] | None = None,
 ) -> int:
     """Run sweeps for all market/timeframe combinations."""
     # Load market specs
@@ -180,19 +231,11 @@ def run_batch(
     with open(MARKETS_CONFIG) as f:
         all_markets = yaml.safe_load(f)
 
-    # Validate markets
-    unknown = set(markets) - set(all_markets.keys())
-    if unknown:
-        print(f"ERROR: Unknown markets: {', '.join(sorted(unknown))}")
-        print(f"Available: {', '.join(sorted(all_markets.keys()))}")
+    try:
+        jobs = build_job_list(all_markets, markets, timeframes, explicit_jobs)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
         return 1
-
-    # Build job list
-    jobs = []
-    for market in markets:
-        for tf in timeframes:
-            if tf in all_markets[market].get("data_files", {}):
-                jobs.append((market, tf))
 
     if not jobs:
         print("No valid market/timeframe combinations found.")
@@ -209,6 +252,8 @@ def run_batch(
     print(f"CLUSTER SWEEP: {len(jobs)} jobs")
     print(f"  Markets:    {', '.join(markets)}")
     print(f"  Timeframes: {', '.join(timeframes)}")
+    if explicit_jobs is not None:
+        print("  Job mode:   exact --jobs list")
     print(f"  Workers:    {workers}")
     print(f"  Data dir:   {data_dir}")
     print(f"  Resume:     {resume}")
@@ -370,6 +415,8 @@ def main() -> None:
                         help="Markets to sweep (e.g., ES NQ GC)")
     parser.add_argument("--timeframes", nargs="*", default=None,
                         help="Timeframes to sweep (e.g., daily 60m 30m)")
+    parser.add_argument("--jobs", nargs="*", default=None,
+                        help="Exact jobs in MARKET:TIMEFRAME form; avoids market/timeframe cross-product")
     parser.add_argument("--data-dir", type=str, default="Data",
                         help="Data directory")
     parser.add_argument("--workers", type=int, default=36,
@@ -404,6 +451,16 @@ def main() -> None:
                               args.dry_run, resume=True)
         sys.exit(exit_code)
 
+    explicit_jobs = None
+    if args.jobs:
+        try:
+            explicit_jobs = parse_job_specs(args.jobs)
+        except ValueError as exc:
+            print(f"ERROR: {exc}")
+            sys.exit(1)
+        args.markets = sorted({market for market, _ in explicit_jobs})
+        args.timeframes = sorted({tf for _, tf in explicit_jobs})
+
     if not args.markets:
         # Default: all markets from cfd_markets.yaml
         if MARKETS_CONFIG.exists():
@@ -418,7 +475,7 @@ def main() -> None:
         args.timeframes = ["5m", "15m", "30m", "60m", "daily"]
 
     exit_code = run_batch(args.markets, args.timeframes, args.data_dir,
-                          args.workers, args.dry_run)
+                          args.workers, args.dry_run, explicit_jobs=explicit_jobs)
     sys.exit(exit_code)
 
 

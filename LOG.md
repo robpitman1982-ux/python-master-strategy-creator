@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex] Exact-job distributed CFD sweep planner
+Status: OK
+What: Added exact job-list support to `run_cluster_sweep.py` via `--jobs MARKET:TIMEFRAME ...`, plus `modules/distributed_sweep.py` and `run_distributed_sweep.py` to partition CFD jobs across cluster hosts by worker capacity. The distributed planner validates every assigned job config using the same instrument-universe preflight and prints per-host commands that preserve exact assignments rather than expanding to a market/timeframe cross-product.
+Outcome: The two-job proof `python run_cluster_sweep.py --jobs ES:daily NQ:60m --data-dir /data/market_data/cfds/ohlc_engine --workers 36 --dry-run` planned exactly two jobs. The full 96-job CFD plan validated for `c240:36 gen8:24 r630:32 g9:16` with no remote work started. Tests: `python -m pytest tests/ --ignore=tests/test_engine_parity.py -q` -> 302 passed, 1 known date-parse warning.
+Files: run_cluster_sweep.py, modules/distributed_sweep.py, run_distributed_sweep.py, tests/test_distributed_sweep.py, docs/CFD_SWEEP_SETUP.md, MASTER_HANDOVER.md, LOG.md.
+Next: Stage or sync these commits to the cluster, run `run_distributed_sweep.py --dry-run-commands`, and execute those per-host dry-run commands on each host before any real multi-host sweep.
+
 ### 2026-04-30 [Codex] c240 ES daily CFD gate passed
 Status: OK
 What: Staged commit `0e525e4` into an isolated c240 temp tree at `/tmp/psc_0e525e4` without mutating the stale/dirty c240 working copy. Ran `run_local_sweep.py --config configs/local_sweeps/ES_daily.yaml --data-dir /data/market_data/cfds/ohlc_engine --dry-run`, then ran the real ES daily CFD sweep on c240 using the same temp tree.
