@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex] Whole-cluster CFD validation and worker sizing
+Status: OK
+What: Completed the cluster-readiness gate for CFD sweeps. Copied the full `/data/market_data/cfds/ohlc_engine/` dataset from c240 to gen8/r630/g9 so all four hosts now have 120 CFD OHLC files locally. Staged the committed repo tree at `/tmp/psc_ad8bf7e_full` on all hosts without mutating their repo working copies. Installed `requirements.txt` into g9 `~/venv`, making g9 compute-ready for the engine. Ran distributed exact-job dry-runs and then a real near-max 60m stress test using venv Python.
+Outcome: Distributed dry-runs passed on all four hosts with exact assignments. Near-max stress reached about c240 90% CPU at 72 workers, gen8 92% at 44 workers, r630 91% at 80 workers, and g9 58% at 28 workers; the 60m jobs were stopped deliberately after proving load because they would run for hours. Daily completion test then ran one real job per host and all outputs completed correctly: c240 CL daily DONE (34 files, ~35 MB, 14 accepted), gen8 NQ daily DONE (34 files, ~36 MB, 15 accepted), r630 GC daily DONE (34 files, ~36 MB, 14 accepted), g9 BP daily DONE (34 files, ~35 MB, 13 accepted). No sweep processes left running afterward.
+Files: MASTER_HANDOVER.md, LOG.md, HANDOVER_FOR_CODEX.md. Runtime artifacts are under `/tmp/psc_ad8bf7e_full/Outputs/` on each host; dataset copies are under `/data/market_data/cfds/ohlc_engine/` on all hosts.
+Next: Use workers c240:72, gen8:44, r630:80, g9:28 for the first full 96-job CFD run, with an option to raise g9 gradually to 34-38 after another stress sample. Decide whether to push local commits before the next run. Avoid 5m until worker memory is separately profiled.
+
 ### 2026-04-30 [Codex] Exact-job distributed CFD sweep planner
 Status: OK
 What: Added exact job-list support to `run_cluster_sweep.py` via `--jobs MARKET:TIMEFRAME ...`, plus `modules/distributed_sweep.py` and `run_distributed_sweep.py` to partition CFD jobs across cluster hosts by worker capacity. The distributed planner validates every assigned job config using the same instrument-universe preflight and prints per-host commands that preserve exact assignments rather than expanding to a market/timeframe cross-product.

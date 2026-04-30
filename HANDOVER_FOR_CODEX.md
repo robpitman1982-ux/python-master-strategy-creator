@@ -12,6 +12,8 @@
 
 You're picking up an active project briefly. The operator will return to a Claude session tomorrow evening (2026-05-01). Your job: **don't lose state, don't break invariants, don't make destructive changes without per-action confirmation**. If the operator hands you a small task, complete it cleanly. If it's a bigger ask, push back and suggest waiting for Claude.
 
+**Codex update, 2026-04-30:** this file was written before Codex's CFD pipeline work. Trust `MASTER_HANDOVER.md` and the top of `LOG.md` over older sections below when they differ. Since this file was written, Codex added futures-vs-CFD universe guardrails, exact-job distributed planning, staged the committed tree on all four cluster hosts, copied the full CFD OHLC dataset to gen8/r630/g9, installed engine requirements into g9 `~/venv`, and validated whole-cluster dry-run/stress/output gates. Recent local commits, not pushed unless Rob explicitly approves: `0e525e4`, `b78999d`, `ad8bf7e`, plus the current checkpoint docs commit.
+
 **Read these in order before doing anything:**
 
 1. `MASTER_HANDOVER.md` — current state, infrastructure, open issues
@@ -74,7 +76,7 @@ The operator has a working spec all collaborators must follow. Violating these w
 ## Current state snapshot (as of 2026-04-30 ~22:00 AEST)
 
 ### Code
-- 287/287 tests pass (run `python -m pytest tests/ --ignore=tests/test_engine_parity.py`)
+- 302 tests pass excluding slow parity tests (run `python -m pytest tests/ --ignore=tests/test_engine_parity.py -q`)
 - ~454 strategies in ultimate leaderboard from prior sweeps
 - 12 strategy families (3 long base + 3 short + 9 subtypes)
 - Vectorized engine: 14-23x speedup, parity-tested
@@ -94,17 +96,25 @@ The operator has a working spec all collaborators must follow. Violating these w
 | c240 | 80 | 192.168.68.53 | 100.120.11.35 | Data hub + compute. `/data/market_data/`, `/data/sweep_results/`, `/data/leaderboards/` |
 | gen8 | 48 | 192.168.68.71 | 100.76.227.12 | Compute worker (post-CPU upgrade; awaiting 2 fans for bays 3-4) |
 | r630 | 88 | 192.168.68.78 | 100.85.102.4 | Compute worker |
-| g9 | 48 / 32 GB | 192.168.68.50 | 100.71.141.89 | Compute worker — **NOT yet onboarded** to cluster |
+| g9 | 48 / 32 GB | 192.168.68.50 | 100.71.141.89 | Compute worker. Codex installed requirements in `~/venv`; use conservative workers due to 31 GiB RAM |
 
 **Latitude is the dev machine.** Tailscale 100.79.72.125. SSH aliases: `c240`, `gen8`, `r630`, `g9`, `g9-ts`. Z: drive mapped to c240 samba.
 
 ### Data
 - 81 TradeStation futures CSVs (~2.2 GB) for 17 markets — local in `Data/`
-- 120 Dukascopy CFD CSVs (24 markets × 5 TFs) on c240 at `/data/market_data/cfds/ohlc_engine/`
+- 120 Dukascopy CFD CSVs (24 markets x 5 TFs) on all four cluster hosts at `/data/market_data/cfds/ohlc_engine/`
 - The5ers tick exports: SP500 (3.1 GB), NAS100 (10.6 GB), partial others
 
-### Cluster contention WARNING
-The betfair-trader project's Claude is using the cluster for sweeps as of last check. **Do not launch any cluster job without operator confirmation that the betfair work is done.** Read-only / single-host / Latitude-local work is fine.
+### Cluster status update
+Rob confirmed the betfair-trader cluster work had completed. Codex validated the whole cluster for this project. Last confirmed state after the daily output test: no `master_strategy_engine`, `run_cluster_sweep`, or `run_local_sweep` processes running on c240/gen8/r630/g9.
+
+Recommended first full-run worker sizing:
+- c240: 72 workers (80 threads)
+- gen8: 44 workers (48 threads)
+- r630: 80 workers (88 threads)
+- g9: 28 workers for the first full run; consider 34-38 only after another stress sample
+
+Avoid 5m for now. The validated full CFD scope is 96 jobs: 24 markets x daily/60m/30m/15m.
 
 ---
 
@@ -131,8 +141,8 @@ All committed and pushed. Six discipline upgrades + six prop-firm-config bugs fi
 
 | Deferred | Why |
 |----------|-----|
-| **g9 onboarding** to compute cluster | Cluster contention with betfair Claude. Plan: rsync (not samba) per betfair Claude advice |
-| **Throughput refactor of `run_cluster_sweep.py`** | Current code is single-host sequential — uses 1/4 of cluster. Need per-host job dispatch |
+| **g9 onboarding** to compute cluster | Codex completed enough for sweep compute: data copied, requirements installed, staged tree validated. Permanent repo/post_sweep cleanup can still be done later. |
+| **Throughput refactor of `run_cluster_sweep.py`** | Codex added exact `--jobs` mode plus `run_distributed_sweep.py` planner. It prints per-host commands; it does not yet supervise remote jobs end-to-end. |
 | **CFD swap costs into MC simulator** (Open Issue #8) | Critical for honest funding timelines. Cost profiles in `configs/cfd_markets.yaml` exist but not consumed by portfolio selector |
 
 ---
@@ -148,7 +158,7 @@ All committed and pushed. Six discipline upgrades + six prop-firm-config bugs fi
 7. X1 Carbon offline — verify SSH isolation when back online.
 8. **CFD swap costs not modeled in MC simulator** — see deferred section above.
 9. Dashboard Live Monitor broken (engine log + promoted candidates panels don't work during active runs).
-10. g9 not yet a compute-cluster member.
+10. g9 is now compute-capable for staged-tree sweeps, but still needs permanent repo/post_sweep polish if desired.
 11. r630 5m sweep OOM'd with 82 workers. Need: per-worker RAM measurement, nested-pool audit, safe worker count derivation.
 
 ---
