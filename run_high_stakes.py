@@ -15,7 +15,6 @@ config = {
             "n_max": 8,
             "candidate_cap": 60,
             "quality_flags": ["ROBUST", "ROBUST_BORDERLINE", "STABLE"],
-            "bootcamp_score_min": 40,
             "oos_pf_threshold": 1.0,
             "n_sims_mc": 10_000,
             "n_sims_sizing": 1_000,

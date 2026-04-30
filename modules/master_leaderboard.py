@@ -172,6 +172,7 @@ def write_master_leaderboards(
     outputs_root: str | Path = "Outputs",
     min_pf: float = 1.0,
     min_oos_pf: float = 1.0,
+    include_bootcamp_scores: bool = True,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     outputs_root = Path(outputs_root)
     outputs_root.mkdir(parents=True, exist_ok=True)
@@ -182,15 +183,21 @@ def write_master_leaderboards(
         min_oos_pf=min_oos_pf,
         ranking="classic",
     )
-    bootcamp = aggregate_master_leaderboard(
-        outputs_root=outputs_root,
-        min_pf=min_pf,
-        min_oos_pf=min_oos_pf,
-        ranking="bootcamp",
+    bootcamp = (
+        aggregate_master_leaderboard(
+            outputs_root=outputs_root,
+            min_pf=min_pf,
+            min_oos_pf=min_oos_pf,
+            ranking="bootcamp",
+        )
+        if include_bootcamp_scores
+        else pd.DataFrame()
     )
 
     if not classic.empty:
         classic.to_csv(outputs_root / "master_leaderboard.csv", index=False)
+        if not include_bootcamp_scores:
+            classic.to_csv(outputs_root / "master_leaderboard_cfd.csv", index=False)
     if not bootcamp.empty:
         bootcamp.to_csv(outputs_root / "master_leaderboard_bootcamp.csv", index=False)
 

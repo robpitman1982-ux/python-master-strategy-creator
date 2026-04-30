@@ -1,6 +1,6 @@
 """Generate strategy_returns.csv files for all accepted strategies.
 
-Reads Outputs/ultimate_leaderboard_bootcamp.csv, rebuilds trades for each
+Reads the current canonical ultimate leaderboard, rebuilds trades for each
 accepted strategy, and writes per-dataset strategy_returns.csv files into
 the corresponding Outputs/runs/{run_id}/Outputs/{MARKET}_{TIMEFRAME}/ folders.
 
@@ -21,7 +21,16 @@ from modules.data_loader import load_tradestation_csv
 from modules.portfolio_evaluator import _rebuild_strategy_from_leaderboard_row
 
 REPO_ROOT = Path(__file__).resolve().parent
-LEADERBOARD_PATH = REPO_ROOT / "Outputs" / "ultimate_leaderboard_bootcamp.csv"
+for candidate in (
+    REPO_ROOT / "Outputs" / "ultimate_leaderboard_cfd.csv",
+    REPO_ROOT / "Outputs" / "ultimate_leaderboard.csv",
+    REPO_ROOT / "Outputs" / "ultimate_leaderboard_bootcamp.csv",
+):
+    if candidate.exists():
+        LEADERBOARD_PATH = candidate
+        break
+else:
+    LEADERBOARD_PATH = REPO_ROOT / "Outputs" / "ultimate_leaderboard.csv"
 DATA_DIR = REPO_ROOT / "Data"
 RUNS_DIR = REPO_ROOT / "Outputs" / "runs"
 

@@ -106,7 +106,8 @@ Bulletproof SPOT runner `run_spot_resilient.py` (Session 59): queue-based, multi
 - **~454 strategies** in ultimate leaderboard (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
 - **12 strategy families**: 3 long base (trend, mean_reversion, breakout) + 3 short (short_trend, short_mean_reversion, short_breakout) + 9 subtypes (3 per long family)
 - **Vectorized engine** (14-23x speedup, parity-tested) — every cloud config has `use_vectorized_trades: true`
-- **Portfolio selector** with 3-layer correlation, ECD, block bootstrap MC, regime survival gate
+- **CFD leaderboard architecture** now uses neutral canonical pools (`family_leaderboard_results.csv`, `master_leaderboard_cfd.csv`, `ultimate_leaderboard_cfd.csv`) instead of Bootcamp-ranked CFD outputs
+- **Portfolio selector** with 3-layer correlation, ECD, block bootstrap MC, regime survival gate; now owns program-specific ranking directly rather than inheriting `bootcamp_score` from the CFD leaderboard layer
 - **4 prop firm programs** configured with daily DD enforcement (Bootcamp, High Stakes, Pro Growth, Hyper Growth)
 - **Test suite**: 261+ tests passing (smoke, subtypes, parity, portfolio selector, prop firm configs, cross-dataset evaluator)
 
@@ -163,7 +164,7 @@ Bulletproof SPOT runner `run_spot_resilient.py` (Session 59): queue-based, multi
 
 ### Near-term (Sessions 77-80)
 4. **Full 24-market sweep** (Session 74 plan) — `run_cluster_sweep.py` orchestrating c240 + gen8 + r630 + g9 = 92 sweeps total (4 TFs × 23 markets, 5m excluded).
-5. **CFD swap costs into MC simulator** — cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector. **Critical for trustworthy funding timelines.** Without this, MC pass rates against The5ers programs are optimistic.
+5. **CFD swap costs into MC simulator** — cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector. **Critical for trustworthy funding timelines.** Without this, MC pass rates against The5ers programs are optimistic even though the CFD leaderboard layer is now neutral.
 6. **Challenge vs Funded mode** — implement spec at `docs/CHALLENGE_VS_FUNDED_SPEC.md`.
 
 ### Medium-term

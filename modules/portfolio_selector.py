@@ -61,6 +61,50 @@ def _resolve_prop_config(program: str, target: float) -> PropFirmConfig:
     return factory(target)
 
 
+_QUALITY_PRIORITY = {
+    "ROBUST": 0,
+    "ROBUST_BORDERLINE": 1,
+    "STABLE": 2,
+}
+
+
+def _quality_priority(flag: Any) -> int:
+    return _QUALITY_PRIORITY.get(str(flag).upper().strip(), 99)
+
+
+def _candidate_priority_tuple(candidate: dict[str, Any]) -> tuple[float, ...]:
+    """Neutral pre-selector ranking for candidate dedup and capping.
+
+    This is intentionally program-agnostic. The actual prop-firm ranking
+    happens later in the selector via MC, drawdown, and time-to-fund.
+    """
+    quality_rank = -_quality_priority(candidate.get("quality_flag", ""))
+    oos_pf = float(candidate.get("oos_pf", 0.0) or 0.0)
+    leader_pf = float(candidate.get("leader_pf", 0.0) or 0.0)
+    recent_pf = float(candidate.get("recent_12m_pf", 0.0) or 0.0)
+    net_pnl = float(candidate.get("leader_net_pnl", 0.0) or 0.0)
+    trades = float(candidate.get("leader_trades", candidate.get("total_trades", 0.0)) or 0.0)
+    return (quality_rank, oos_pf, leader_pf, recent_pf, net_pnl, trades)
+
+
+def _resolve_leaderboard_path(leaderboard_path: str | os.PathLike[str]) -> str:
+    requested = Path(leaderboard_path)
+    if requested.exists():
+        return str(requested)
+
+    candidates = [
+        requested,
+        requested.parent / "ultimate_leaderboard_cfd.csv",
+        requested.parent / "ultimate_leaderboard.csv",
+        requested.parent / "ultimate_leaderboard_bootcamp.csv",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            logger.info(f"Leaderboard path fallback: using {candidate}")
+            return str(candidate)
+    return str(requested)
+
+
 # ============================================================================
 # STAGE 1: Hard filter candidates
 # ============================================================================
@@ -68,19 +112,17 @@ def _resolve_prop_config(program: str, target: float) -> PropFirmConfig:
 def hard_filter_candidates(
     leaderboard_path: str,
     oos_pf_threshold: float = 1.0,
-    bootcamp_score_min: float = 40,
     candidate_cap: int = 50,
     quality_flags: list[str] | None = None,
 ) -> list[dict]:
-    """Load ultimate_leaderboard_bootcamp.csv and apply hard filters.
+    """Load a neutral strategy pool and apply hard filters.
 
     Filters:
     - quality_flag in quality_flags (default ROBUST, STABLE)
     - oos_pf > oos_pf_threshold (default 1.0)
-    - bootcamp_score > bootcamp_score_min (default 40)
     - leader_trades >= 60 (fallback to total_trades)
-    - Dedup: same best_refined_strategy_name + market -> keep highest bootcamp_score
-    - Cap at candidate_cap candidates by bootcamp_score
+    - Dedup: same best_refined_strategy_name + market -> keep highest neutral priority
+    - Cap at candidate_cap candidates by neutral priority
     """
     df = pd.read_csv(leaderboard_path)
     n_total = len(df)
@@ -96,12 +138,6 @@ def hard_filter_candidates(
     df = df[df["oos_pf"] > oos_pf_threshold].copy()
     logger.info(f"After OOS PF > {oos_pf_threshold}: {len(df)}")
 
-    # Bootcamp score filter
-    if "bootcamp_score" in df.columns:
-        df["bootcamp_score"] = pd.to_numeric(df["bootcamp_score"], errors="coerce").fillna(0)
-        df = df[df["bootcamp_score"] > bootcamp_score_min].copy()
-        logger.info(f"After bootcamp_score > {bootcamp_score_min}: {len(df)}")
-
     # Trade count filter
     if "leader_trades" in df.columns:
         trades_col = pd.to_numeric(df["leader_trades"], errors="coerce").fillna(0)
@@ -116,9 +152,11 @@ def hard_filter_candidates(
         logger.warning("No candidates passed hard filters")
         return []
 
-    # Dedup: same best_refined_strategy_name + market -> keep highest bootcamp_score
-    score_col = "bootcamp_score" if "bootcamp_score" in df.columns else "leader_pf"
-    df["_score"] = pd.to_numeric(df.get(score_col, pd.Series(0, index=df.index)), errors="coerce").fillna(0)
+    df["_quality_rank"] = df.get("quality_flag", pd.Series("", index=df.index)).apply(_quality_priority)
+    df["_leader_pf"] = pd.to_numeric(df.get("leader_pf", pd.Series(0, index=df.index)), errors="coerce").fillna(0)
+    df["_recent_pf"] = pd.to_numeric(df.get("recent_12m_pf", pd.Series(0, index=df.index)), errors="coerce").fillna(0)
+    df["_net_pnl"] = pd.to_numeric(df.get("leader_net_pnl", pd.Series(0, index=df.index)), errors="coerce").fillna(0)
+    df["_trades"] = pd.to_numeric(df.get("leader_trades", pd.Series(0, index=df.index)), errors="coerce").fillna(0)
 
     dedup_key_col = "best_refined_strategy_name" if "best_refined_strategy_name" in df.columns else "leader_strategy_name"
     market_col = "market" if "market" in df.columns else None
@@ -128,16 +166,22 @@ def hard_filter_candidates(
     else:
         df["_dedup_key"] = df[dedup_key_col].astype(str)
 
-    df = df.sort_values("_score", ascending=False).drop_duplicates(subset="_dedup_key", keep="first")
+    df = df.sort_values(
+        by=["_quality_rank", "oos_pf", "_leader_pf", "_recent_pf", "_net_pnl", "_trades"],
+        ascending=[True, False, False, False, False, False],
+    ).drop_duplicates(subset="_dedup_key", keep="first")
     logger.info(f"After dedup: {len(df)}")
 
     # Cap at candidate_cap
     if len(df) > candidate_cap:
         n_before = len(df)
-        df = df.nlargest(candidate_cap, "_score")
-        logger.warning(f"Capped candidates from {n_before} to {candidate_cap} by {score_col}")
+        df = df.head(candidate_cap)
+        logger.warning(f"Capped candidates from {n_before} to {candidate_cap} by neutral priority")
 
-    df = df.drop(columns=["_score", "_dedup_key"], errors="ignore")
+    df = df.drop(
+        columns=["_quality_rank", "_leader_pf", "_recent_pf", "_net_pnl", "_trades", "_dedup_key"],
+        errors="ignore",
+    )
     result = df.to_dict("records")
     logger.info(f"Hard filter: {n_total} -> {len(result)} candidates")
     return result
@@ -577,8 +621,9 @@ def correlation_dedup(
 ) -> list[dict]:
     """Remove near-duplicate strategies before combinatorial sweep.
 
-    If two strategies have |Pearson| > threshold, keep the one with
-    higher bootcamp_score. This reduces n before C(n,k) explosion.
+    If two strategies have |Pearson| > threshold, keep the higher-priority
+    candidate from the neutral pre-selector ranking. This reduces n before
+    C(n,k) explosion.
 
     Uses a greedy approach: build graph of high-correlation edges,
     then for each connected component keep only the highest-scoring node.
@@ -638,17 +683,16 @@ def correlation_dedup(
             continue
 
         # Keep only the highest-scoring member
-        def _score(l: str) -> float:
+        def _score(l: str) -> tuple[float, ...]:
             c = cand_by_label[l]
-            return float(c.get("bootcamp_score", c.get("leader_pf", 0)))
+            return _candidate_priority_tuple(c)
 
         component.sort(key=_score, reverse=True)
         keeper = component[0]
         for removed in component[1:]:
             to_remove.add(removed)
             logger.info(
-                f"Dedup: removing {removed} (score={_score(removed):.1f}), "
-                f"correlated with {keeper} (score={_score(keeper):.1f})"
+                f"Dedup: removing {removed}, correlated with higher-priority {keeper}"
             )
 
     if not to_remove:
@@ -1952,7 +1996,7 @@ def portfolio_robustness_test(
 # ============================================================================
 
 def run_portfolio_selection(
-    leaderboard_path: str = "Outputs/ultimate_leaderboard_bootcamp.csv",
+    leaderboard_path: str = "Outputs/ultimate_leaderboard_cfd.csv",
     runs_base_path: str = "Outputs/runs",
     output_dir: str = "Outputs",
     n_sims_mc: int | None = None,
@@ -1967,6 +2011,8 @@ def run_portfolio_selection(
     logger.info("=" * 60)
     logger.info("PORTFOLIO SELECTOR — Starting")
     logger.info("=" * 60)
+
+    leaderboard_path = _resolve_leaderboard_path(leaderboard_path)
 
     # Read config overrides
     if config is None:
@@ -1997,7 +2043,6 @@ def run_portfolio_selection(
     candidates = hard_filter_candidates(
         leaderboard_path,
         oos_pf_threshold=float(ps_cfg.get("oos_pf_threshold", 1.0)),
-        bootcamp_score_min=float(ps_cfg.get("bootcamp_score_min", 40)),
         candidate_cap=int(ps_cfg.get("candidate_cap", 60)),
         quality_flags=quality_flags_cfg,
     )

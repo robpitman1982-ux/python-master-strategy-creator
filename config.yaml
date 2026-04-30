@@ -37,7 +37,6 @@ pipeline:
     min_pass_rate: 0.40        # Minimum acceptable 3-step pass rate
     candidate_cap: 60          # Max candidates after hard filter
     oos_pf_threshold: 1.0      # Hard filter OOS PF minimum
-    bootcamp_score_min: 40     # Hard filter bootcamp score minimum
     n_sims_mc: 10000           # MC simulations for main sweep
     n_sims_sizing: 1000        # MC simulations for sizing optimizer
     n_min: 3                   # Minimum portfolio size (allow lean 3-strategy portfolios)

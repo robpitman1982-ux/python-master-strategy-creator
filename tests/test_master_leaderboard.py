@@ -145,3 +145,38 @@ def test_write_master_leaderboards_writes_both_outputs():
     assert not bootcamp.empty
     assert (root / "master_leaderboard.csv").exists()
     assert (root / "master_leaderboard_bootcamp.csv").exists()
+
+
+def test_write_master_leaderboards_cfd_skips_bootcamp_output():
+    root = _fresh_fixture_root("write_cfd")
+    _write_family_files(
+        root,
+        "ES_daily",
+        classic_rows=[
+            {
+                "strategy_type": "mean_reversion",
+                "leader_strategy_name": "CFDMR",
+                "accepted_final": True,
+                "quality_flag": "ROBUST",
+                "leader_pf": 1.40,
+                "leader_net_pnl": 60000.0,
+                "leader_trades": 180,
+                "dataset": "ES_daily_dukascopy.csv",
+                "is_pf": 1.10,
+                "oos_pf": 1.35,
+                "recent_12m_pf": 1.30,
+            }
+        ],
+        bootcamp_rows=[],
+    )
+
+    classic, bootcamp = write_master_leaderboards(
+        outputs_root=root,
+        include_bootcamp_scores=False,
+    )
+
+    assert not classic.empty
+    assert bootcamp.empty
+    assert (root / "master_leaderboard.csv").exists()
+    assert (root / "master_leaderboard_cfd.csv").exists()
+    assert not (root / "master_leaderboard_bootcamp.csv").exists()

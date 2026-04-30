@@ -28,6 +28,7 @@ def _make_leaderboard_df(rows: list[dict]) -> pd.DataFrame:
         "leader_avg_trade": 500.0,
         "leader_net_pnl": 50000.0,
         "leader_trades": 100,
+        "recent_12m_pf": 1.6,
         "oos_pf": 1.8,
         "bootcamp_score": 80.0,
         "dataset": "ES_60m_2008_2026_tradestation.csv",
@@ -97,8 +98,8 @@ class TestHardFilter:
                     "market": "ES",
                     "quality_flag": "ROBUST",
                     "oos_pf": 1.8,
+                    "leader_pf": 1.7,
                     "leader_trades": 100,
-                    "bootcamp_score": 80,
                 },
                 {
                     "leader_strategy_name": "StratB",
@@ -106,8 +107,8 @@ class TestHardFilter:
                     "market": "ES",
                     "quality_flag": "ROBUST",
                     "oos_pf": 1.9,
+                    "leader_pf": 1.9,
                     "leader_trades": 120,
-                    "bootcamp_score": 70,
                 },
             ]
             df = _make_leaderboard_df(rows)
@@ -116,7 +117,7 @@ class TestHardFilter:
 
             result = hard_filter_candidates(str(csv_path))
             assert len(result) == 1
-            assert result[0]["bootcamp_score"] == 80
+            assert result[0]["leader_strategy_name"] == "StratB"
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -233,7 +234,7 @@ class TestCorrelationDedup:
     """Test Stage 3b: correlation_dedup."""
 
     def test_correlation_dedup_removes_clones(self) -> None:
-        """Strategies with r > 0.6 should be deduped, keeping higher score."""
+        """Strategies with r > 0.6 should be deduped, keeping higher-priority candidate."""
         from modules.portfolio_selector import correlation_dedup
 
         rng = np.random.RandomState(42)
@@ -258,9 +259,9 @@ class TestCorrelationDedup:
         assert abs(corr_matrix.loc["ES_60m_StratA", "ES_daily_StratB"]) > 0.6
 
         candidates = [
-            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "bootcamp_score": 80},
-            {"leader_strategy_name": "StratB", "market": "ES", "timeframe": "daily", "bootcamp_score": 90},
-            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "bootcamp_score": 70},
+            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "oos_pf": 1.4, "leader_pf": 1.3, "quality_flag": "STABLE"},
+            {"leader_strategy_name": "StratB", "market": "ES", "timeframe": "daily", "oos_pf": 2.1, "leader_pf": 1.9, "quality_flag": "ROBUST"},
+            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "oos_pf": 1.7, "leader_pf": 1.6, "quality_flag": "ROBUST"},
         ]
 
         result = correlation_dedup(candidates, corr_matrix, return_matrix, threshold=0.6)
@@ -268,8 +269,8 @@ class TestCorrelationDedup:
         # Should have 2 candidates: StratB (higher score) and StratC
         assert len(result) == 2
         names = [c["leader_strategy_name"] for c in result]
-        assert "StratB" in names  # Higher bootcamp_score kept
-        assert "StratA" not in names  # Lower score removed
+        assert "StratB" in names  # Higher neutral priority kept
+        assert "StratA" not in names  # Lower-priority correlated clone removed
         assert "StratC" in names  # Independent, kept
 
     def test_correlation_dedup_no_removal_when_uncorrelated(self) -> None:
@@ -287,9 +288,9 @@ class TestCorrelationDedup:
         corr_matrix = return_matrix.corr()
 
         candidates = [
-            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "bootcamp_score": 80},
-            {"leader_strategy_name": "StratB", "market": "CL", "timeframe": "daily", "bootcamp_score": 90},
-            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "bootcamp_score": 70},
+            {"leader_strategy_name": "StratA", "market": "ES", "timeframe": "60m", "oos_pf": 1.5, "leader_pf": 1.4, "quality_flag": "ROBUST"},
+            {"leader_strategy_name": "StratB", "market": "CL", "timeframe": "daily", "oos_pf": 1.6, "leader_pf": 1.5, "quality_flag": "ROBUST"},
+            {"leader_strategy_name": "StratC", "market": "NQ", "timeframe": "30m", "oos_pf": 1.7, "leader_pf": 1.6, "quality_flag": "STABLE"},
         ]
 
         result = correlation_dedup(candidates, corr_matrix, return_matrix, threshold=0.6)
@@ -325,24 +326,25 @@ class TestHardFilterThreshold:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    def test_hard_filter_bootcamp_score_filter(self) -> None:
-        """Strategies with bootcamp_score <= 40 should be filtered out."""
+    def test_hard_filter_without_bootcamp_score_filter(self) -> None:
+        """Selector should work without using bootcamp_score as a gate."""
         from modules.portfolio_selector import hard_filter_candidates
 
         tmp = _make_tmp_dir()
         try:
             rows = [
-                {"leader_strategy_name": "good_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_trades": 100, "bootcamp_score": 80, "best_refined_strategy_name": "ref_good", "market": "ES"},
-                {"leader_strategy_name": "low_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_trades": 100, "bootcamp_score": 30, "best_refined_strategy_name": "ref_low", "market": "CL"},
+                {"leader_strategy_name": "good_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_pf": 1.6, "leader_trades": 100, "best_refined_strategy_name": "ref_good", "market": "ES"},
+                {"leader_strategy_name": "low_score", "quality_flag": "ROBUST", "oos_pf": 1.5, "leader_pf": 1.4, "leader_trades": 100, "best_refined_strategy_name": "ref_low", "market": "CL"},
             ]
             df = _make_leaderboard_df(rows)
+            df = df.drop(columns=["bootcamp_score"])
             csv_path = tmp / "test_lb_bscore.csv"
             df.to_csv(csv_path, index=False)
 
             result = hard_filter_candidates(str(csv_path))
             names = [r["leader_strategy_name"] for r in result]
             assert "good_score" in names
-            assert "low_score" not in names, "bootcamp_score 30 should fail threshold of 40"
+            assert "low_score" in names
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

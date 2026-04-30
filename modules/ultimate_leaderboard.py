@@ -83,6 +83,13 @@ def _build_signature(row: "Any") -> tuple[str, ...]:
     )
 
 
+def _looks_like_cfd_row(row: "Any") -> bool:
+    dataset = str(row.get("dataset", "") if isinstance(row, dict) else getattr(row, "dataset", ""))
+    source_file = str(row.get("source_file", "") if isinstance(row, dict) else getattr(row, "source_file", ""))
+    text = f"{dataset} {source_file}".lower()
+    return "dukascopy" in text or "/cfds/" in text or "\\cfds\\" in text
+
+
 def aggregate_ultimate_leaderboard(
     storage_root: Path | None = None,
     output_path: Path | None = None,
@@ -193,8 +200,17 @@ def aggregate_ultimate_leaderboard(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     combined.to_csv(output_path, index=False)
 
+    if combined.apply(_looks_like_cfd_row, axis=1).all():
+        cfd_output_path = output_path.parent / "ultimate_leaderboard_cfd.csv"
+        combined.to_csv(cfd_output_path, index=False)
+        if verbose:
+            print(f"CFD ultimate leaderboard: {len(combined)} strategies -> {cfd_output_path}")
+
     # --- Bootcamp ultimate leaderboard (accepted-only, bootcamp-ranked) ---
-    if "bootcamp_score" in combined.columns or "leader_pf" in combined.columns:
+    if (
+        "bootcamp_score" in combined.columns
+        and not combined.apply(_looks_like_cfd_row, axis=1).all()
+    ):
         sort_col = "bootcamp_score" if "bootcamp_score" in combined.columns else (pf_col or "leader_pf")
         boot_df = combined.copy()
         boot_sort = pd.to_numeric(boot_df.get(sort_col, pd.Series(0, index=boot_df.index)), errors="coerce").fillna(0)

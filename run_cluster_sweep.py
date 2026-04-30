@@ -383,7 +383,10 @@ def run_batch(
         try:
             from modules.master_leaderboard import write_master_leaderboards
             output_dir = "Outputs"
-            classic_df, bootcamp_df = write_master_leaderboards(output_dir)
+            classic_df, bootcamp_df = write_master_leaderboards(
+                output_dir,
+                include_bootcamp_scores=False,
+            )
             if classic_df is not None:
                 print(f"  Master leaderboard: {len(classic_df)} strategies")
         except Exception as e:
