@@ -100,44 +100,15 @@ def aggregate_ultimate_leaderboard(
 
     discovered_at = datetime.now(UTC).isoformat(timespec="seconds")
 
-    # ------------------------------------------------------------------
-    # 1. Collect all leaderboard rows
-    # ------------------------------------------------------------------
-    all_frames: list[pd.DataFrame] = []
-    files_found = 0
-
-    for run_id, csv_path in _find_leaderboard_files(runs_root, verbose=verbose):
-        try:
-            df = pd.read_csv(csv_path)
-        except Exception as exc:
-            if verbose:
-                print(f"  [skip] {csv_path}: {exc}")
-            continue
-
-        files_found += 1
-
-        # Filter to accepted only
-        if "accepted_final" in df.columns:
-            accepted_mask = df["accepted_final"].apply(
-                lambda v: str(v).strip().lower() in ("true", "1", "yes")
-            )
-            df = df[accepted_mask]
-
-        if df.empty:
-            continue
-
-        df = df.copy()
-        df["run_id"] = run_id
-        df["source_file"] = str(csv_path)
-        df["discovered_at"] = discovered_at
-        all_frames.append(df)
-
-    if not all_frames:
+    combined = collect_accepted_ultimate_rows(
+        storage_root=storage_root,
+        discovered_at=discovered_at,
+        verbose=verbose,
+    )
+    if combined.empty:
         if verbose:
-            print(f"No accepted strategies found (scanned {files_found} files across {runs_root})")
+            print(f"No accepted strategies found across {runs_root}")
         return pd.DataFrame()
-
-    combined = pd.concat(all_frames, ignore_index=True)
     total_raw = len(combined)
 
     # ------------------------------------------------------------------
@@ -207,6 +178,59 @@ def aggregate_ultimate_leaderboard(
             print(combined[preview_cols].head(10).to_string(index=False))
 
     return combined
+
+
+def collect_accepted_ultimate_rows(
+    storage_root: Path | None = None,
+    *,
+    discovered_at: str | None = None,
+    verbose: bool = False,
+) -> "Any":
+    """Collect raw accepted rows from all run leaderboards before dedupe/ranking."""
+    import pandas as pd
+
+    from paths import CONSOLE_STORAGE_ROOT
+
+    if storage_root is None:
+        storage_root = CONSOLE_STORAGE_ROOT.expanduser()
+
+    runs_root = storage_root / "runs"
+    discovered_at = discovered_at or datetime.now(UTC).isoformat(timespec="seconds")
+
+    all_frames: list[pd.DataFrame] = []
+    files_found = 0
+
+    for run_id, csv_path in _find_leaderboard_files(runs_root, verbose=verbose):
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception as exc:
+            if verbose:
+                print(f"  [skip] {csv_path}: {exc}")
+            continue
+
+        files_found += 1
+
+        if "accepted_final" in df.columns:
+            accepted_mask = df["accepted_final"].apply(
+                lambda v: str(v).strip().lower() in ("true", "1", "yes")
+            )
+            df = df[accepted_mask]
+
+        if df.empty:
+            continue
+
+        df = df.copy()
+        df["run_id"] = run_id
+        df["source_file"] = str(csv_path)
+        df["discovered_at"] = discovered_at
+        all_frames.append(df)
+
+    if not all_frames:
+        if verbose:
+            print(f"No accepted strategies found (scanned {files_found} files across {runs_root})")
+        return pd.DataFrame()
+
+    return pd.concat(all_frames, ignore_index=True)
 
 
 # ---------------------------------------------------------------------------

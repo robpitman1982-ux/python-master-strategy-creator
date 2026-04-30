@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable
 
 from modules.master_leaderboard import write_master_leaderboards
+from modules.post_ultimate_gate import build_post_ultimate_gate
 from modules.ultimate_leaderboard import (
     FUTURES_ULTIMATE_FILENAME,
     LEGACY_ULTIMATE_FILENAME,
@@ -361,6 +362,23 @@ def finalize_cluster_run(
         exported_files.append(str(exports_dir / LEGACY_ULTIMATE_FILENAME))
     if (exports_dir / CFD_ULTIMATE_FILENAME).exists():
         exported_files.append(str(exports_dir / CFD_ULTIMATE_FILENAME))
+
+    for ultimate_name in (
+        FUTURES_ULTIMATE_FILENAME,
+        CFD_ULTIMATE_FILENAME,
+    ):
+        ultimate_path = exports_dir / ultimate_name
+        if not ultimate_path.exists():
+            continue
+        gate_result = build_post_ultimate_gate(
+            storage_root=storage_root,
+            source_path=ultimate_path,
+            output_dir=exports_dir,
+        )
+        exported_files.append(gate_result["audit_path"])
+        exported_files.append(gate_result["gated_path"])
+        for alias_path in gate_result.get("alias_paths", []):
+            exported_files.append(alias_path)
 
     (storage_root / "runs" / "LATEST_RUN.txt").write_text(f"{run_id}\n", encoding="utf-8")
 

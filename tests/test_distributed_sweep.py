@@ -8,7 +8,7 @@ from modules.distributed_sweep import (
     build_host_command,
     parse_host_specs,
 )
-from run_cluster_sweep import build_job_list, parse_job_specs
+from run_cluster_sweep import build_distributed_plan, build_job_list, parse_job_specs
 
 
 def test_parse_job_specs_deduplicates_and_normalizes_market():
@@ -85,3 +85,23 @@ def test_build_host_command_uses_exact_jobs():
     assert "--data-dir /data/market_data/cfds/ohlc_engine" in command
     assert "--workers 36" in command
     assert "--dry-run" in command
+
+
+def test_build_distributed_plan_includes_commands_and_weights():
+    plan = build_distributed_plan(
+        [("ES", "5m"), ("NQ", "daily"), ("GC", "30m")],
+        host_specs=["c240:80", "g9:80", "gen8:48"],
+        data_dir="/data/market_data/cfds/ohlc_engine",
+        remote_root="/tmp/psc",
+        dry_run=True,
+    )
+
+    assert plan["total_jobs"] == 3
+    assert len(plan["hosts"]) == 3
+    assigned = sum(len(host["job_specs"]) for host in plan["hosts"])
+    assert assigned == 3
+    for host in plan["hosts"]:
+        if host["job_specs"]:
+            assert host["command"].startswith("cd /tmp/psc && python run_cluster_sweep.py --jobs ")
+            assert "--data-dir /data/market_data/cfds/ohlc_engine" in host["command"]
+            assert "--dry-run" in host["command"]

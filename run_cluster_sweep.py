@@ -32,6 +32,12 @@ from pathlib import Path
 
 import yaml
 
+from modules.distributed_sweep import (
+    assign_jobs_to_hosts,
+    build_host_command,
+    job_weight,
+    parse_host_specs,
+)
 from modules.instrument_universe import (
     CFD_DUKASCOPY,
     InstrumentUniverseError,
@@ -111,6 +117,73 @@ def build_job_list(
         raise ValueError(f"Invalid jobs: {details}. Available markets: {available}")
 
     return valid_jobs
+
+
+def build_distributed_plan(
+    jobs: list[tuple[str, str]],
+    *,
+    host_specs: list[str],
+    data_dir: str,
+    remote_root: str = ".",
+    dry_run: bool = False,
+) -> dict:
+    """Build a weighted multi-host execution plan for exact sweep jobs."""
+    hosts = parse_host_specs(host_specs)
+    assignments = assign_jobs_to_hosts(jobs, hosts)
+
+    plan_hosts: list[dict] = []
+    for host in hosts:
+        host_jobs = assignments.get(host.name, [])
+        command = build_host_command(
+            host_jobs,
+            data_dir=data_dir,
+            workers=host.workers,
+            remote_root=remote_root,
+            dry_run=dry_run,
+        ) if host_jobs else ""
+        total_weight = sum(job_weight(job) for job in host_jobs)
+        plan_hosts.append(
+            {
+                "host": host.name,
+                "workers": host.workers,
+                "jobs": [{"market": market, "timeframe": timeframe} for market, timeframe in host_jobs],
+                "job_specs": [f"{market}:{timeframe}" for market, timeframe in host_jobs],
+                "total_weight": total_weight,
+                "normalized_weight": round(total_weight / max(float(host.workers), 1.0), 4),
+                "command": command,
+            }
+        )
+
+    return {
+        "created": datetime.now().isoformat(),
+        "data_dir": data_dir,
+        "remote_root": remote_root,
+        "dry_run": dry_run,
+        "total_jobs": len(jobs),
+        "hosts": plan_hosts,
+    }
+
+
+def print_distributed_plan(plan: dict) -> None:
+    print("=" * 72)
+    print("DISTRIBUTED SWEEP PLAN")
+    print(f"  Jobs:       {plan.get('total_jobs', 0)}")
+    print(f"  Data dir:   {plan.get('data_dir', '?')}")
+    print(f"  Remote root:{plan.get('remote_root', '?')}")
+    print(f"  Dry run:    {plan.get('dry_run', False)}")
+    print("=" * 72)
+    for host in plan.get("hosts", []):
+        print(
+            f"\n[{host['host']}] workers={host['workers']} "
+            f"jobs={len(host['job_specs'])} "
+            f"weight={host['total_weight']:.1f} "
+            f"norm={host['normalized_weight']:.3f}"
+        )
+        if host["job_specs"]:
+            print("  " + " ".join(host["job_specs"]))
+            print(f"  Command: {host['command']}")
+        else:
+            print("  No jobs assigned")
 
 
 def show_status() -> None:
@@ -425,6 +498,14 @@ def main() -> None:
                         help="Data directory")
     parser.add_argument("--workers", type=int, default=36,
                         help="Parallel workers per sweep")
+    parser.add_argument("--hosts", nargs="*", default=None,
+                        help="Distributed plan host specs in HOST:WORKERS form, e.g. c240:80 gen8:48 r630:88 g9:80")
+    parser.add_argument("--remote-root", type=str, default=".",
+                        help="Remote repo root to use in distributed host commands")
+    parser.add_argument("--distributed-plan", action="store_true",
+                        help="Build a weighted multi-host execution plan instead of running sequentially")
+    parser.add_argument("--plan-output", type=str, default=None,
+                        help="Optional JSON file path for distributed plan output")
     parser.add_argument("--resume", action="store_true",
                         help="Resume from manifest, skipping completed jobs")
     parser.add_argument("--status", action="store_true",
@@ -477,6 +558,37 @@ def main() -> None:
 
     if not args.timeframes:
         args.timeframes = ["5m", "15m", "30m", "60m", "daily"]
+
+    if args.distributed_plan:
+        if args.resume:
+            print("ERROR: --distributed-plan does not support --resume yet.")
+            sys.exit(1)
+        if not args.hosts:
+            print("ERROR: --distributed-plan requires --hosts HOST:WORKERS ...")
+            sys.exit(1)
+        try:
+            with open(MARKETS_CONFIG) as f:
+                all_markets = yaml.safe_load(f)
+            jobs = build_job_list(all_markets, args.markets, args.timeframes, explicit_jobs=explicit_jobs)
+            plan = build_distributed_plan(
+                jobs,
+                host_specs=args.hosts,
+                data_dir=args.data_dir,
+                remote_root=args.remote_root,
+                dry_run=args.dry_run,
+            )
+        except ValueError as exc:
+            print(f"ERROR: {exc}")
+            sys.exit(1)
+
+        print_distributed_plan(plan)
+        if args.plan_output:
+            plan_path = Path(args.plan_output)
+            plan_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(plan_path, "w", encoding="utf-8") as f:
+                json.dump(plan, f, indent=2)
+            print(f"\nSaved plan: {plan_path}")
+        sys.exit(0)
 
     exit_code = run_batch(args.markets, args.timeframes, args.data_dir,
                           args.workers, args.dry_run, explicit_jobs=explicit_jobs)
