@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from modules.cluster_results import finalize_cluster_run, ingest_host_results
+from modules.cluster_results import finalize_cluster_run, ingest_host_results, mirror_storage_to_backup
 from run_cluster_sweep import parse_job_specs
 
 
@@ -45,6 +45,23 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_mirror_backup(args: argparse.Namespace) -> int:
+    result = mirror_storage_to_backup(
+        storage_root=Path(args.storage_root).expanduser(),
+        backup_root=Path(args.backup_root).expanduser(),
+        run_id=args.run_id,
+        include_all_runs=args.include_all_runs,
+    )
+    print(f"Mirrored backup into: {result['backup_root']}")
+    if result["latest_run_id"]:
+        print(f"Latest run: {result['latest_run_id']}")
+    for path_text in result["copied_exports"]:
+        print(f"  Export: {path_text}")
+    for path_text in result["copied_runs"]:
+        print(f"  Run: {path_text}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Ingest local-cluster sweep results into strategy_console_storage and rebuild leaderboards."
@@ -67,6 +84,16 @@ def main() -> int:
     finalize.add_argument("--no-cfd-alias", action="store_true", help="Do not emit master_leaderboard_cfd.csv")
     finalize.add_argument("--no-publish-exports", action="store_true", help="Do not mirror run master / ultimate into exports/")
     finalize.set_defaults(func=_cmd_finalize)
+
+    mirror = subparsers.add_parser(
+        "mirror-backup",
+        help="Copy canonical exports and selected/all run artifacts into a backup root such as a Google Drive folder.",
+    )
+    mirror.add_argument("--storage-root", required=True, help="Canonical storage root containing exports/ and runs/")
+    mirror.add_argument("--backup-root", required=True, help="Backup root, e.g. G:\\My Drive\\strategy-data-backup")
+    mirror.add_argument("--run-id", help="Specific run to mirror. Defaults to LATEST_RUN.txt when omitted.")
+    mirror.add_argument("--include-all-runs", action="store_true", help="Mirror every run under runs/ instead of just one.")
+    mirror.set_defaults(func=_cmd_mirror_backup)
 
     args = parser.parse_args()
     return args.func(args)

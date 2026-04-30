@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from modules.cluster_results import finalize_cluster_run, ingest_host_results, resolve_cluster_run_paths
+from modules.cluster_results import (
+    finalize_cluster_run,
+    ingest_host_results,
+    mirror_storage_to_backup,
+    resolve_cluster_run_paths,
+)
 
 
 def _make_tmp() -> Path:
@@ -156,5 +161,76 @@ def test_partial_run_still_flows_into_ultimate() -> None:
         assert "NQ_15m_dukascopy" in datasets
         assert "HG_15m_dukascopy" in datasets
         assert result["ultimate_rows"] == 3
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_mirror_storage_to_backup_copies_exports_and_latest_run() -> None:
+    tmp = _make_tmp()
+    try:
+        storage_root = tmp / "storage"
+        backup_root = tmp / "gdrive"
+
+        source_root = tmp / "source"
+        _write_dataset_output(source_root, "ES", "30m")
+        ingest_host_results(
+            run_id="run-mirror",
+            host="c240",
+            source_root=source_root,
+            jobs=[("ES", "30m")],
+            storage_root=storage_root,
+        )
+        finalize_cluster_run(run_id="run-mirror", storage_root=storage_root)
+
+        result = mirror_storage_to_backup(storage_root=storage_root, backup_root=backup_root)
+
+        assert result["latest_run_id"] == "run-mirror"
+        assert (backup_root / "leaderboards" / "master_leaderboard.csv").exists()
+        assert (backup_root / "leaderboards" / "master_leaderboard_cfd.csv").exists()
+        assert (backup_root / "leaderboards" / "ultimate_leaderboard.csv").exists()
+        assert (backup_root / "leaderboards" / "ultimate_leaderboard_cfd.csv").exists()
+        assert (backup_root / "sweep_results" / "LATEST_RUN.txt").read_text(encoding="utf-8").strip() == "run-mirror"
+        assert (backup_root / "sweep_results" / "runs" / "run-mirror" / "cluster_run_manifest.json").exists()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_mirror_storage_to_backup_can_copy_all_runs() -> None:
+    tmp = _make_tmp()
+    try:
+        storage_root = tmp / "storage"
+        backup_root = tmp / "gdrive"
+
+        source_a = tmp / "source-a"
+        _write_dataset_output(source_a, "ES", "30m")
+        ingest_host_results(
+            run_id="run-a",
+            host="c240",
+            source_root=source_a,
+            jobs=[("ES", "30m")],
+            storage_root=storage_root,
+        )
+        finalize_cluster_run(run_id="run-a", storage_root=storage_root)
+
+        source_b = tmp / "source-b"
+        _write_dataset_output(source_b, "NQ", "60m")
+        ingest_host_results(
+            run_id="run-b",
+            host="r630",
+            source_root=source_b,
+            jobs=[("NQ", "60m")],
+            storage_root=storage_root,
+        )
+        finalize_cluster_run(run_id="run-b", storage_root=storage_root)
+
+        result = mirror_storage_to_backup(
+            storage_root=storage_root,
+            backup_root=backup_root,
+            include_all_runs=True,
+        )
+
+        assert set(Path(path_text).name for path_text in result["copied_runs"]) == {"run-a", "run-b"}
+        assert (backup_root / "sweep_results" / "runs" / "run-a" / "cluster_run_manifest.json").exists()
+        assert (backup_root / "sweep_results" / "runs" / "run-b" / "cluster_run_manifest.json").exists()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

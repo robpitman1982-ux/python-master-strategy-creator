@@ -5,6 +5,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Iterable
 
 from modules.master_leaderboard import write_master_leaderboards
 from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
@@ -56,6 +57,20 @@ def _copy_if_exists(src: Path, dst: Path) -> bool:
         return False
     _copy_path(src, dst)
     return True
+
+
+def _latest_run_id(runs_root: Path) -> str | None:
+    latest_run_path = runs_root / "LATEST_RUN.txt"
+    if not latest_run_path.exists():
+        return None
+    text = latest_run_path.read_text(encoding="utf-8").strip()
+    return text or None
+
+
+def _iter_export_files(exports_dir: Path) -> Iterable[Path]:
+    if not exports_dir.exists():
+        return []
+    return sorted(path for path in exports_dir.iterdir() if path.is_file())
 
 
 @dataclass(frozen=True)
@@ -242,4 +257,63 @@ def finalize_cluster_run(
         "ultimate_rows": 0 if ultimate_df.empty else int(len(ultimate_df)),
         "exported_files": exported_files,
         "manifest_path": str(paths.manifest_path),
+    }
+
+
+def mirror_storage_to_backup(
+    *,
+    storage_root: Path,
+    backup_root: Path,
+    run_id: str | None = None,
+    include_all_runs: bool = False,
+) -> dict:
+    storage_root = Path(storage_root)
+    backup_root = Path(backup_root)
+
+    exports_dir = storage_root / "exports"
+    runs_root = storage_root / "runs"
+    leaderboards_backup_dir = backup_root / "leaderboards"
+    sweep_results_backup_dir = backup_root / "sweep_results"
+    runs_backup_dir = sweep_results_backup_dir / "runs"
+
+    leaderboards_backup_dir.mkdir(parents=True, exist_ok=True)
+    runs_backup_dir.mkdir(parents=True, exist_ok=True)
+
+    copied_exports: list[str] = []
+    copied_runs: list[str] = []
+
+    for export_path in _iter_export_files(exports_dir):
+        if export_path.suffix.lower() not in {".csv", ".txt", ".json"}:
+            continue
+        dst = leaderboards_backup_dir / export_path.name
+        _copy_path(export_path, dst)
+        copied_exports.append(str(dst))
+
+    latest_run_id = _latest_run_id(runs_root)
+    if latest_run_id is not None:
+        latest_run_dst = sweep_results_backup_dir / "LATEST_RUN.txt"
+        _copy_path(runs_root / "LATEST_RUN.txt", latest_run_dst)
+        copied_exports.append(str(latest_run_dst))
+
+    run_ids: list[str] = []
+    if include_all_runs:
+        run_ids = sorted(path.name for path in runs_root.iterdir() if path.is_dir())
+    else:
+        selected_run_id = run_id or latest_run_id
+        if selected_run_id:
+            run_ids = [selected_run_id]
+
+    for selected_run_id in run_ids:
+        run_src = runs_root / selected_run_id
+        if not run_src.exists():
+            raise FileNotFoundError(f"Run not found under storage root: {run_src}")
+        run_dst = runs_backup_dir / selected_run_id
+        _copy_path(run_src, run_dst)
+        copied_runs.append(str(run_dst))
+
+    return {
+        "backup_root": str(backup_root),
+        "copied_exports": copied_exports,
+        "copied_runs": copied_runs,
+        "latest_run_id": latest_run_id,
     }
