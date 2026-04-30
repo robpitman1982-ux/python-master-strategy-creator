@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex] c240 ES daily CFD gate passed
+Status: OK
+What: Staged commit `0e525e4` into an isolated c240 temp tree at `/tmp/psc_0e525e4` without mutating the stale/dirty c240 working copy. Ran `run_local_sweep.py --config configs/local_sweeps/ES_daily.yaml --data-dir /data/market_data/cfds/ohlc_engine --dry-run`, then ran the real ES daily CFD sweep on c240 using the same temp tree.
+Outcome: Preflight confirmed the CFD universe split in the real c240 environment: data path `/data/market_data/cfds/ohlc_engine/ES_daily_dukascopy.csv`, `instrument_universe: cfd_dukascopy`, `price_source: dukascopy`, `tick_value: 0.01`, `dollars_per_point: 1.0`, `slippage_ticks: 1`. Execution completed with `status.json` stage `DONE`, 15/15 families completed, no leftover sweep processes, 37 MB artifacts under `/tmp/psc_0e525e4/Outputs/es_daily_dukascopy_v1/ES_daily`. Leaderboard sanity: 15 family rows, 13 accepted final, quality flags 7 ROBUST / 3 ROBUST_BORDERLINE / 3 STABLE_BORDERLINE / 1 BROKEN_IN_OOS / 1 NO_TRADES, OOS PF range 0.00-2.24.
+Files: MASTER_HANDOVER.md, LOG.md. Runtime artifacts are on c240 temp storage only.
+Next: Sync the guardrail commit(s) to c240/workers through the agreed route, then run a multi-timeframe or multi-host dry run before any full 24-market cluster dispatch.
+
 ### 2026-04-30 [Codex] Instrument universe guardrails for futures vs CFD sweeps
 Status: OK
 What: Operator paused sprint planning and asked to bulletproof the futures-vs-CFD pipeline before any The5ers CFD run. Added `modules/instrument_universe.py` with explicit `futures_tradestation` and `cfd_dukascopy` universes, source-path inference, canonical CFD filename checks, and known contract-economics validation for ES/NQ/YM/GC/SI/CL plus core futures specs. Wired preflight into `run_local_sweep.py`, `run_cluster_sweep.py`, and direct `master_strategy_engine.py --config ...`; batch dry-run now builds and validates every generated job config before reporting success. Corrected `configs/cfd_markets.yaml` for The5ers-mapped CFD economics, normalized Dukascopy data filenames to `{MARKET}_{TF}_dukascopy.csv`, regenerated all 24 local CFD sweep configs with explicit universe metadata, and documented the separation in `docs/INSTRUMENT_UNIVERSES.md`. Removed the uncommitted Sprint 84 draft after operator asked to hold sprint planning.
