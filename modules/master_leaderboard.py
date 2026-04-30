@@ -58,13 +58,12 @@ def aggregate_master_leaderboard(
     if not outputs_root.exists():
         return pd.DataFrame()
 
-    for subdir in sorted(outputs_root.iterdir()):
-        if not subdir.is_dir():
+    leaderboard_paths = sorted(outputs_root.rglob(leaderboard_filename))
+    for leaderboard_csv in leaderboard_paths:
+        if not leaderboard_csv.is_file():
             continue
 
-        leaderboard_csv = subdir / leaderboard_filename
-        if not leaderboard_csv.exists():
-            continue
+        subdir = leaderboard_csv.parent
 
         try:
             df = pd.read_csv(leaderboard_csv)

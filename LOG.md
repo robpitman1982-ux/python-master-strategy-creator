@@ -5,6 +5,13 @@
 
 ---
 
+### 2026-04-30 [Codex] Live cluster status updated; defer two unattended full-market runs
+Status: OK
+What: Re-checked the live ES/NQ CFD validation batch over SSH. Confirmed `r630` complete (`1h27m32s` total), `c240` complete (`ES:30m` in `2h59m20s`), `gen8` complete (`ES:60m` in `3h03m05s`), and `g9` still actively running `NQ:30m`; latest visible `g9` progress was breakout `3294/16473 (20.0%)` at `2026-04-30 09:58:01 UTC` after completing mean reversion and trend. Updated MASTER_HANDOVER current-status paragraph with the real per-host completion picture and the overnight-planning recommendation.
+Outcome: State is current again. Operational recommendation is to avoid queueing two unattended full 24-market runs before the first real `run_cluster_results.py ingest-host` + `finalize-run` cycle has been proven on live host outputs. First finish and publish `/tmp/psc_9ed5648`, then decide whether one unattended full-market batch is mature enough.
+Files: MASTER_HANDOVER.md, LOG.md.
+Next: Wait for `g9` to finish, ingest/finalize the current run on c240, inspect published CFD exports, then reassess unattended overnight capacity.
+
 ### 2026-04-30 [Codex] Implemented canonical local-cluster result ingest + finalize flow
 Status: OK
 What: Operator confirmed that the old GCP bucket model had a crucial property the current local cluster was missing: partial and full runs alike could still land in one canonical place and contribute to the cumulative leaderboard. Implemented that missing local-cluster glue in a new `modules/cluster_results.py` plus CLI wrapper `run_cluster_results.py`. The new flow has two stages: `ingest-host` copies finished dataset outputs from a host temp tree (for example `/tmp/psc_9ed5648/Outputs/es_30m_cfd/ES_30m`) into `strategy_console_storage/runs/<run_id>/artifacts/Outputs/<dataset_dir>`, preserves host logs and metadata, and records everything in `cluster_run_manifest.json`; `finalize-run` rebuilds the run-scoped master leaderboard from the canonical run artifacts, mirrors the run master into `strategy_console_storage/exports/`, rebuilds the cumulative ultimate leaderboard from all archived runs, and updates `runs/LATEST_RUN.txt`. The design explicitly supports partial runs, so single-market or single-timeframe experiments can still flow into the cumulative ultimate leaderboard.

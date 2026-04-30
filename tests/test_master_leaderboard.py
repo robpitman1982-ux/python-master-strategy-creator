@@ -17,6 +17,12 @@ def _write_family_files(root: Path, dataset_name: str, classic_rows: list[dict])
     pd.DataFrame(classic_rows).to_csv(ds_dir / "family_leaderboard_results.csv", index=False)
 
 
+def _write_nested_family_files(root: Path, job_name: str, dataset_name: str, classic_rows: list[dict]) -> None:
+    job_dir = root / job_name / dataset_name
+    job_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(classic_rows).to_csv(job_dir / "family_leaderboard_results.csv", index=False)
+
+
 def _fresh_fixture_root(case_name: str) -> Path:
     root = _FIXTURE_ROOT / case_name
     if root.exists():
@@ -144,3 +150,36 @@ def test_write_master_leaderboards_cfd_skips_bootcamp_output():
     assert (root / "master_leaderboard.csv").exists()
     assert (root / "master_leaderboard_cfd.csv").exists()
     assert not (root / "master_leaderboard_bootcamp.csv").exists()
+
+
+def test_aggregate_master_leaderboard_reads_nested_job_output_layout():
+    root = _fresh_fixture_root("nested_job_layout")
+    _write_nested_family_files(
+        root,
+        "es_30m_cfd",
+        "ES_30m",
+        classic_rows=[
+            {
+                "strategy_type": "trend",
+                "leader_strategy_name": "NestedTrend",
+                "accepted_final": True,
+                "quality_flag": "ROBUST",
+                "leader_pf": 1.30,
+                "leader_net_pnl": 50000.0,
+                "leader_trades": 100,
+                "leader_trades_per_year": 7.0,
+                "leader_max_drawdown": 10000.0,
+                "calmar_ratio": 1.8,
+                "is_pf": 1.10,
+                "oos_pf": 1.22,
+                "recent_12m_pf": 1.18,
+            }
+        ],
+    )
+
+    classic = aggregate_master_leaderboard(outputs_root=root)
+
+    assert len(classic) == 1
+    assert classic.iloc[0]["market"] == "ES"
+    assert classic.iloc[0]["timeframe"] == "30m"
+    assert classic.iloc[0]["leader_strategy_name"] == "NestedTrend"
