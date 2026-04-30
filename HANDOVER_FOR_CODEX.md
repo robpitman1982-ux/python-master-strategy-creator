@@ -12,7 +12,7 @@
 
 You're picking up an active project briefly. The operator will return to a Claude session tomorrow evening (2026-05-01). Your job: **don't lose state, don't break invariants, don't make destructive changes without per-action confirmation**. If the operator hands you a small task, complete it cleanly. If it's a bigger ask, push back and suggest waiting for Claude.
 
-**Codex update, 2026-04-30:** this file was written before Codex's CFD pipeline work. Trust `MASTER_HANDOVER.md` and the top of `LOG.md` over older sections below when they differ. Since this file was written, Codex added futures-vs-CFD universe guardrails, exact-job distributed planning, staged the committed tree on all four cluster hosts, copied the full CFD OHLC dataset to gen8/r630/g9, installed engine requirements into g9 `~/venv`, validated whole-cluster dry-run/stress/output gates, and then refactored the CFD research pipeline so CFD leaderboards are now neutral strategy pools rather than Bootcamp-ranked views. On the CFD path, `bootcamp_score` has been removed from emitted leaderboards, canonical aggregates are `master_leaderboard_cfd.csv` and `ultimate_leaderboard_cfd.csv`, and the selector now owns program-specific ranking. Futures Bootcamp-ranked outputs were left intact. Recent local commits, not pushed unless Rob explicitly approves: `0e525e4`, `b78999d`, `ad8bf7e`, plus the current CFD leaderboard/selector pivot commit that may not yet be created when you read this line.
+**Codex update, 2026-04-30:** this file was written before Codex's CFD pipeline work. Trust `MASTER_HANDOVER.md` and the top of `LOG.md` over older sections below when they differ. Since this file was written, Codex added futures-vs-CFD universe guardrails, exact-job distributed planning, staged the committed tree on all four cluster hosts, copied the full CFD OHLC dataset to gen8/r630/g9, installed engine requirements into g9 `~/venv`, validated whole-cluster dry-run/stress/output gates, and then refactored the active research pipeline so both CFD and futures leaderboards are now neutral strategy pools rather than Bootcamp-ranked views. On the active path, `bootcamp_score` is no longer emitted into new leaderboards, canonical CFD aggregates are `master_leaderboard_cfd.csv` and `ultimate_leaderboard_cfd.csv`, canonical futures aggregates remain `master_leaderboard.csv` and `ultimate_leaderboard.csv`, and the selector now owns program-specific ranking. Recent local commits, not pushed unless Rob explicitly approves: `0e525e4`, `b78999d`, `ad8bf7e`, `9cb74c4`, plus the current ranking-cleanup commit that may not yet be created when you read this line.
 
 **Read these in order before doing anything:**
 
@@ -80,9 +80,9 @@ The operator has a working spec all collaborators must follow. Violating these w
 - ~454 strategies in ultimate leaderboard from prior sweeps
 - 12 strategy families (3 long base + 3 short + 9 subtypes)
 - Vectorized engine: 14-23x speedup, parity-tested
-- CFD leaderboards are now neutral strategy pools: canonical CFD outputs are `family_leaderboard_results.csv`, `master_leaderboard_cfd.csv`, and `ultimate_leaderboard_cfd.csv`
-- Futures Bootcamp-ranked outputs still exist for the legacy futures research track
-- Portfolio selector: 3-layer correlation, ECD, block bootstrap MC, regime survival gate. It now reads the neutral CFD pool and does program-specific ranking itself rather than inheriting `bootcamp_score` as an upstream gate
+- Active leaderboards are now neutral strategy pools. CFD outputs are `family_leaderboard_results.csv`, `master_leaderboard_cfd.csv`, and `ultimate_leaderboard_cfd.csv`; futures outputs are `family_leaderboard_results.csv`, `master_leaderboard.csv`, and `ultimate_leaderboard.csv`
+- Research ranking now favors stronger accepted/quality/OOS/recency/Calmar/DSR profiles with lower max DD rather than any Bootcamp-specific heuristic
+- Portfolio selector: 3-layer correlation, ECD, block bootstrap MC, regime survival gate. It now reads the neutral pool and does program-specific ranking itself rather than inheriting `bootcamp_score` as an upstream gate
 - Newly added (this week): BH-FDR family-aware promotion gate, DSR on master leaderboard, walk-forward validation module, random-flip null permutation test, EXTERNAL_LLM_BRIEFING.md, sprint architecture
 
 ### Live trading

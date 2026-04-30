@@ -386,6 +386,7 @@ def run_batch(
             classic_df, bootcamp_df = write_master_leaderboards(
                 output_dir,
                 include_bootcamp_scores=False,
+                emit_cfd_alias=True,
             )
             if classic_df is not None:
                 print(f"  Master leaderboard: {len(classic_df)} strategies")

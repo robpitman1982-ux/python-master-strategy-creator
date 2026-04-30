@@ -106,8 +106,8 @@ Bulletproof SPOT runner `run_spot_resilient.py` (Session 59): queue-based, multi
 - **~454 strategies** in ultimate leaderboard (414 bootcamp-accepted) across 8 markets (ES, CL, NQ, SI, HG, RTY, YM, GC)
 - **12 strategy families**: 3 long base (trend, mean_reversion, breakout) + 3 short (short_trend, short_mean_reversion, short_breakout) + 9 subtypes (3 per long family)
 - **Vectorized engine** (14-23x speedup, parity-tested) — every cloud config has `use_vectorized_trades: true`
-- **CFD leaderboard architecture** now uses neutral canonical pools (`family_leaderboard_results.csv`, `master_leaderboard_cfd.csv`, `ultimate_leaderboard_cfd.csv`) instead of Bootcamp-ranked CFD outputs
-- **Portfolio selector** with 3-layer correlation, ECD, block bootstrap MC, regime survival gate; now owns program-specific ranking directly rather than inheriting `bootcamp_score` from the CFD leaderboard layer
+- **Leaderboard architecture** now uses neutral canonical pools: futures rank in `family_leaderboard_results.csv`, `master_leaderboard.csv`, `ultimate_leaderboard.csv`; CFDs rank in `family_leaderboard_results.csv`, `master_leaderboard_cfd.csv`, `ultimate_leaderboard_cfd.csv`
+- **Portfolio selector** with 3-layer correlation, ECD, block bootstrap MC, regime survival gate; now owns program-specific ranking directly rather than inheriting `bootcamp_score` from any leaderboard layer
 - **4 prop firm programs** configured with daily DD enforcement (Bootcamp, High Stakes, Pro Growth, Hyper Growth)
 - **Test suite**: 261+ tests passing (smoke, subtypes, parity, portfolio selector, prop firm configs, cross-dataset evaluator)
 

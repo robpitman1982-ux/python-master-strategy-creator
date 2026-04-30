@@ -15,25 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
-# Quality-flag priority for ranking
-# ---------------------------------------------------------------------------
-
-_QUALITY_PRIORITY: dict[str, int] = {
-    "ROBUST": 0,
-    "STABLE": 1,
-    "MARGINAL": 2,
-    "EDGE_DECAYED_OOS": 3,
-    "REGIME_DEPENDENT": 4,
-    "BROKEN_IN_OOS": 5,
-    "LOW_IS_SAMPLE": 6,
-    "OOS_HEAVY": 7,
-    "NO_TRADES": 8,
-}
-
-
-def _quality_sort_key(flag: Any) -> int:
-    return _QUALITY_PRIORITY.get(str(flag).upper().strip(), 99)
+from modules.leaderboard_ranking import sort_aggregate_leaderboard
 
 
 def _find_leaderboard_files(runs_root: Path, *, verbose: bool = False) -> list[tuple[str, Path]]:
@@ -173,26 +155,11 @@ def aggregate_ultimate_leaderboard(
     # ------------------------------------------------------------------
     # 3. Rank
     # ------------------------------------------------------------------
-    combined["_quality_sort"] = combined.get("quality_flag", pd.Series("", index=combined.index)).apply(_quality_sort_key)
-
-    pnl_col = "leader_net_pnl" if "leader_net_pnl" in combined.columns else (
-        "net_pnl" if "net_pnl" in combined.columns else None
-    )
-    pnl_series = pd.to_numeric(combined[pnl_col], errors="coerce").fillna(0) if pnl_col else pd.Series(0, index=combined.index)
-    pf_series = pd.to_numeric(combined[pf_col], errors="coerce").fillna(0) if pf_col else pd.Series(0, index=combined.index)
-
-    combined = combined.assign(_pnl_sort=pnl_series, _pf_sort2=pf_series)
-    combined = combined.sort_values(
-        ["_quality_sort", "_pnl_sort", "_pf_sort2"],
-        ascending=[True, False, False],
-    )
+    combined = sort_aggregate_leaderboard(combined)
     combined = combined.reset_index(drop=True)
     if "rank" in combined.columns:
         combined = combined.drop(columns=["rank"])
     combined.insert(0, "rank", combined.index + 1)
-
-    # Drop internal sort columns
-    combined = combined.drop(columns=[c for c in combined.columns if c.startswith("_")])
 
     # ------------------------------------------------------------------
     # 4. Write
@@ -205,25 +172,6 @@ def aggregate_ultimate_leaderboard(
         combined.to_csv(cfd_output_path, index=False)
         if verbose:
             print(f"CFD ultimate leaderboard: {len(combined)} strategies -> {cfd_output_path}")
-
-    # --- Bootcamp ultimate leaderboard (accepted-only, bootcamp-ranked) ---
-    if (
-        "bootcamp_score" in combined.columns
-        and not combined.apply(_looks_like_cfd_row, axis=1).all()
-    ):
-        sort_col = "bootcamp_score" if "bootcamp_score" in combined.columns else (pf_col or "leader_pf")
-        boot_df = combined.copy()
-        boot_sort = pd.to_numeric(boot_df.get(sort_col, pd.Series(0, index=boot_df.index)), errors="coerce").fillna(0)
-        boot_df = boot_df.assign(_boot_sort=boot_sort).sort_values("_boot_sort", ascending=False)
-        boot_df = boot_df.drop(columns=["_boot_sort"])
-        boot_df = boot_df.reset_index(drop=True)
-        if "rank" in boot_df.columns:
-            boot_df = boot_df.drop(columns=["rank"])
-        boot_df.insert(0, "rank", boot_df.index + 1)
-        boot_output_path = output_path.parent / "ultimate_leaderboard_bootcamp.csv"
-        boot_df.to_csv(boot_output_path, index=False)
-        if verbose:
-            print(f"Bootcamp ultimate leaderboard: {len(boot_df)} strategies -> {boot_output_path}")
 
     if verbose:
         print(

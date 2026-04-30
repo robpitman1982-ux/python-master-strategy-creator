@@ -21,7 +21,6 @@ from typing import Any
 import pandas as pd
 
 from modules.config_loader import get_nested, load_config
-from modules.bootcamp_scoring import add_bootcamp_scores
 from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
@@ -32,6 +31,7 @@ from modules.instrument_universe import (
     infer_universe_from_paths,
     validate_sweep_config,
 )
+from modules.leaderboard_ranking import sort_family_leaderboard
 from modules.portfolio_evaluator import evaluate_portfolio
 from modules.progress import ProgressTracker
 from modules.statistics import annotate_dataframe_with_pvalues
@@ -671,16 +671,20 @@ def _compute_oos_is_pf_ratio(row: pd.Series) -> float:
 
 
 def _should_include_bootcamp_scores(config: dict[str, Any]) -> bool:
-    """Keep Bootcamp ranking only for the futures research track."""
+    """Legacy Bootcamp ranking is retired from the active research pipeline."""
+    return False
+
+
+def _is_cfd_universe(config: dict[str, Any]) -> bool:
     datasets = config.get("datasets", []) if isinstance(config, dict) else []
     universe = get_declared_universe(config) or infer_universe_from_paths(datasets)
-    return universe != CFD_DUKASCOPY
+    return universe == CFD_DUKASCOPY
 
 
 def build_family_leaderboard(
     summary_df: pd.DataFrame,
     *,
-    include_bootcamp_scores: bool = True,
+    include_bootcamp_scores: bool = False,
 ) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
@@ -692,13 +696,7 @@ def build_family_leaderboard(
     leaderboard["accepted_final"] = leaderboard.apply(_passes_final_leaderboard_gate, axis=1)
     leaderboard["calmar_ratio"] = leaderboard.apply(_compute_calmar_ratio, axis=1)
     leaderboard["oos_is_pf_ratio"] = leaderboard.apply(_compute_oos_is_pf_ratio, axis=1)
-    if include_bootcamp_scores:
-        leaderboard = add_bootcamp_scores(leaderboard)
-
-    leaderboard = leaderboard.sort_values(
-        by=["accepted_final", "leader_net_pnl", "leader_pf", "leader_avg_trade"],
-        ascending=[False, False, False, False],
-    ).reset_index(drop=True)
+    leaderboard = sort_family_leaderboard(leaderboard)
 
     keep_cols = [
         "strategy_type",
@@ -750,34 +748,11 @@ def build_family_leaderboard(
         "best_refined_signal_exit_reference",
     ]
 
-    if include_bootcamp_scores:
-        keep_cols.extend([
-            "bootcamp_score",
-            "bootcamp_profitability_score",
-            "bootcamp_drawdown_score",
-            "bootcamp_oos_score",
-            "bootcamp_consistency_score",
-            "bootcamp_trade_count_score",
-            "bootcamp_quality_penalty",
-            "bootcamp_drawdown_to_profit_ratio",
-        ])
-
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()
 
 
 def build_family_bootcamp_leaderboard(summary_df: pd.DataFrame) -> pd.DataFrame:
-    classic = build_family_leaderboard(summary_df, include_bootcamp_scores=True)
-    if classic.empty:
-        return pd.DataFrame()
-
-    sort_cols = [c for c in ["accepted_final", "bootcamp_score", "oos_pf", "leader_net_pnl"] if c in classic.columns]
-    if not sort_cols:
-        return classic.reset_index(drop=True)
-
-    return classic.sort_values(
-        by=sort_cols,
-        ascending=[False] * len(sort_cols),
-    ).reset_index(drop=True)
+    return pd.DataFrame()
 
 
 # =============================================================================
@@ -1135,15 +1110,8 @@ def _run_dataset(
 
     tracker.log_build_leaderboard()
     include_bootcamp_scores = _should_include_bootcamp_scores(_cfg)
-    leaderboard_df = build_family_leaderboard(
-        family_summary_df,
-        include_bootcamp_scores=include_bootcamp_scores,
-    )
-    bootcamp_leaderboard_df = (
-        build_family_bootcamp_leaderboard(family_summary_df)
-        if include_bootcamp_scores
-        else pd.DataFrame()
-    )
+    leaderboard_df = build_family_leaderboard(family_summary_df)
+    bootcamp_leaderboard_df = pd.DataFrame()
     leaderboard_path = ds_output_dir / "family_leaderboard_results.csv"
     bootcamp_leaderboard_path = ds_output_dir / "family_leaderboard_bootcamp.csv"
 
@@ -1152,8 +1120,7 @@ def _run_dataset(
         if not bootcamp_leaderboard_df.empty:
             bootcamp_leaderboard_df.to_csv(bootcamp_leaderboard_path, index=False)
 
-        leaderboard_label = "CFD LEADERBOARD" if not include_bootcamp_scores else "LEADERBOARD"
-        print(f"\n{leaderboard_label} - {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
+        print(f"\nLEADERBOARD - {ds_market} {ds_timeframe} (Saved to {leaderboard_path})")
         preview_cols = [
             "strategy_type",
             "leader_source",
@@ -1301,9 +1268,11 @@ if __name__ == "__main__":
         from modules.master_leaderboard import write_master_leaderboards
 
         include_bootcamp_scores = _should_include_bootcamp_scores(_cfg)
+        emit_cfd_alias = _is_cfd_universe(_cfg)
         master_lb, bootcamp_master_lb = write_master_leaderboards(
             outputs_root=str(OUTPUTS_DIR),
             include_bootcamp_scores=include_bootcamp_scores,
+            emit_cfd_alias=emit_cfd_alias,
         )
         if not master_lb.empty:
             print(f"\n{'=' * 72}")
@@ -1320,7 +1289,7 @@ if __name__ == "__main__":
             print(master_lb[[c for c in preview_cols if c in master_lb.columns]].to_string(index=False))
 
             print(f"\nSaved to {OUTPUTS_DIR / 'master_leaderboard.csv'}")
-            if not include_bootcamp_scores:
+            if emit_cfd_alias:
                 print(f"Saved to {OUTPUTS_DIR / 'master_leaderboard_cfd.csv'}")
             if not bootcamp_master_lb.empty:
                 print(f"\n{'=' * 72}")
@@ -1338,7 +1307,7 @@ if __name__ == "__main__":
                 print("Running portfolio selection...")
                 selector_leaderboard = (
                     OUTPUTS_DIR / "ultimate_leaderboard_cfd.csv"
-                    if not include_bootcamp_scores
+                    if emit_cfd_alias
                     else OUTPUTS_DIR / "ultimate_leaderboard.csv"
                 )
                 run_portfolio_selection(

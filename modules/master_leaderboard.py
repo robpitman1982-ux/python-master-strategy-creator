@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from modules.leaderboard_ranking import sort_aggregate_leaderboard
 from modules.statistics import annotate_dataframe_with_dsr
 
 
@@ -48,12 +49,11 @@ def aggregate_master_leaderboard(
     outputs_root = Path(outputs_root)
     all_rows: list[pd.DataFrame] = []
 
+    if ranking == "bootcamp":
+        return pd.DataFrame()
+
     if leaderboard_filename is None:
-        leaderboard_filename = (
-            "family_leaderboard_bootcamp.csv"
-            if ranking == "bootcamp"
-            else "family_leaderboard_results.csv"
-        )
+        leaderboard_filename = "family_leaderboard_results.csv"
 
     if not outputs_root.exists():
         return pd.DataFrame()
@@ -112,14 +112,7 @@ def aggregate_master_leaderboard(
     if combined.empty:
         return pd.DataFrame()
 
-    sort_preferences = (
-        ["bootcamp_score", "oos_pf", "leader_net_pnl"]
-        if ranking == "bootcamp"
-        else ["leader_net_pnl", "leader_pf"]
-    )
-    sort_cols = [c for c in sort_preferences if c in combined.columns]
-    if sort_cols:
-        combined = combined.sort_values(by=sort_cols, ascending=[False] * len(sort_cols))
+    combined = sort_aggregate_leaderboard(combined)
 
     combined = combined.reset_index(drop=True)
     combined.insert(0, "rank", range(1, len(combined) + 1))
@@ -147,7 +140,6 @@ def aggregate_master_leaderboard(
         "leader_trades",
         "leader_trades_per_year",
         "leader_win_rate",
-        "bootcamp_score",
         "deflated_sharpe_ratio",
         "sharpe_per_trade",
         "n_trials_in_search",
@@ -172,7 +164,8 @@ def write_master_leaderboards(
     outputs_root: str | Path = "Outputs",
     min_pf: float = 1.0,
     min_oos_pf: float = 1.0,
-    include_bootcamp_scores: bool = True,
+    include_bootcamp_scores: bool = False,
+    emit_cfd_alias: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     outputs_root = Path(outputs_root)
     outputs_root.mkdir(parents=True, exist_ok=True)
@@ -183,23 +176,12 @@ def write_master_leaderboards(
         min_oos_pf=min_oos_pf,
         ranking="classic",
     )
-    bootcamp = (
-        aggregate_master_leaderboard(
-            outputs_root=outputs_root,
-            min_pf=min_pf,
-            min_oos_pf=min_oos_pf,
-            ranking="bootcamp",
-        )
-        if include_bootcamp_scores
-        else pd.DataFrame()
-    )
+    bootcamp = pd.DataFrame()
 
     if not classic.empty:
         classic.to_csv(outputs_root / "master_leaderboard.csv", index=False)
-        if not include_bootcamp_scores:
+        if emit_cfd_alias:
             classic.to_csv(outputs_root / "master_leaderboard_cfd.csv", index=False)
-    if not bootcamp.empty:
-        bootcamp.to_csv(outputs_root / "master_leaderboard_bootcamp.csv", index=False)
 
     # Print locations of cross-timeframe output files if they exist
     cross_tf_files = [
@@ -225,9 +207,3 @@ if __name__ == "__main__":
         print(f"{'=' * 72}")
         print(classic_df.to_string(index=False))
         print(f"\nSaved to {Path('Outputs') / 'master_leaderboard.csv'}")
-        if not bootcamp_df.empty:
-            print(f"\n{'=' * 72}")
-            print(f"BOOTCAMP MASTER LEADERBOARD - {len(bootcamp_df)} accepted strategies")
-            print(f"{'=' * 72}")
-            print(bootcamp_df.to_string(index=False))
-            print(f"\nSaved to {Path('Outputs') / 'master_leaderboard_bootcamp.csv'}")

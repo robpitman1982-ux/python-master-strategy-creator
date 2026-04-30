@@ -11,11 +11,10 @@ from modules.master_leaderboard import aggregate_master_leaderboard, write_maste
 _FIXTURE_ROOT = Path(".tmp_master_leaderboard_fixture")
 
 
-def _write_family_files(root: Path, dataset_name: str, classic_rows: list[dict], bootcamp_rows: list[dict]) -> None:
+def _write_family_files(root: Path, dataset_name: str, classic_rows: list[dict]) -> None:
     ds_dir = root / dataset_name
     ds_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(classic_rows).to_csv(ds_dir / "family_leaderboard_results.csv", index=False)
-    pd.DataFrame(bootcamp_rows).to_csv(ds_dir / "family_leaderboard_bootcamp.csv", index=False)
 
 
 def _fresh_fixture_root(case_name: str) -> Path:
@@ -26,7 +25,7 @@ def _fresh_fixture_root(case_name: str) -> Path:
     return root
 
 
-def test_aggregate_master_leaderboard_bootcamp_sorting():
+def test_aggregate_master_leaderboard_prefers_robust_oos_and_low_dd():
     root = _fresh_fixture_root("aggregate")
     _write_family_files(
         root,
@@ -34,30 +33,18 @@ def test_aggregate_master_leaderboard_bootcamp_sorting():
         classic_rows=[
             {
                 "strategy_type": "trend",
-                "leader_strategy_name": "TrendClassic",
+                "leader_strategy_name": "StableHigherPnl",
                 "accepted_final": True,
                 "quality_flag": "STABLE",
-                "leader_pf": 1.10,
-                "leader_net_pnl": 40000.0,
+                "leader_pf": 1.60,
+                "leader_net_pnl": 90000.0,
                 "leader_trades": 120,
-                "is_pf": 1.02,
-                "oos_pf": 1.15,
-                "recent_12m_pf": 1.10,
-            }
-        ],
-        bootcamp_rows=[
-            {
-                "strategy_type": "trend",
-                "leader_strategy_name": "TrendBootcamp",
-                "accepted_final": True,
-                "quality_flag": "STABLE",
-                "leader_pf": 1.10,
-                "leader_net_pnl": 40000.0,
-                "leader_trades": 120,
-                "bootcamp_score": 58.0,
-                "is_pf": 1.02,
-                "oos_pf": 1.15,
-                "recent_12m_pf": 1.10,
+                "leader_trades_per_year": 8.0,
+                "leader_max_drawdown": 30000.0,
+                "calmar_ratio": 0.8,
+                "is_pf": 1.10,
+                "oos_pf": 1.25,
+                "recent_12m_pf": 1.18,
             }
         ],
     )
@@ -67,43 +54,28 @@ def test_aggregate_master_leaderboard_bootcamp_sorting():
         classic_rows=[
             {
                 "strategy_type": "breakout",
-                "leader_strategy_name": "BreakoutClassic",
+                "leader_strategy_name": "RobustLowerDd",
                 "accepted_final": True,
                 "quality_flag": "ROBUST",
-                "leader_pf": 1.05,
-                "leader_net_pnl": 45000.0,
-                "leader_trades": 90,
-                "is_pf": 1.00,
-                "oos_pf": 1.05,
-                "recent_12m_pf": 1.02,
-            }
-        ],
-        bootcamp_rows=[
-            {
-                "strategy_type": "breakout",
-                "leader_strategy_name": "BreakoutBootcamp",
-                "accepted_final": True,
-                "quality_flag": "ROBUST",
-                "leader_pf": 1.05,
-                "leader_net_pnl": 45000.0,
-                "leader_trades": 90,
-                "bootcamp_score": 71.0,
-                "is_pf": 1.00,
-                "oos_pf": 1.05,
-                "recent_12m_pf": 1.02,
+                "leader_pf": 1.45,
+                "leader_net_pnl": 70000.0,
+                "leader_trades": 150,
+                "leader_trades_per_year": 10.0,
+                "leader_max_drawdown": 12000.0,
+                "calmar_ratio": 1.9,
+                "is_pf": 1.08,
+                "oos_pf": 1.55,
+                "recent_12m_pf": 1.34,
             }
         ],
     )
 
-    classic = aggregate_master_leaderboard(outputs_root=root, ranking="classic")
-    bootcamp = aggregate_master_leaderboard(outputs_root=root, ranking="bootcamp")
+    classic = aggregate_master_leaderboard(outputs_root=root)
 
-    assert list(classic["leader_strategy_name"]) == ["BreakoutClassic", "TrendClassic"]
-    assert list(bootcamp["leader_strategy_name"]) == ["BreakoutBootcamp", "TrendBootcamp"]
-    assert "bootcamp_score" in bootcamp.columns
+    assert list(classic["leader_strategy_name"]) == ["RobustLowerDd", "StableHigherPnl"]
 
 
-def test_write_master_leaderboards_writes_both_outputs():
+def test_write_master_leaderboards_writes_only_neutral_outputs():
     root = _fresh_fixture_root("write")
     _write_family_files(
         root,
@@ -117,21 +89,9 @@ def test_write_master_leaderboards_writes_both_outputs():
                 "leader_pf": 1.40,
                 "leader_net_pnl": 60000.0,
                 "leader_trades": 180,
-                "is_pf": 1.10,
-                "oos_pf": 1.35,
-                "recent_12m_pf": 1.30,
-            }
-        ],
-        bootcamp_rows=[
-            {
-                "strategy_type": "mean_reversion",
-                "leader_strategy_name": "BootcampMR",
-                "accepted_final": True,
-                "quality_flag": "ROBUST",
-                "leader_pf": 1.40,
-                "leader_net_pnl": 60000.0,
-                "leader_trades": 180,
-                "bootcamp_score": 75.5,
+                "leader_trades_per_year": 9.0,
+                "leader_max_drawdown": 15000.0,
+                "calmar_ratio": 1.6,
                 "is_pf": 1.10,
                 "oos_pf": 1.35,
                 "recent_12m_pf": 1.30,
@@ -142,9 +102,10 @@ def test_write_master_leaderboards_writes_both_outputs():
     classic, bootcamp = write_master_leaderboards(outputs_root=root)
 
     assert not classic.empty
-    assert not bootcamp.empty
+    assert bootcamp.empty
     assert (root / "master_leaderboard.csv").exists()
-    assert (root / "master_leaderboard_bootcamp.csv").exists()
+    assert not (root / "master_leaderboard_cfd.csv").exists()
+    assert not (root / "master_leaderboard_bootcamp.csv").exists()
 
 
 def test_write_master_leaderboards_cfd_skips_bootcamp_output():
@@ -161,18 +122,21 @@ def test_write_master_leaderboards_cfd_skips_bootcamp_output():
                 "leader_pf": 1.40,
                 "leader_net_pnl": 60000.0,
                 "leader_trades": 180,
+                "leader_trades_per_year": 9.0,
+                "leader_max_drawdown": 15000.0,
+                "calmar_ratio": 1.6,
                 "dataset": "ES_daily_dukascopy.csv",
                 "is_pf": 1.10,
                 "oos_pf": 1.35,
                 "recent_12m_pf": 1.30,
             }
         ],
-        bootcamp_rows=[],
     )
 
     classic, bootcamp = write_master_leaderboards(
         outputs_root=root,
         include_bootcamp_scores=False,
+        emit_cfd_alias=True,
     )
 
     assert not classic.empty
