@@ -19,7 +19,9 @@ from dashboard_utils import (
     detect_preemption_warning,
     detect_result_files,
     estimate_run_cost,
+    estimate_total_eta_seconds,
     fetch_live_dataset_statuses,
+    fetch_cluster_live_statuses,
     format_bytes,
     format_currency,
     format_datetime,
@@ -41,137 +43,274 @@ from dashboard_utils import (
 )
 from paths import EXPORTS_DIR, LEGACY_RESULTS_DIR, RUNS_DIR, UPLOADS_DIR
 
-# ─── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ────────────────────────────────────────────────────────────────
 
-st.set_page_config(page_title="Strategy Console", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Strategy Console", layout="wide", page_icon="")
 
 st.markdown("""
 <style>
-.block-container {padding-top: 1.2rem; padding-bottom: 3rem;}
+/* ── Base slate theme ─────────────────────────────── */
+.main { background-color: #0f172a; color: #f8fafc; }
+.block-container { padding-top: 1.5rem; padding-bottom: 3rem; }
 
 .console-banner {
-    padding: 1rem 1.5rem;
+    padding: 0.9rem 1.4rem;
     border-radius: 12px;
-    background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    border: 1px solid #334155;
     color: #f8fafc;
     margin-bottom: 1.2rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
-.console-banner h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.5px; }
-.console-banner p  { margin: 0.3rem 0 0 0; opacity: 0.8; font-size: 0.9rem; }
+.console-banner h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.5px; }
+.console-banner p  { margin: 0.2rem 0 0 0; opacity: 0.75; font-size: 0.85rem; }
 
-.status-success { color: #00e676; font-weight: bold; }
-.status-warning { color: #ffab00; font-weight: bold; }
-.status-error   { color: #ff1744; font-weight: bold; }
-.status-info    { color: #448aff; font-weight: bold; }
-.status-neutral { color: #90a4ae; font-weight: bold; }
+.status-success { color: #10b981; font-weight: bold; }
+.status-warning { color: #f59e0b; font-weight: bold; }
+.status-error   { color: #ef4444; font-weight: bold; }
+.status-info    { color: #3b82f6; font-weight: bold; }
+.status-neutral { color: #94a3b8; font-weight: bold; }
 
-.flag-robust   { background:#1b5e20; color:#a5d6a7; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
-.flag-stable   { background:#0d47a1; color:#90caf9; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
-.flag-marginal { background:#e65100; color:#ffcc80; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
-.flag-broken   { background:#b71c1c; color:#ef9a9a; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-robust   { background:#064e3b; color:#6ee7b7; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-stable   { background:#1e3a8a; color:#93c5fd; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-marginal { background:#78350f; color:#fcd34d; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
+.flag-broken   { background:#7f1d1d; color:#fca5a5; padding:2px 8px; border-radius:8px; font-size:0.78rem; }
 
 div[data-testid="metric-container"] {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid #2a2a4a;
+    background: #1e293b;
+    border: 1px solid #334155;
     border-radius: 12px;
     padding: 0.75rem;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
 }
 
 [data-testid="stSidebar"] { background: #0f1923; }
 .stTabs [data-baseweb="tab"] { font-size: 0.95rem; font-weight: 600; }
 .dataframe { font-size: 0.82rem; }
 
+/* ── Live Monitor: dataset grid ─────────────────── */
+.dataset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 1rem;
+    margin-top: 0.75rem;
+}
+
+.ds-card {
+    background: #111827;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 1.2rem 1.25rem 1rem;
+}
+.ds-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.6rem;
+}
+.ds-title {
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1;
+}
+.ds-tf {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-left: 0.35rem;
+}
+.ds-elapsed {
+    font-size: 0.75rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+}
+
+/* Host badges */
+.host-badge {
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.host-c240 { background: #1e3a8a; color: #93c5fd; }
+.host-r630 { background: #064e3b; color: #6ee7b7; }
+.host-gen8 { background: #4c1d95; color: #c4b5fd; }
+.host-g9   { background: #7c2d12; color: #fdba74; }
+.host-unknown { background: #334155; color: #94a3b8; }
+
+/* Progress bar */
+.prog-outer {
+    background: #1e293b;
+    border-radius: 6px;
+    height: 10px;
+    margin: 0.65rem 0 0.3rem;
+    overflow: hidden;
+    border: 1px solid #334155;
+}
+.prog-inner { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+.prog-active  { background: linear-gradient(90deg, #3b82f6 0%, #06b6d4 100%); }
+.prog-done    { background: #10b981; }
+.prog-waiting { background: #475569; }
+.prog-pct {
+    font-size: 0.72rem;
+    color: #64748b;
+    text-align: right;
+    margin-bottom: 0.55rem;
+}
+
+/* ETA display */
+.eta-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #06b6d4;
+    line-height: 1;
+    letter-spacing: -0.03em;
+}
+.eta-done {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #10b981;
+}
+.eta-unknown {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #475569;
+}
+.stage-line {
+    font-size: 0.8rem;
+    color: #64748b;
+    margin-top: 0.2rem;
+    margin-bottom: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Family group mini bars */
+.fam-groups {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 10px;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #1e293b;
+}
+.fam-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+}
+.fam-label { color: #94a3b8; min-width: 58px; }
+.fam-bar {
+    flex: 1;
+    background: #1e293b;
+    border-radius: 3px;
+    height: 5px;
+    overflow: hidden;
+}
+.fam-fill { height: 100%; border-radius: 3px; }
+.fg-done   { background: #10b981; }
+.fg-active { background: #3b82f6; }
+.fg-wait   { background: #475569; }
+.fam-count { color: #cbd5e1; font-size: 0.72rem; min-width: 26px; text-align: right; }
+
+/* Console run monitor (secondary) */
 .live-scope-card {
-    background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
-    border: 1px solid #d7e8ff;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    border: 1px solid #334155;
     border-radius: 18px;
-    padding: 1.35rem 1.5rem;
-    margin-bottom: 1.1rem;
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1rem;
     text-align: center;
 }
-.live-scope-card h2 { margin: 0; font-size: 1.35rem; color: #163b66; letter-spacing: -0.02em; }
-.live-scope-card .scope-line { margin-top: 0.55rem; font-size: 1.5rem; font-weight: 700; color: #10253b; }
+.live-scope-card h2 { margin: 0; font-size: 1.2rem; color: #cbd5e1; }
+.live-scope-card .scope-line { margin-top: 0.4rem; font-size: 1.35rem; font-weight: 700; color: #f8fafc; }
 .monitor-card {
-    background: #ffffff;
-    border: 1px solid #e6edf5;
+    background: #111827;
+    border: 1px solid #334155;
     border-radius: 18px;
-    padding: 1rem 1.1rem 0.9rem;
-    box-shadow: 0 10px 28px rgba(15, 25, 35, 0.05);
+    padding: 0.9rem 1.1rem 0.8rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
     margin-bottom: 1rem;
 }
-.monitor-card h3 { margin: 0 0 0.3rem 0; color: #10253b; font-size: 1.05rem; }
-.monitor-card .subtle { color: #5f7286; font-size: 0.86rem; }
+.monitor-card h3 { margin: 0 0 0.25rem 0; color: #f8fafc; font-size: 1rem; }
+.monitor-card .subtle { color: #94a3b8; font-size: 0.84rem; }
 .monitor-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 0.9rem;
-    margin-top: 0.9rem;
+    gap: 0.8rem;
+    margin-top: 0.8rem;
 }
 .dataset-card {
-    border: 1px solid #ebf0f5;
-    border-radius: 16px;
-    padding: 0.95rem 1rem;
-    background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+    border: 1px solid #334155;
+    border-radius: 14px;
+    padding: 0.9rem 1rem;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
 }
 .dataset-head {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 0.75rem;
-    margin-bottom: 0.6rem;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
 }
-.dataset-title { font-size: 1.02rem; font-weight: 700; color: #10253b; }
-.dataset-meta { font-size: 0.78rem; color: #5f7286; }
-.family-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.dataset-title { font-size: 1rem; font-weight: 700; color: #f8fafc; }
+.dataset-meta { font-size: 0.76rem; color: #94a3b8; }
+.family-list { display: flex; flex-direction: column; gap: 0.3rem; }
 .family-pill {
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-radius: 10px;
-    padding: 0.45rem 0.85rem;
-    font-size: 0.95rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.86rem;
     font-weight: 600;
-    line-height: 1.4;
+    border: 1px solid transparent;
 }
 .family-pill .progress-bar-bg {
-    flex: 1; height: 6px; background: #e2e8ef; border-radius: 3px; margin: 0 0.6rem;
+    flex: 1; height: 5px; background: #1e293b; border-radius: 3px; margin: 0 0.5rem;
 }
-.family-pill .progress-bar-fill {
-    height: 100%; border-radius: 3px; transition: width 0.3s;
-}
-.family-pill.complete .progress-bar-fill { background: #0d6b35; }
-.family-pill.active .progress-bar-fill { background: #175ea6; }
-.family-pill.pending .progress-bar-fill { background: #758597; }
-.family-pill.complete { background: #e9f8ef; color: #0d6b35; border: 1px solid #c6ecd4; }
-.family-pill.active { background: #e7f1ff; color: #175ea6; border: 1px solid #c9dcff; }
-.family-pill.pending { background: #f2f5f8; color: #758597; border: 1px solid #e2e8ef; }
-.family-pill.failed { background: #ffe9ee; color: #b4233d; border: 1px solid #ffc9d5; }
+.family-pill .progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.family-pill.complete .progress-bar-fill { background: #10b981; }
+.family-pill.active .progress-bar-fill  { background: #3b82f6; }
+.family-pill.pending .progress-bar-fill { background: #475569; }
+.family-pill.complete { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
+.family-pill.active   { background: #1e3a8a; color: #93c5fd; border-color: #1e40af; }
+.family-pill.pending  { background: #334155; color: #94a3b8; border-color: #475569; }
+.family-pill.failed   { background: #7f1d1d; color: #fca5a5; border-color: #991b1b; }
 .hero-banner {
-    background: linear-gradient(135deg, #fef2f2 0%, #ffe5e7 100%);
-    color: #991b1b;
-    border: 2px solid #ef4444;
-    border-radius: 18px;
-    padding: 1rem 1.15rem;
-    font-size: 1.2rem;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    text-align: center;
-    margin-bottom: 1rem;
+    background: #450a0a; color: #f87171;
+    border: 1px solid #ef4444; border-radius: 16px;
+    padding: 0.9rem 1rem; font-size: 1.1rem; font-weight: 800;
+    text-align: center; margin-bottom: 1rem;
 }
 .focus-card {
-    background: linear-gradient(135deg, #10253b 0%, #1d4562 100%);
-    color: #f8fbff;
-    border-radius: 18px;
-    padding: 1rem 1.1rem;
-    margin-bottom: 0.95rem;
+    background: #0f172a; border: 1px solid #334155; color: #f8fbff;
+    border-radius: 16px; padding: 0.9rem 1rem; margin-bottom: 0.85rem;
 }
-.focus-card .eyebrow { color: rgba(248, 251, 255, 0.75); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
-.focus-card .value { margin-top: 0.35rem; font-size: 1.25rem; font-weight: 800; }
-.focus-card .detail { margin-top: 0.28rem; font-size: 0.88rem; color: rgba(248, 251, 255, 0.82); }
+.focus-card .eyebrow { color: rgba(248,251,255,0.6); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; }
+.focus-card .value   { margin-top: 0.3rem; font-size: 1.15rem; font-weight: 800; }
+.focus-card .detail  { margin-top: 0.25rem; font-size: 0.84rem; color: rgba(248,251,255,0.7); }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Runtime metadata ──────────────────────────────────────────────────────────
+# ── Strategy family grouping ───────────────────────────────────────────────────
+
+FAMILY_GROUPS: list[tuple[str, list[str]]] = [
+    ("Trend",    ["trend", "trend_pullback_continuation", "trend_momentum_breakout", "trend_slope_recovery"]),
+    ("MR",       ["mean_reversion", "mean_reversion_vol_dip", "mean_reversion_mom_exhaustion", "mean_reversion_trend_pullback"]),
+    ("Breakout", ["breakout", "breakout_compression_squeeze", "breakout_range_expansion", "breakout_higher_low_structure"]),
+    ("S.MR",     ["short_mean_reversion"]),
+    ("S.Trend",  ["short_trend"]),
+    ("S.BKT",    ["short_breakout"]),
+]
+
+# ── Runtime metadata ───────────────────────────────────────────────────────────
 
 @st.cache_resource
 def dashboard_runtime_metadata() -> dict[str, str]:
@@ -185,32 +324,66 @@ def dashboard_runtime_metadata() -> dict[str, str]:
     return {"commit": commit, "hostname": socket.gethostname(), "started_at": started_at}
 
 
-# ─── Data loading ──────────────────────────────────────────────────────────────
+# ── Cached SSH functions (avoid blocking on every page load) ───────────────────
+
+@st.cache_data(ttl=30)
+def _cached_cluster_statuses() -> list[dict]:
+    return fetch_cluster_live_statuses()
+
+
+@st.cache_data(ttl=60)
+def _check_host_alive(host: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", host, "echo 1"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+# ── Data loading ───────────────────────────────────────────────────────────────
 
 runtime = dashboard_runtime_metadata()
 storage = resolve_console_storage_paths()
-run_records = collect_console_run_records(
-    storage=storage, repo_results_root=LEGACY_RESULTS_DIR, include_legacy_fallback=False,
-)
+run_records = collect_console_run_records(storage=storage, include_legacy_fallback=False)
 uploaded_datasets = list_uploaded_datasets(storage)
 export_files = list_export_files(storage)
 console_run_status = read_console_run_status()
 monitor_run = choose_default_run_record(run_records, prefer_running=True)
 selected_run = choose_default_run_record(run_records, require_outputs=True) or monitor_run
+cluster_live_statuses = _cached_cluster_statuses()
 
-# ─── Sidebar ──────────────────────────────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────────────────────
 
-st.sidebar.markdown("## Strategy Console")
+st.sidebar.title("Cluster Console")
 st.sidebar.code(
     f"commit: {runtime['commit']}\nhost:   {runtime['hostname']}\nup:     {runtime['started_at']}",
 )
+
+with st.sidebar.expander("Cluster Status", expanded=True):
+    for h in ["c240", "gen8", "r630", "g9"]:
+        alive = _check_host_alive(h)
+        dot = "o" if alive else "x"
+        state_label = "Online" if alive else "Offline"
+        # Show active dataset count for this host from cached statuses
+        active_on_host = [s for s in cluster_live_statuses if str(s.get("host", "")).lower() == h]
+        if alive and active_on_host:
+            datasets_str = ", ".join(
+                f"{s.get('market','?')} {s.get('timeframe','?')}" for s in active_on_host
+            )
+            st.caption(f"[{dot}] **{h}** — {datasets_str}")
+        else:
+            st.caption(f"[{dot}] **{h}** ({state_label})")
+
 st.sidebar.divider()
-if monitor_run:
+if cluster_live_statuses:
+    st.sidebar.caption(f"Active runs: {len(cluster_live_statuses)} dataset(s) across cluster")
+elif monitor_run:
     st.sidebar.caption("Live Monitor follows the active run automatically.")
-    st.sidebar.markdown(f"**Monitor Run**  \n`{build_run_choice_label(monitor_run)}`")
-    st.sidebar.markdown(f"**Scope**  \n{format_run_scope(monitor_run.get('run_manifest', {}))}")
 else:
-    st.sidebar.caption("No runs found yet.")
+    st.sidebar.caption("No active runs detected.")
 
 if selected_run:
     selected_status      = selected_run["launcher_status"]
@@ -218,75 +391,74 @@ if selected_run:
     selected_run_dir     = selected_run["run_dir"]
     selected_outputs_dir = selected_run["outputs_dir"]
     run_outcome      = str(selected_status.get("run_outcome") or "unknown")
-    vm_outcome       = str(selected_status.get("vm_outcome") or "unknown")
-    billing_status   = billing_status_for_launcher(selected_status)
+    host_label       = str(selected_manifest.get("host") or "c240")
+    run_state        = str(selected_status.get("state") or "unknown")
     operator_summary = operator_action_summary(selected_status)
     run_category     = classify_run_status(selected_status)
 else:
     selected_status = {}; selected_manifest = {}
     selected_run_dir = None; selected_outputs_dir = None
-    run_outcome = vm_outcome = "unknown"
-    billing_status = "unknown"; operator_summary = "No runs available yet."
-    run_category = "unknown"
+    run_outcome = "unknown"
+    run_state = "unknown"; operator_summary = "No runs available yet."
+    run_category = "unknown"; host_label = "none"
 
-analysis_run = selected_run
-analysis_status = selected_status
-analysis_manifest = selected_manifest
-analysis_run_dir = selected_run_dir
-analysis_outputs_dir = selected_outputs_dir
-analysis_run_outcome = run_outcome
-analysis_vm_outcome = vm_outcome
-analysis_billing_status = billing_status
-analysis_run_category = run_category
+analysis_run            = selected_run
+analysis_status         = selected_status
+analysis_manifest       = selected_manifest
+analysis_run_dir        = selected_run_dir
+analysis_outputs_dir    = selected_outputs_dir
+analysis_run_outcome    = run_outcome
+analysis_run_category   = run_category
 
 if monitor_run:
-    monitor_status = monitor_run["launcher_status"]
-    monitor_manifest = monitor_run["run_manifest"]
-    monitor_run_dir = monitor_run["run_dir"]
-    monitor_outputs_dir = monitor_run["outputs_dir"]
-    monitor_run_outcome = str(monitor_status.get("run_outcome") or "unknown")
-    monitor_vm_outcome = str(monitor_status.get("vm_outcome") or "unknown")
-    monitor_billing_status = billing_status_for_launcher(monitor_status)
-    monitor_run_category = classify_run_status(monitor_status)
+    monitor_status        = monitor_run["launcher_status"]
+    monitor_manifest      = monitor_run["run_manifest"]
+    monitor_run_dir       = monitor_run["run_dir"]
+    monitor_outputs_dir   = monitor_run["outputs_dir"]
+    monitor_run_outcome   = str(monitor_status.get("run_outcome") or "unknown")
+    monitor_host          = str(monitor_manifest.get("host") or "c240")
+    monitor_run_category  = classify_run_status(monitor_status)
+    monitor_run_state     = str(monitor_status.get("state") or "unknown")
 else:
-    monitor_status = {}
-    monitor_manifest = {}
-    monitor_run_dir = None
-    monitor_outputs_dir = None
-    monitor_run_outcome = "unknown"
-    monitor_vm_outcome = "unknown"
-    monitor_billing_status = "unknown"
-    monitor_run_category = "unknown"
+    monitor_status = {}; monitor_manifest = {}
+    monitor_run_dir = None; monitor_outputs_dir = None
+    monitor_run_outcome = "unknown"; monitor_host = "none"
+    monitor_run_category = "unknown"; monitor_run_state = "unknown"
 
-is_running = (monitor_run_category == "running")
+is_running       = (monitor_run_category == "running") or bool(cluster_live_statuses)
 display_run_outcome = "running" if is_running else monitor_run_outcome
-display_vm_outcome = monitor_vm_outcome
+display_host     = monitor_host
 
 if monitor_run:
-    selected_run = monitor_run
-    selected_status = monitor_status
+    selected_run     = monitor_run
+    selected_status  = monitor_status
     selected_manifest = monitor_manifest
-    selected_run_dir = monitor_run_dir
+    selected_run_dir  = monitor_run_dir
     selected_outputs_dir = monitor_outputs_dir
     run_outcome = monitor_run_outcome
-    vm_outcome = monitor_vm_outcome
-    billing_status = monitor_billing_status
+    host_label  = monitor_host
     run_category = monitor_run_category
+    run_state    = monitor_run_state
 
-# ─── Banner ────────────────────────────────────────────────────────────────────
+# ── Banner ─────────────────────────────────────────────────────────────────────
 
-run_id_display = selected_status.get("run_id", selected_run_dir.name if selected_run_dir else "—")
+run_id_display = (
+    selected_status.get("run_id")
+    or (selected_run_dir.name if selected_run_dir else "")
+    or ("cluster-active" if cluster_live_statuses else "no run")
+)
+n_active = len(cluster_live_statuses)
+active_str = f"{n_active} dataset(s) running" if n_active else display_run_outcome.upper()
 st.markdown(f"""
 <div class="console-banner">
-    <h1>📈 Strategy Console</h1>
-    <p>Run: <strong>{run_id_display}</strong> &nbsp;|&nbsp;
-       Outcome: <strong>{badge_for_value(display_run_outcome)}</strong> &nbsp;|&nbsp;
-       VM: <strong>{badge_for_value(display_vm_outcome)}</strong> &nbsp;|&nbsp;
-       Billing: <strong>{billing_status}</strong></p>
+    <h1>Strategy Console</h1>
+    <p>{active_str} &nbsp;|&nbsp;
+       Host: <strong><span style="color:#0ea5e9">{runtime['hostname'].upper()}</span></strong> &nbsp;|&nbsp;
+       Run: <strong>{html.escape(str(run_id_display))}</strong></p>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
 def render_table(df: pd.DataFrame) -> None:
     try:
@@ -295,110 +467,204 @@ def render_table(df: pd.DataFrame) -> None:
         st.code(df.to_string(index=False))
 
 
-def render_monitor_progress(summary: dict[str, object]) -> None:
-    rows = summary.get("rows", [])
-    if not rows:
-        st.info("No live dataset progress available yet.")
+def format_current_leaders(leaders_df: pd.DataFrame | None) -> pd.DataFrame | None:
+    if leaders_df is None or leaders_df.empty:
+        return None
+    display = leaders_df.copy()
+    rename_map = {
+        "strategy_name": "Strategy", "leader_strategy_name": "Strategy",
+        "strategy_type": "Family", "dataset": "Dataset",
+        "market": "Market", "timeframe": "Timeframe",
+        "profit_factor": "PF", "leader_pf": "PF",
+        "net_pnl": "Net Profit", "leader_net_pnl": "Net Profit",
+        "max_drawdown": "Drawdown", "leader_max_drawdown": "Drawdown",
+        "total_trades": "Trades", "leader_trades": "Trades",
+        "quality_flag": "Quality",
+    }
+    existing = [c for c in rename_map if c in display.columns]
+    if not existing:
+        return display
+    display = display[existing].copy()
+    display.columns = [rename_map[c] for c in existing]
+    display = display.loc[:, ~display.columns.duplicated()]
+    for nc in ("PF", "Trades"):
+        if nc in display.columns:
+            display[nc] = pd.to_numeric(display[nc], errors="coerce").round(2)
+    for mc in ("Net Profit", "Drawdown"):
+        if mc in display.columns:
+            display[mc] = pd.to_numeric(display[mc], errors="coerce").apply(
+                lambda v: f"${v:,.0f}" if pd.notna(v) else "—"
+            )
+    return display
+
+
+# ── Live Monitor rendering ──────────────────────────────────────────────────────
+
+def _dataset_card_html(status: dict) -> str:
+    host = str(status.get("host", "?")).lower()
+    market = html.escape(str(status.get("market", "?")))
+    timeframe = html.escape(str(status.get("timeframe", "?")))
+    current_family = str(status.get("current_family", "")).strip()
+    current_stage = str(status.get("current_stage", "?"))
+    pct = float(status.get("progress_pct", 0) or 0)
+    elapsed = float(status.get("elapsed_seconds", 0) or 0)
+    completed = list(status.get("families_completed", []) or [])
+    remaining = list(status.get("families_remaining", []) or [])
+    is_done = (
+        current_stage.upper() in {"DONE", "COMPLETE", "COMPLETED"}
+        and not remaining
+    ) or (pct >= 100 and not remaining)
+
+    # ETA
+    total_eta = estimate_total_eta_seconds(status)
+    if is_done:
+        eta_html = f'<div class="eta-done">Done</div>'
+        stage_html = f'<div class="stage-line">Elapsed: {format_duration_short(elapsed)}</div>'
+    elif total_eta is not None and total_eta > 0:
+        eta_html = f'<div class="eta-value">{format_duration_short(total_eta)}</div>'
+        fam_clean = current_family.replace("_", " ") or "starting"
+        stage_html = f'<div class="stage-line">{html.escape(current_stage)} &bull; {html.escape(fam_clean)}</div>'
+    else:
+        eta_html = '<div class="eta-unknown">calculating...</div>'
+        fam_clean = current_family.replace("_", " ") or "starting"
+        stage_html = f'<div class="stage-line">{html.escape(current_stage)} &bull; {html.escape(fam_clean)}</div>'
+
+    # Progress bar
+    bar_cls = "prog-done" if is_done else ("prog-waiting" if pct < 1 else "prog-active")
+    prog_html = (
+        f'<div class="prog-outer">'
+        f'<div class="prog-inner {bar_cls}" style="width:{min(pct, 100):.1f}%"></div>'
+        f'</div>'
+        f'<div class="prog-pct">{pct:.0f}%</div>'
+    )
+
+    # Host badge
+    host_cls = f"host-{host}" if host in ("c240", "r630", "gen8", "g9") else "host-unknown"
+    badge_html = f'<span class="host-badge {host_cls}">{host}</span>'
+
+    # Family group mini bars
+    completed_set = set(completed)
+    fam_html = '<div class="fam-groups">'
+    for group_label, families in FAMILY_GROUPS:
+        n_total = len(families)
+        n_done = sum(1 for f in families if f in completed_set)
+        is_active_grp = not is_done and any(
+            current_family == f or current_family.startswith(f + "_") for f in families
+        )
+        if n_done == n_total:
+            fill_cls = "fg-done"
+            fill_pct = 100
+        elif is_active_grp:
+            fill_cls = "fg-active"
+            fill_pct = max(int(n_done / n_total * 100), 5)
+        else:
+            fill_cls = "fg-wait"
+            fill_pct = int(n_done / n_total * 100)
+        fam_html += (
+            f'<div class="fam-row">'
+            f'<div class="fam-label">{html.escape(group_label)}</div>'
+            f'<div class="fam-bar"><div class="fam-fill {fill_cls}" style="width:{fill_pct}%"></div></div>'
+            f'<div class="fam-count">{n_done}/{n_total}</div>'
+            f'</div>'
+        )
+    fam_html += "</div>"
+
+    return (
+        f'<div class="ds-card">'
+        f'<div class="ds-card-header">'
+        f'<div>'
+        f'<div><span class="ds-title">{market}</span><span class="ds-tf">{timeframe}</span></div>'
+        f'<div class="ds-elapsed">Elapsed: {format_duration_short(elapsed)}</div>'
+        f'</div>'
+        f'{badge_html}'
+        f'</div>'
+        f'{prog_html}'
+        f'{eta_html}'
+        f'{stage_html}'
+        f'{fam_html}'
+        f'</div>'
+    )
+
+
+def render_live_monitor(statuses: list[dict]) -> None:
+    if not statuses:
+        st.info(
+            "No active sweep detected on c240, gen8, r630, or g9.  "
+            "Start a run with: python run_cluster_sweep.py --jobs ES:daily --workers 72"
+        )
         return
 
+    # KPI strip
+    n_active_hosts = len({str(s.get("host", "")).lower() for s in statuses if s.get("host")})
+    n_fam_done = sum(len(s.get("families_completed", []) or []) for s in statuses)
+    n_fam_remaining = sum(len(s.get("families_remaining", []) or []) for s in statuses)
+    n_fam_total = n_fam_done + n_fam_remaining or len(statuses)
+    etas = [estimate_total_eta_seconds(s) for s in statuses]
+    max_eta = max((e for e in etas if e is not None and e > 0), default=None)
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Active Hosts", n_active_hosts)
+    k2.metric("Running Datasets", len(statuses))
+    k3.metric("Families Complete", f"{n_fam_done} / {n_fam_total}")
+    k4.metric("Est. Completion", format_duration_short(max_eta) if max_eta else "—")
+
+    # Dataset cards
+    cards = "".join(_dataset_card_html(s) for s in statuses)
+    st.markdown(f'<div class="dataset-grid">{cards}</div>', unsafe_allow_html=True)
+
+
+# ── Secondary: console-run monitor (old pipeline) ─────────────────────────────
+
+def render_monitor_progress(summary: dict) -> None:
+    rows = summary.get("rows", [])
+    if not rows:
+        st.info("No dataset progress available yet.")
+        return
     completed = int(summary.get("completed_items", 0) or 0)
     total = int(summary.get("total_items", 0) or 0)
     pct = (completed / total * 100.0) if total else 0.0
     st.markdown(
-        f"""
-        <div class="monitor-card">
-            <h3>Run Checklist</h3>
-            <div class="subtle">Completed buckets: <strong>{completed}</strong> / <strong>{total}</strong> ({pct:.0f}%)</div>
-            <div class="monitor-grid">
-        """,
+        f'<div class="monitor-card">'
+        f'<h3>Run Checklist</h3>'
+        f'<div class="subtle">Completed: <strong>{completed}</strong> / <strong>{total}</strong> ({pct:.0f}%)</div>'
+        f'<div class="monitor-grid">',
         unsafe_allow_html=True,
     )
-    dataset_cards: list[str] = []
+    cards: list[str] = []
     for row in rows:
         items_html: list[str] = []
         for item in row["items"]:
-            icon = {
-                "complete": "✓",
-                "active": "▶",
-                "failed": "!",
-                "pending": "○",
-            }.get(item["status"], "○")
+            icon = {"complete": "v", "active": ">", "failed": "!", "pending": "o"}.get(item["status"], "o")
             detail = item["stage"] if item["status"] == "active" and item["stage"] else ""
-            # Build a mini progress bar for active families
-            progress_pct = item.get("progress_pct", 100 if item["status"] == "complete" else 0)
+            prog_pct = item.get("progress_pct", 100 if item["status"] == "complete" else 0)
             bar_html = (
                 f'<div class="progress-bar-bg">'
-                f'<div class="progress-bar-fill" style="width:{progress_pct}%"></div>'
+                f'<div class="progress-bar-fill" style="width:{prog_pct}%"></div>'
                 f'</div>'
             )
-            detail_text = f"{html.escape(detail)}" if detail else ""
             items_html.append(
                 f'<div class="family-pill {item["status"]}">'
-                f"<span>{icon} {html.escape(item['family_label'])}</span>"
-                f"{bar_html}"
-                f"<span>{detail_text}</span>"
-                f"</div>"
+                f'<span>{icon} {html.escape(item["family_label"])}</span>'
+                f'{bar_html}'
+                f'<span>{html.escape(detail)}</span>'
+                f'</div>'
             )
-        dataset_cards.append(
-            f"""
-            <div class="dataset-card">
-                <div class="dataset-head">
-                    <div class="dataset-title">{html.escape(row["label"])}</div>
-                    <div class="dataset-meta">{row["progress_pct"]:.0f}% complete</div>
-                </div>
-                <div class="family-list">
-                    {''.join(items_html)}
-                </div>
-            </div>
-            """
+        cards.append(
+            f'<div class="dataset-card">'
+            f'<div class="dataset-head">'
+            f'<div class="dataset-title">{html.escape(row["label"])}</div>'
+            f'<div class="dataset-meta">{row["progress_pct"]:.0f}%</div>'
+            f'</div>'
+            f'<div class="family-list">{"".join(items_html)}</div>'
+            f'</div>'
         )
-    st.markdown("".join(dataset_cards) + "</div></div>", unsafe_allow_html=True)
+    st.markdown("".join(cards) + "</div></div>", unsafe_allow_html=True)
 
 
-def format_current_leaders(leaders_df: pd.DataFrame | None) -> pd.DataFrame | None:
-    if leaders_df is None or leaders_df.empty:
-        return None
+# ── TABS ────────────────────────────────────────────────────────────────────────
 
-    display = leaders_df.copy()
-    rename_map = {
-        "strategy_name": "Strategy",
-        "leader_strategy_name": "Strategy",
-        "strategy_type": "Family",
-        "dataset": "Dataset",
-        "market": "Market",
-        "timeframe": "Timeframe",
-        "profit_factor": "PF",
-        "leader_pf": "PF",
-        "net_pnl": "Net Profit",
-        "leader_net_pnl": "Net Profit",
-        "max_drawdown": "Drawdown",
-        "leader_max_drawdown": "Drawdown",
-        "total_trades": "Trades",
-        "leader_trades": "Trades",
-        "quality_flag": "Quality",
-    }
-    existing = [column for column in rename_map if column in display.columns]
-    if not existing:
-        return display
-
-    display = display[existing].copy()
-    display.columns = [rename_map[column] for column in existing]
-    display = display.loc[:, ~display.columns.duplicated()]
-
-    for numeric_column in ("PF", "Trades"):
-        if numeric_column in display.columns:
-            display[numeric_column] = pd.to_numeric(display[numeric_column], errors="coerce").round(2)
-    for money_column in ("Net Profit", "Drawdown"):
-        if money_column in display.columns:
-            display[money_column] = pd.to_numeric(display[money_column], errors="coerce").apply(
-                lambda value: f"${value:,.0f}" if pd.notna(value) else "—"
-            )
-    return display
-
-# ─── TABS ──────────────────────────────────────────────────────────────────────
-
-tab_monitor, tab_results, tab_ultimate, tab_history, tab_system = st.tabs(
-    ["🔴 Live Monitor", "📊 Results", "🏆 Ultimate Leaderboard", "🗂️ Run History", "⚙️ System"]
+tab_monitor, tab_results, tab_history, tab_system, tab_ultimate = st.tabs(
+    ["Live Monitor", "Results", "Run History", "System", "Ultimate Leaderboard"]
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -410,227 +676,73 @@ with tab_monitor:
     if is_running:
         st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
 
-    # ── Top KPI row ──────────────────────────────────────────────────────────
+    # ── Primary: direct cluster activity ────────────────────────────────────
+    render_live_monitor(cluster_live_statuses)
 
-    cost_info    = estimate_run_cost(monitor_run) if monitor_run else {}
-    elapsed_sec  = float(cost_info.get("elapsed_seconds") or 0)
-    hourly_rate  = cost_info.get("hourly_rate")
-    total_cost   = cost_info.get("estimated_total_cost")
-    machine_type = cost_info.get("machine_type", "unknown")
+    # ── Secondary: console-storage run progress ──────────────────────────────
+    if selected_run_dir or monitor_run:
+        with st.expander("Console Run Records", expanded=False):
+            dataset_statuses = fetch_live_dataset_statuses(selected_run_dir) if selected_run_dir else []
+            monitor_summary = build_monitor_progress_rows(dataset_statuses, selected_manifest)
+            log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
+            preemption_warning = detect_preemption_warning(selected_status, log_tail)
+            run_scope = format_run_scope(selected_manifest)
+            focus = monitor_summary.get("active_focus") or monitor_summary.get("recent_focus") or {}
 
-    if is_running and monitor_status.get("created_utc"):
-        try:
-            from datetime import timezone
-            created = datetime.fromisoformat(str(monitor_status["created_utc"]).replace("Z", "+00:00"))
-            elapsed_sec = (datetime.now(timezone.utc) - created).total_seconds()
-            if hourly_rate:
-                total_cost = hourly_rate * (elapsed_sec / 3600)
-        except Exception:
-            pass
+            if preemption_warning:
+                st.markdown(f'<div class="hero-banner">{html.escape(preemption_warning)}</div>', unsafe_allow_html=True)
 
-    cost_str    = f"${total_cost:.2f}" if total_cost is not None else "—"
-    elapsed_str = format_duration_short(elapsed_sec)
-    rate_str    = f"${hourly_rate:.2f}/hr" if hourly_rate else "—"
-
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        status_emoji = "🟢" if is_running else ("✅" if run_category == "completed" else "⚪")
-        st.metric("Status", f"{status_emoji} {run_category.upper()}")
-    with k2:
-        st.metric("Elapsed Time", elapsed_str)
-    with k3:
-        st.metric("Est. SPOT Cost", cost_str,
-                  delta=rate_str if is_running else None, delta_color="inverse")
-    with k4:
-        machine_label = (machine_type.replace("n2-highcpu-", "") + " vCPU"
-                         if "highcpu" in machine_type else machine_type)
-        st.metric("VM", machine_label)
-
-    st.divider()
-
-    # ── Dataset progress ─────────────────────────────────────────────────────
-
-    dataset_statuses = fetch_live_dataset_statuses(selected_run_dir) if selected_run_dir else []
-    monitor_summary = build_monitor_progress_rows(dataset_statuses, selected_manifest)
-    log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
-    preemption_warning = detect_preemption_warning(selected_status, log_tail)
-    run_scope = format_run_scope(selected_manifest)
-    focus = monitor_summary.get("active_focus") or monitor_summary.get("recent_focus") or {}
-
-    if preemption_warning:
-        st.markdown(f'<div class="hero-banner">{html.escape(preemption_warning)}</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        f"""
-        <div class="live-scope-card">
-            <h2>Market and time frames in current live run</h2>
-            <div class="scope-line">{html.escape(run_scope)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    overview_col, leader_col = st.columns([1.7, 1.0], gap="large")
-    with overview_col:
-        render_monitor_progress(monitor_summary)
-    with leader_col:
-        focus_value = focus.get("label") or "Awaiting first active bucket"
-        focus_detail = focus.get("stage") or ("Most recently completed bucket" if monitor_summary.get("recent_focus") else "Progress signal not available yet")
-        st.markdown(
-            f"""
-            <div class="focus-card">
-                <div class="eyebrow">Current Focus</div>
-                <div class="value">{html.escape(str(focus_value))}</div>
-                <div class="detail">{html.escape(str(focus_detail))}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        current_leaders = format_current_leaders(load_current_leader_snapshot(selected_outputs_dir, monitor_summary))
-        st.markdown('<div class="monitor-card"><h3>Current Leaders</h3><div class="subtle">Best available leaders for the active or most recently completed bucket.</div></div>', unsafe_allow_html=True)
-        if current_leaders is not None and not current_leaders.empty:
-            st.dataframe(current_leaders, use_container_width=True, height=min(340, 36 + len(current_leaders) * 35))
-        else:
-            st.info("No promoted candidates have been written for this focus yet.")
-
-    if selected_run and selected_run_dir:
-        dataset_statuses = fetch_live_dataset_statuses(selected_run_dir)
-    else:
-        dataset_statuses = []
-
-    if dataset_statuses:
-        # Build title from manifest datasets if available
-        manifest_datasets = selected_manifest.get("datasets", []) if selected_manifest else []
-        ds_label = (
-            ", ".join(
-                f"{d.get('market','?')} {d.get('timeframe','?')}"
-                for d in manifest_datasets
-                if isinstance(d, dict)
+            st.markdown(
+                f'<div class="live-scope-card">'
+                f'<h2>Console run scope</h2>'
+                f'<div class="scope-line">{html.escape(run_scope)}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
             )
-            if manifest_datasets else ""
-        )
-        progress_title = f"Dataset Progress — {ds_label}" if ds_label else "Dataset Progress"
-        st.subheader(progress_title)
-        fam_emoji = {"trend": "📈", "mean_reversion": "↩️", "breakout": "💥",
-                     "short_mean_reversion": "↩️", "short_trend": "📈", "short_breakout": "💥"}
-        parent_families = ["mean_reversion", "trend", "breakout",
-                           "short_mean_reversion", "short_trend", "short_breakout"]
 
-        def _group_families(family_list: list[str]) -> dict[str, list[str]]:
-            groups: dict[str, list[str]] = {p: [] for p in parent_families}
-            for f in family_list:
-                matched = False
-                for p in parent_families:
-                    if f == p or f.startswith(p + "_"):
-                        groups[p].append(f)
-                        matched = True
-                        break
-                if not matched:
-                    groups.setdefault(f, []).append(f)
-            return groups
-
-        done_families = sum(len(ds.get("families_completed", [])) for ds in dataset_statuses)
-        remaining_families = sum(len(ds.get("families_remaining", [])) for ds in dataset_statuses)
-        total_families = done_families + remaining_families or len(dataset_statuses) * 3
-        overall_pct    = (done_families / total_families * 100) if total_families else 0
-
-        st.markdown(f"**Overall: {done_families} / {total_families} families complete ({overall_pct:.0f}%)**")
-        st.progress(min(overall_pct / 100.0, 1.0))
-        st.markdown("")
-
-        for ds in dataset_statuses:
-            pct       = float(ds.get("progress_pct", 0) or 0)
-            market    = ds.get("market", ds.get("dataset", "?"))
-            timeframe = ds.get("timeframe", "?")
-            cur_fam   = ds.get("current_family", "?")
-            cur_stage = ds.get("current_stage", "?")
-            completed = ds.get("families_completed", [])
-            remaining = ds.get("families_remaining", [])
-            eta_sec   = float(ds.get("eta_seconds", 0) or 0)
-            el_sec    = float(ds.get("elapsed_seconds", 0) or 0)
-            is_waiting = cur_stage == "WAITING"
-            is_done   = not is_waiting and (pct >= 100 or cur_stage == "DONE")
-            is_active = not is_done and not is_waiting and pct > 0
-
-            completed_groups = _group_families(completed)
-            all_fams_for_ds  = _group_families(completed + remaining)
-
-            col_a, col_b = st.columns([3, 1])
-            with col_a:
-                icon = "✅" if is_done else ("🔵" if is_active else ("⏳" if is_waiting else "⏳"))
-                st.markdown(f"**{icon} {market} {timeframe}**")
-                st.progress(min(pct / 100.0, 1.0))
-                pill_html = '<div style="display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:4px">'
-                for p in parent_families:
-                    group_items = all_fams_for_ds.get(p, [])
-                    if not group_items:
-                        continue
-                    e = fam_emoji.get(p, "•")
-                    done_in_group  = len(completed_groups.get(p, []))
-                    total_in_group = max(len(group_items), 1)
-                    is_cur = cur_fam == p or (cur_fam or "").startswith(p + "_")
-                    is_fam_done = done_in_group >= total_in_group
-                    pct_done = int(done_in_group / total_in_group * 100) if total_in_group else 0
-                    label = f"{done_in_group}/{total_in_group}" if total_in_group > 1 else ("✓" if is_fam_done else "")
-                    # Progress bar HTML
-                    bar_bg = "#c6ecd4" if is_fam_done else ("#c9dcff" if is_cur else "#e2e8ef")
-                    bar_fg = "#0d6b35" if is_fam_done else ("#175ea6" if is_cur else "#758597")
-                    bar_html = (
-                        f'<div style="height:4px;background:{bar_bg};border-radius:2px;margin-top:3px">'
-                        f'<div style="width:{pct_done}%;height:100%;background:{bar_fg};border-radius:2px"></div>'
-                        f'</div>'
-                    )
-                    if is_fam_done:
-                        pill_html += (f'<div style="background:#e9f8ef;color:#0d6b35;border:1px solid #c6ecd4;'
-                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
-                                      f'{e} {p} {label}{bar_html}</div>')
-                    elif is_cur and not is_done:
-                        pill_html += (f'<div style="background:#e7f1ff;color:#175ea6;border:1px solid #c9dcff;'
-                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
-                                      f'⚙️ {p} {label} ({cur_stage}){bar_html}</div>')
-                    else:
-                        pill_html += (f'<div style="background:#f2f5f8;color:#758597;border:1px solid #e2e8ef;'
-                                      f'padding:4px 12px;border-radius:10px;font-size:0.95rem;font-weight:600;min-width:100px">'
-                                      f'{e} {p} {label}{bar_html}</div>')
-                pill_html += '</div>'
-                st.markdown(pill_html, unsafe_allow_html=True)
-            with col_b:
-                if is_done:
-                    st.markdown("**Done ✅**")
-                elif is_waiting:
-                    st.markdown("*Waiting...*")
-                elif is_active:
-                    st.markdown(f"**ETA** {format_duration_short(eta_sec)}")
-                    st.caption(f"Elapsed {format_duration_short(el_sec)}")
+            overview_col, leader_col = st.columns([1.7, 1.0], gap="large")
+            with overview_col:
+                render_monitor_progress(monitor_summary)
+            with leader_col:
+                focus_value = focus.get("label") or "Awaiting first active bucket"
+                focus_detail = (
+                    focus.get("stage")
+                    or ("Most recently completed" if monitor_summary.get("recent_focus") else "Not yet available")
+                )
+                st.markdown(
+                    f'<div class="focus-card">'
+                    f'<div class="eyebrow">Current Focus</div>'
+                    f'<div class="value">{html.escape(str(focus_value))}</div>'
+                    f'<div class="detail">{html.escape(str(focus_detail))}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                current_leaders = format_current_leaders(
+                    load_current_leader_snapshot(selected_outputs_dir, monitor_summary)
+                )
+                st.markdown(
+                    '<div class="monitor-card"><h3>Current Leaders</h3>'
+                    '<div class="subtle">Best available leaders for the active bucket.</div></div>',
+                    unsafe_allow_html=True,
+                )
+                if current_leaders is not None and not current_leaders.empty:
+                    st.dataframe(current_leaders, use_container_width=True, height=min(380, 36 + len(current_leaders) * 35))
                 else:
-                    st.markdown("*Queued*")
-            st.markdown("")
+                    st.info("No leaders yet for this focus.")
 
-    elif is_running:
-        st.info("Run is active — waiting for first status update.")
-    else:
-        st.info("No active run. Start a new sweep to populate the live monitor.")
-
-    # ── Promoted candidates feed ──────────────────────────────────────────────
-
-    st.divider()
-    st.subheader("Promoted Candidates")
-    st.caption("Strategies that passed the promotion gate — populated as each family completes.")
-
+    # ── Promoted candidates ──────────────────────────────────────────────────
     if selected_outputs_dir:
+        st.divider()
+        st.subheader("Promoted Candidates")
+        st.caption("Strategies that passed the promotion gate.")
         candidates_df = load_promoted_candidates(selected_outputs_dir)
         if candidates_df is not None and not candidates_df.empty:
             col_map = {
-                "strategy_name":   "Strategy",
-                "strategy_type":   "Family",
-                "profit_factor":   "PF",
-                "is_pf":           "IS PF",
-                "oos_pf":          "OOS PF",
-                "net_pnl":         "Net PnL ($)",
-                "total_trades":    "Trades",
-                "trades_per_year": "Trades/yr",
-                "quality_flag":    "Quality",
-                "dataset":         "Dataset",
+                "strategy_name": "Strategy", "strategy_type": "Family",
+                "profit_factor": "PF", "is_pf": "IS PF", "oos_pf": "OOS PF",
+                "net_pnl": "Net PnL ($)", "total_trades": "Trades",
+                "trades_per_year": "Trades/yr", "quality_flag": "Quality",
+                "dataset": "Dataset",
             }
             existing = {k: v for k, v in col_map.items() if k in candidates_df.columns}
             if existing:
@@ -644,37 +756,24 @@ with tab_monitor:
                         lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
                     )
                 st.dataframe(disp, use_container_width=True, height=min(400, 36 + len(disp) * 35))
-                st.caption(f"{len(candidates_df)} candidates promoted across all completed families")
+                st.caption(f"{len(candidates_df)} candidates promoted")
             else:
                 render_table(candidates_df.head(20))
         elif is_running:
             st.info("No candidates yet — families still running.")
         else:
             st.info("No promoted candidates file found for this run.")
-    else:
-        if is_running:
-            st.info("Run is active but results not yet downloaded. Candidates appear after download or when run completes.")
-        else:
-            st.info("No outputs directory found. Download run results to see promoted candidates.")
 
-    with st.expander("Engine log (last 30 lines)", expanded=False):
-        log_tail = load_log_tail(selected_run_dir) if selected_run_dir else ""
-        if log_tail:
-            st.code("\n".join(log_tail.splitlines()[-30:]), language="text")
+    # ── Engine log ───────────────────────────────────────────────────────────
+    with st.expander("Engine log (last 40 lines)", expanded=False):
+        log_tail_text = load_log_tail(selected_run_dir) if selected_run_dir else ""
+        if log_tail_text:
+            st.code("\n".join(log_tail_text.splitlines()[-40:]), language="text")
         else:
-            st.info("No engine log found yet.")
-    st.divider()
-    st.subheader("Run Trail")
-    st.caption("Recent engine progress lines, warnings, and errors.")
-    if log_tail:
-        st.code(log_tail, language="text")
-    elif is_running:
-        st.info("Run is active, but the first log lines have not been captured yet.")
-    else:
-        st.info("No live run trail is available for this run.")
+            st.info("No engine log found.")
 
     if is_running:
-        st.caption("🔄 Auto-refreshes every 30 seconds while run is active.")
+        st.caption("Auto-refreshes every 30 seconds while runs are active.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -688,30 +787,22 @@ with tab_results:
     else:
         results = load_strategy_results(analysis_outputs_dir)
         run_id  = analysis_status.get("run_id", analysis_run_dir.name if analysis_run_dir else "?")
-        st.caption(f"Results from: `{run_id}` → `{analysis_outputs_dir}`")
+        st.caption(f"Results from: `{run_id}` -> `{analysis_outputs_dir}`")
 
         st.subheader("Strategy Leaderboard")
         if results["leaderboard"] is not None:
             lb = results["leaderboard"]
             col_map = {
                 "strategy_name": "Strategy", "leader_strategy_name": "Strategy",
-                "strategy_type": "Family",
-                "quality_flag": "Quality", "accepted_final": "Accepted",
-                "profit_factor": "PF", "leader_pf": "PF",
-                "is_pf": "IS PF", "oos_pf": "OOS PF",
-                "recent_12m_pf": "R12m PF",
+                "strategy_type": "Family", "quality_flag": "Quality",
+                "accepted_final": "Accepted", "profit_factor": "PF", "leader_pf": "PF",
+                "is_pf": "IS PF", "oos_pf": "OOS PF", "recent_12m_pf": "R12m PF",
                 "net_pnl": "Net PnL", "leader_net_pnl": "Net PnL",
                 "total_trades": "Trades", "leader_trades": "Trades",
-                "bootcamp_score": "Bootcamp",
-                "leader_trades_per_year": "Trades/Yr",
-                "calmar_ratio": "Calmar",
-                "oos_is_pf_ratio": "OOS/IS",
-                "leader_win_rate": "Win%",
-                "leader_max_drawdown": "Max DD",
-                "leader_pct_profitable_years": "Prof Yrs%",
-                "timeframe": "TF",
-                "market": "Market",
-                "dataset": "Dataset",
+                "leader_trades_per_year": "Trades/Yr", "calmar_ratio": "Calmar",
+                "oos_is_pf_ratio": "OOS/IS", "leader_win_rate": "Win%",
+                "leader_max_drawdown": "Max DD", "leader_pct_profitable_years": "Prof Yrs%",
+                "timeframe": "TF", "market": "Market", "dataset": "Dataset",
             }
             existing = {k: v for k, v in col_map.items() if k in lb.columns}
             if existing:
@@ -725,17 +816,14 @@ with tab_results:
                     else:
                         seen[c] = 0; new_cols.append(c)
                 disp.columns = new_cols
-                # Format monetary columns
-                for money_col in ["Net PnL", "Max DD"]:
-                    if money_col in disp.columns:
-                        disp[money_col] = pd.to_numeric(disp[money_col], errors="coerce").apply(
+                for mc in ["Net PnL", "Max DD"]:
+                    if mc in disp.columns:
+                        disp[mc] = pd.to_numeric(disp[mc], errors="coerce").apply(
                             lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
                         )
-                # Format ratio/percentage columns
-                for ratio_col in ["PF", "IS PF", "OOS PF", "R12m PF", "Calmar", "IS/OOS", "Win%", "Prof Yrs%", "Trades/Yr"]:
-                    if ratio_col in disp.columns:
-                        disp[ratio_col] = pd.to_numeric(disp[ratio_col], errors="coerce").round(2)
-                # Quality flag column config
+                for rc in ["PF", "IS PF", "OOS PF", "R12m PF", "Calmar", "Win%", "Prof Yrs%", "Trades/Yr"]:
+                    if rc in disp.columns:
+                        disp[rc] = pd.to_numeric(disp[rc], errors="coerce").round(2)
                 col_config: dict = {}
                 if "Quality" in disp.columns:
                     col_config["Quality"] = st.column_config.TextColumn(
@@ -744,8 +832,7 @@ with tab_results:
                     )
                 st.dataframe(disp, column_config=col_config, use_container_width=True)
             else:
-                disp = lb.head(20)
-                render_table(disp)
+                render_table(lb.head(20))
             st.caption(f"{len(lb)} strategies")
         else:
             st.info("No leaderboard file found.")
@@ -761,7 +848,7 @@ with tab_results:
             returns_df = results["returns"]
             try:
                 import plotly.graph_objects as go
-                date_col  = next((c for c in returns_df.columns if "date" in c.lower() or "time" in c.lower()), None)
+                date_col   = next((c for c in returns_df.columns if "date" in c.lower() or "time" in c.lower()), None)
                 strat_cols = [c for c in returns_df.columns if c != date_col] if date_col else []
                 if date_col and strat_cols:
                     fig = go.Figure()
@@ -795,11 +882,11 @@ with tab_results:
                     )
                     fig = px.bar(yearly_df, x=year_col, y=pnl_col, color="_color",
                                  facet_col=name_col if yearly_df[name_col].nunique() > 1 else None,
-                                 color_discrete_map={"Profit": "#00e676", "Loss": "#ff1744"},
+                                 color_discrete_map={"Profit": "#10b981", "Loss": "#ef4444"},
                                  template="plotly_dark", title="Annual PnL",
                                  labels={pnl_col: "PnL ($)", year_col: "Year"})
                     fig.add_vline(x=2018.5, line_dash="dash", line_color="orange",
-                                  annotation_text="OOS →", annotation_position="top left")
+                                  annotation_text="OOS ->", annotation_position="top left")
                     fig.update_layout(height=350, showlegend=False, margin=dict(l=40, r=20, t=60, b=40))
                     st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -807,18 +894,16 @@ with tab_results:
             except Exception:
                 render_table(yearly_df)
 
-        # Cross-timeframe correlation matrix (all accepted strategies across all datasets)
         if results.get("cross_correlation") is not None:
             st.divider()
-            st.subheader("Cross-Timeframe Strategy Correlations")
-            st.caption("All accepted strategies across all timeframes — correlation of daily PnL")
+            st.subheader("Cross-Timeframe Correlations")
+            st.caption("All accepted strategies across all timeframes")
             try:
                 import plotly.express as px
                 ctf_df = results["cross_correlation"].copy()
                 idx_col = ctf_df.columns[0]
                 ctf_df = ctf_df.set_index(idx_col)
-
-                def _shorten_label(s: str) -> str:
+                def _shorten(s: str) -> str:
                     s = str(s)
                     if "_Refined" in s:
                         parts = s.split("_Refined", 1)
@@ -826,15 +911,13 @@ with tab_results:
                     if "_ES_" in s:
                         return s.split("_ES_")[-1][-25:]
                     return s[-25:]
-
-                ctf_df.index   = [_shorten_label(i) for i in ctf_df.index]
-                ctf_df.columns = [_shorten_label(c) for c in ctf_df.columns]
+                ctf_df.index = [_shorten(i) for i in ctf_df.index]
+                ctf_df.columns = [_shorten(c) for c in ctf_df.columns]
                 n = len(ctf_df)
-                fig_height = max(350, n * 40 + 80)
                 fig = px.imshow(ctf_df, color_continuous_scale="RdBu_r", zmin=-1, zmax=1,
                                 text_auto=".2f", template="plotly_dark",
-                                title=f"Cross-Timeframe Correlation ({n}×{n})")
-                fig.update_layout(height=fig_height, margin=dict(l=40, r=20, t=60, b=40))
+                                title=f"Cross-Timeframe Correlation ({n}x{n})")
+                fig.update_layout(height=max(350, n * 40 + 80), margin=dict(l=40, r=20, t=60, b=40))
                 st.plotly_chart(fig, use_container_width=True)
             except Exception as e:
                 render_table(results["cross_correlation"])
@@ -863,189 +946,32 @@ with tab_results:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — ULTIMATE LEADERBOARD
-# ══════════════════════════════════════════════════════════════════════════════
-
-with tab_ultimate:
-
-    @st.cache_data(ttl=120)
-    def _load_ultimate_leaderboard(bootcamp: bool = False) -> pd.DataFrame:
-        filename = "ultimate_leaderboard_bootcamp.csv" if bootcamp else "ultimate_leaderboard.csv"
-        try:
-            from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
-            df = aggregate_ultimate_leaderboard()
-            if bootcamp and "bootcamp_score" in df.columns:
-                df = df.sort_values("bootcamp_score", ascending=False).reset_index(drop=True)
-                if "rank" in df.columns:
-                    df["rank"] = range(1, len(df) + 1)
-            return df
-        except Exception as exc:
-            return pd.DataFrame({"error": [str(exc)]})
-
-    col_refresh, col_spacer, col_view = st.columns([1, 3, 2])
-    with col_refresh:
-        if st.button("🔄 Refresh", key="ul_refresh"):
-            _load_ultimate_leaderboard.clear()
-    with col_view:
-        view_mode = st.radio(
-            "Ranking",
-            ["Classic (PF)", "Bootcamp Score"],
-            horizontal=True,
-            key="ul_view_mode",
-        )
-
-    use_bootcamp = view_mode == "Bootcamp Score"
-    ul_df = _load_ultimate_leaderboard(bootcamp=use_bootcamp)
-
-    if ul_df.empty or "error" in ul_df.columns:
-        if "error" in ul_df.columns:
-            st.error(f"Error loading ultimate leaderboard: {ul_df['error'].iloc[0]}")
-        else:
-            st.info("No accepted strategies found across any runs. Run a sweep first.")
-    else:
-        # ── KPI strip ────────────────────────────────────────────────────────
-        total_strats  = len(ul_df)
-        robust_count  = int((ul_df.get("quality_flag", pd.Series()) == "ROBUST").sum()) if "quality_flag" in ul_df.columns else 0
-        stable_count  = int(ul_df["quality_flag"].str.startswith("STABLE").sum()) if "quality_flag" in ul_df.columns else 0
-        unique_tfs    = ul_df["timeframe"].nunique() if "timeframe" in ul_df.columns else (
-            ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
-        )
-        unique_markets = ul_df["market"].nunique() if "market" in ul_df.columns else "—"
-        runs_scanned  = ul_df["run_id"].nunique() if "run_id" in ul_df.columns else 0
-
-        u1, u2, u3, u4, u5 = st.columns(5)
-        u1.metric("Total Strategies", total_strats)
-        u2.metric("ROBUST", robust_count)
-        u3.metric("STABLE", stable_count)
-        u4.metric("Timeframes", unique_tfs)
-        u5.metric("Markets", unique_markets)
-
-        st.divider()
-
-        # ── Filters ──────────────────────────────────────────────────────────
-        filtered = ul_df.copy()
-
-        f1, f2, f3, f4, f5 = st.columns(5)
-        with f1:
-            if "market" in filtered.columns:
-                mkt_all = sorted(filtered["market"].dropna().unique().tolist())
-                sel_mkt = st.multiselect("Market", mkt_all, default=mkt_all, key="ul_mkt")
-                if sel_mkt:
-                    filtered = filtered[filtered["market"].isin(sel_mkt)]
-            elif "dataset" in filtered.columns:
-                ds_all = sorted(filtered["dataset"].dropna().unique().tolist())
-                sel_ds = st.multiselect("Dataset", ds_all, default=ds_all, key="ul_ds")
-                if sel_ds:
-                    filtered = filtered[filtered["dataset"].isin(sel_ds)]
-        with f2:
-            if "strategy_type" in filtered.columns:
-                types_all = sorted(filtered["strategy_type"].dropna().unique().tolist())
-                sel_types = st.multiselect("Strategy type", types_all, default=types_all, key="ul_types")
-                if sel_types:
-                    filtered = filtered[filtered["strategy_type"].isin(sel_types)]
-        with f3:
-            if "quality_flag" in filtered.columns:
-                qf_all = sorted(filtered["quality_flag"].dropna().unique().tolist())
-                sel_qf = st.multiselect("Quality flag", qf_all, default=qf_all, key="ul_qf")
-                if sel_qf:
-                    filtered = filtered[filtered["quality_flag"].isin(sel_qf)]
-        with f4:
-            pf_col = "leader_pf" if "leader_pf" in filtered.columns else (
-                "profit_factor" if "profit_factor" in filtered.columns else None
-            )
-            if pf_col:
-                max_pf = float(pd.to_numeric(filtered[pf_col], errors="coerce").max() or 5.0)
-                min_pf_filter = st.slider("Min PF", 0.0, max_pf, 1.0, 0.05, key="ul_pf")
-                filtered = filtered[pd.to_numeric(filtered[pf_col], errors="coerce").fillna(0) >= min_pf_filter]
-        with f5:
-            if "leader_max_drawdown" in filtered.columns:
-                dd_vals = pd.to_numeric(filtered["leader_max_drawdown"], errors="coerce").abs()
-                max_dd_val = float(dd_vals.max() or 50000)
-                max_dd_filter = st.slider("Max DD ($)", 0, int(max_dd_val), int(max_dd_val), 1000, key="ul_dd")
-                filtered = filtered[dd_vals.fillna(max_dd_val) <= max_dd_filter]
-
-        st.caption(f"Showing {len(filtered)} of {total_strats} strategies")
-
-        # ── Main table ───────────────────────────────────────────────────────
-        display_cols = [c for c in [
-            "rank", "market", "timeframe", "strategy_type", "quality_flag",
-            "leader_pf", "leader_max_drawdown", "is_pf", "oos_pf",
-            "leader_trades", "leader_exit_type",
-            "leader_net_pnl", "bootcamp_score",
-            "recent_12m_pf", "run_id",
-        ] if c in filtered.columns]
-
-        if display_cols:
-            disp = filtered[display_cols].copy()
-            rename_map = {
-                "leader_pf": "PF", "is_pf": "IS PF", "oos_pf": "OOS PF",
-                "leader_max_drawdown": "Max DD", "leader_trades": "Trades",
-                "leader_net_pnl": "Net PnL", "leader_exit_type": "Exit",
-                "bootcamp_score": "BCS", "recent_12m_pf": "R12m PF",
-                "quality_flag": "Quality", "strategy_type": "Family",
-                "timeframe": "TF", "market": "Mkt", "run_id": "Run",
-                "rank": "#",
-            }
-            disp.columns = [rename_map.get(c, c) for c in disp.columns]
-            for num_col in ["PF", "IS PF", "OOS PF", "R12m PF", "BCS"]:
-                if num_col in disp.columns:
-                    disp[num_col] = pd.to_numeric(disp[num_col], errors="coerce").round(2)
-            for money_col in ["Net PnL", "Max DD"]:
-                if money_col in disp.columns:
-                    disp[money_col] = pd.to_numeric(disp[money_col], errors="coerce").apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
-                    )
-            st.dataframe(disp, use_container_width=True)
-        else:
-            render_table(filtered.head(50))
-
-        # ── Details expander ─────────────────────────────────────────────────
-        with st.expander("Strategy details", expanded=False):
-            rank_options = filtered["rank"].tolist() if "rank" in filtered.columns else []
-            if rank_options:
-                sel_rank = st.selectbox("Select rank", rank_options, key="ul_detail_rank")
-                row = filtered[filtered["rank"] == sel_rank]
-                if not row.empty:
-                    r = row.iloc[0]
-                    st.markdown(f"**Strategy**: `{r.get('leader_strategy_name', '—')}`")
-                    st.markdown(f"**Type / Dataset**: `{r.get('strategy_type', '—')}` / `{r.get('dataset', '—')}`")
-                    st.markdown(f"**Quality flag**: `{r.get('quality_flag', '—')}`")
-                    st.markdown(f"**Filter combination**: `{r.get('best_combo_filter_class_names', '—')}`")
-                    st.markdown(f"**Discovered in run**: `{r.get('run_id', '—')}`")
-                    st.markdown(f"**Source file**: `{r.get('source_file', '—')}`")
-                    st.markdown(f"**Discovered at**: `{r.get('discovered_at', '—')}`")
-            else:
-                st.info("No strategies match the current filters.")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — RUN HISTORY
+# TAB 3 — RUN HISTORY
 # ══════════════════════════════════════════════════════════════════════════════
 
 with tab_history:
 
-    st.subheader("All Runs")
+    st.subheader("All Console Runs")
     if run_records:
         rows = []
         for record in run_records:
             status   = record["launcher_status"]
             manifest = record["run_manifest"]
             cost_i   = estimate_run_cost(record)
-            cost_s   = (format_currency(cost_i["estimated_total_cost"])
-                        if cost_i["estimated_total_cost"] is not None else "—")
             cat      = classify_run_status(status)
             datasets = manifest.get("datasets", [])
-            ds_str   = (", ".join(f"{d.get('market','?')} {d.get('timeframe','?')}" for d in datasets)
-                        if datasets else "—")
+            ds_str   = (
+                ", ".join(f"{d.get('market','?')} {d.get('timeframe','?')}" for d in datasets)
+                if datasets else "—"
+            )
             rows.append({
-                "Run ID":    status.get("run_id", record["run_dir"].name),
-                "Updated":   status.get("updated_utc", "unknown"),
-                "Status":    cat.upper(),
-                "Outcome":   badge_for_value(status.get("run_outcome")),
-                "VM":        badge_for_value(status.get("vm_outcome")),
-                "Datasets":  ds_str,
-                "Machine":   manifest.get("machine_type", "—"),
-                "Est. Cost": cost_s,
+                "Run ID":   status.get("run_id", record["run_dir"].name),
+                "Updated":  status.get("updated_utc", "unknown"),
+                "Status":   cat.upper(),
+                "Outcome":  badge_for_value(status.get("run_outcome")),
+                "Host":     manifest.get("host", "local"),
+                "Datasets": ds_str,
+                "Runtime":  format_duration_short(cost_i.get("elapsed_seconds", 0)),
             })
         render_table(pd.DataFrame(rows))
     else:
@@ -1058,8 +984,8 @@ with tab_history:
                 f"**Run ID**: `{rid}`  \n"
                 f"**Path**: `{analysis_run_dir}`  \n"
                 f"**Updated**: `{analysis_status.get('updated_utc', 'unknown')}`  \n"
-                f"**Machine**: `{analysis_manifest.get('machine_type','?')}` in `{analysis_manifest.get('zone','?')}`  \n"
-                f"**Destroy reason**: `{analysis_status.get('destroy_reason','unknown')}`  \n"
+                f"**Host**: `{analysis_manifest.get('host','?')}`  \n"
+                f"**State**: `{analysis_status.get('state','unknown')}`  \n"
                 f"**Bundle size**: `{format_bytes(analysis_status.get('bundle_size_bytes'))}`"
             )
             recovery = analysis_status.get("recovery_commands") or []
@@ -1095,12 +1021,13 @@ with tab_system:
     st.divider()
     st.subheader("System Health")
     render_table(pd.DataFrame([
-        {"Check": "Uploads directory", "Status": "✅ OK" if UPLOADS_DIR.exists() else "❌ Missing"},
-        {"Check": "Runs directory",    "Status": "✅ OK" if RUNS_DIR.exists() else "❌ Missing"},
-        {"Check": "Exports directory", "Status": "✅ OK" if EXPORTS_DIR.exists() else "❌ Missing"},
-        {"Check": "Datasets uploaded", "Status": f"✅ {len(uploaded_datasets)}" if uploaded_datasets else "⚠️ None"},
-        {"Check": "Latest run state",  "Status": console_run_status.get("run_state", "unknown")},
-        {"Check": "Dashboard commit",  "Status": runtime["commit"]},
+        {"Check": "Uploads directory",  "Status": "OK" if UPLOADS_DIR.exists() else "Missing"},
+        {"Check": "Runs directory",     "Status": "OK" if RUNS_DIR.exists() else "Missing"},
+        {"Check": "Exports directory",  "Status": "OK" if EXPORTS_DIR.exists() else "Missing"},
+        {"Check": "Datasets uploaded",  "Status": f"{len(uploaded_datasets)}" if uploaded_datasets else "None"},
+        {"Check": "Latest run state",   "Status": console_run_status.get("run_state", "unknown")},
+        {"Check": "Dashboard commit",   "Status": runtime["commit"]},
+        {"Check": "Active cluster jobs", "Status": str(len(cluster_live_statuses))},
     ]))
 
     st.divider()
@@ -1115,20 +1042,180 @@ with tab_system:
 
     st.divider()
     st.subheader("Quick Commands")
-    st.markdown("**Launch ES all-timeframes sweep (daily, 60m, 30m, 15m):**")
-    st.code("python3 run_cloud_sweep.py --config cloud/config_es_all_timeframes_96core.yaml", language="bash")
-    st.markdown("**Quick test run (MR only, 8-core, dry run):**")
-    st.code("python3 run_cloud_sweep.py --config cloud/config_quick_test.yaml --dry-run", language="bash")
-    st.markdown("**Restart dashboard:**")
-    st.code("sudo systemctl restart strategy-dashboard", language="bash")
-    st.markdown("**Check run status remotely:**")
+    st.markdown("**Plan a distributed batch (10-market The5ers-first):**")
     st.code(
-        "cat ~/strategy_console_storage/runs/"
-        "$(cat ~/strategy_console_storage/runs/LATEST_RUN.txt)"
-        "/artifacts/Outputs/ES_60m/status.json | python3 -m json.tool",
+        "python run_cluster_sweep.py --distributed-plan \\\n"
+        "  --hosts c240:80 gen8:48 r630:88 g9:48 \\\n"
+        "  --markets ES NQ YM RTY DAX N225 FTSE STOXX CAC GC \\\n"
+        "  --timeframes daily 60m 30m 15m \\\n"
+        "  --remote-root /tmp/psc",
         language="bash",
     )
-    st.markdown("**Recover artifacts for a completed run that never downloaded locally:**")
-    st.code("python3 run_cloud_sweep.py --recover-run $(cat ~/strategy_console_storage/runs/LATEST_RUN.txt)", language="bash")
-    st.markdown("**Most convenient leaderboard path after recovery/success:**")
-    st.code("cat ~/strategy_console_storage/exports/master_leaderboard.csv", language="bash")
+    st.markdown("**Run a local batch on c240:**")
+    st.code(
+        "python run_cluster_sweep.py \\\n"
+        "  --markets ES NQ YM GC \\\n"
+        "  --timeframes daily 60m 30m 15m \\\n"
+        "  --data-dir /data/market_data/cfds/ohlc_engine",
+        language="bash",
+    )
+    st.markdown("**Check live status files on r630:**")
+    st.code(
+        "ssh r630 \"find /tmp -maxdepth 4 -path '*/Outputs/*/status.json' | sort\"",
+        language="bash",
+    )
+    st.markdown("**Ingest + finalize canonical results:**")
+    st.code("python run_cluster_results.py finalize", language="bash")
+    st.markdown("**Mirror to Google Drive backup:**")
+    st.code(
+        "python run_cluster_results.py mirror-backup \\\n"
+        "  --storage-root /data/sweep_results \\\n"
+        "  --backup-root \"/mnt/gdrive/strategy-data-backup\"",
+        language="bash",
+    )
+    st.markdown("**Restart dashboard:**")
+    st.code("sudo systemctl restart strategy-dashboard", language="bash")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB 5 — ULTIMATE LEADERBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+with tab_ultimate:
+
+    @st.cache_data(ttl=120)
+    def _load_ultimate_leaderboard(use_gated: bool = False) -> pd.DataFrame:
+        try:
+            from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+            df = aggregate_ultimate_leaderboard()
+            if use_gated and "gate_fragility_status" in df.columns:
+                df = df[df["gate_fragility_status"].str.upper() != "FAIL"].copy()
+            return df
+        except Exception as exc:
+            return pd.DataFrame({"error": [str(exc)]})
+
+    col_refresh, col_spacer, col_view = st.columns([1, 3, 2])
+    with col_refresh:
+        if st.button("Refresh", key="ul_refresh"):
+            _load_ultimate_leaderboard.clear()
+    with col_view:
+        view_mode = st.radio(
+            "Pool",
+            ["All (raw)", "Gated (survivors only)"],
+            horizontal=True,
+            key="ul_view_mode",
+        )
+
+    use_gated = view_mode == "Gated (survivors only)"
+    ul_df = _load_ultimate_leaderboard(use_gated=use_gated)
+
+    if ul_df.empty or "error" in ul_df.columns:
+        if "error" in ul_df.columns:
+            st.error(f"Error: {ul_df['error'].iloc[0]}")
+        else:
+            st.info("No accepted strategies found. Run a sweep first.")
+    else:
+        total_strats   = len(ul_df)
+        robust_count   = int((ul_df.get("quality_flag", pd.Series()) == "ROBUST").sum()) if "quality_flag" in ul_df.columns else 0
+        stable_count   = int(ul_df["quality_flag"].str.startswith("STABLE").sum()) if "quality_flag" in ul_df.columns else 0
+        unique_markets = ul_df["market"].nunique() if "market" in ul_df.columns else "—"
+        unique_tfs     = ul_df["timeframe"].nunique() if "timeframe" in ul_df.columns else (
+            ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
+        )
+        runs_scanned   = ul_df["run_id"].nunique() if "run_id" in ul_df.columns else 0
+
+        u1, u2, u3, u4, u5 = st.columns(5)
+        u1.metric("Total Strategies", total_strats)
+        u2.metric("ROBUST", robust_count)
+        u3.metric("STABLE", stable_count)
+        u4.metric("Markets", unique_markets)
+        u5.metric("Timeframes", unique_tfs)
+
+        st.divider()
+
+        # Filters
+        filtered = ul_df.copy()
+        f1, f2, f3, f4, f5 = st.columns(5)
+        with f1:
+            if "market" in filtered.columns:
+                mkt_all = sorted(filtered["market"].dropna().unique().tolist())
+                sel_mkt = st.multiselect("Market", mkt_all, default=mkt_all, key="ul_mkt")
+                if sel_mkt:
+                    filtered = filtered[filtered["market"].isin(sel_mkt)]
+        with f2:
+            if "strategy_type" in filtered.columns:
+                types_all = sorted(filtered["strategy_type"].dropna().unique().tolist())
+                sel_types = st.multiselect("Family", types_all, default=types_all, key="ul_types")
+                if sel_types:
+                    filtered = filtered[filtered["strategy_type"].isin(sel_types)]
+        with f3:
+            if "quality_flag" in filtered.columns:
+                qf_all = sorted(filtered["quality_flag"].dropna().unique().tolist())
+                sel_qf = st.multiselect("Quality", qf_all, default=qf_all, key="ul_qf")
+                if sel_qf:
+                    filtered = filtered[filtered["quality_flag"].isin(sel_qf)]
+        with f4:
+            pf_col = "leader_pf" if "leader_pf" in filtered.columns else (
+                "profit_factor" if "profit_factor" in filtered.columns else None
+            )
+            if pf_col:
+                max_pf = float(pd.to_numeric(filtered[pf_col], errors="coerce").max() or 5.0)
+                min_pf_filter = st.slider("Min PF", 0.0, max_pf, 1.0, 0.05, key="ul_pf")
+                filtered = filtered[pd.to_numeric(filtered[pf_col], errors="coerce").fillna(0) >= min_pf_filter]
+        with f5:
+            if "leader_max_drawdown" in filtered.columns:
+                dd_vals = pd.to_numeric(filtered["leader_max_drawdown"], errors="coerce").abs()
+                max_dd_val = float(dd_vals.max() or 50000)
+                max_dd_filter = st.slider("Max DD ($)", 0, int(max_dd_val), int(max_dd_val), 1000, key="ul_dd")
+                filtered = filtered[dd_vals.fillna(max_dd_val) <= max_dd_filter]
+
+        st.caption(f"Showing {len(filtered)} of {total_strats} strategies")
+
+        # Main table
+        display_cols = [c for c in [
+            "rank", "market", "timeframe", "strategy_type", "quality_flag",
+            "leader_pf", "leader_max_drawdown", "is_pf", "oos_pf",
+            "leader_trades", "leader_exit_type", "leader_net_pnl",
+            "recent_12m_pf", "calmar_ratio", "deflated_sharpe_ratio",
+            "gate_fragility_status", "run_id",
+        ] if c in filtered.columns]
+
+        if display_cols:
+            disp = filtered[display_cols].copy()
+            rename_map = {
+                "leader_pf": "PF", "is_pf": "IS PF", "oos_pf": "OOS PF",
+                "leader_max_drawdown": "Max DD", "leader_trades": "Trades",
+                "leader_net_pnl": "Net PnL", "leader_exit_type": "Exit",
+                "recent_12m_pf": "R12m PF", "calmar_ratio": "Calmar",
+                "deflated_sharpe_ratio": "DSR", "gate_fragility_status": "Gate",
+                "quality_flag": "Quality", "strategy_type": "Family",
+                "timeframe": "TF", "market": "Mkt", "run_id": "Run", "rank": "#",
+            }
+            disp.columns = [rename_map.get(c, c) for c in disp.columns]
+            for nc in ["PF", "IS PF", "OOS PF", "R12m PF", "Calmar", "DSR"]:
+                if nc in disp.columns:
+                    disp[nc] = pd.to_numeric(disp[nc], errors="coerce").round(2)
+            for mc in ["Net PnL", "Max DD"]:
+                if mc in disp.columns:
+                    disp[mc] = pd.to_numeric(disp[mc], errors="coerce").apply(
+                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                    )
+            st.dataframe(disp, use_container_width=True)
+        else:
+            render_table(filtered.head(50))
+
+        with st.expander("Strategy details", expanded=False):
+            rank_options = filtered["rank"].tolist() if "rank" in filtered.columns else []
+            if rank_options:
+                sel_rank = st.selectbox("Select rank", rank_options, key="ul_detail_rank")
+                row = filtered[filtered["rank"] == sel_rank]
+                if not row.empty:
+                    r = row.iloc[0]
+                    st.markdown(f"**Strategy**: `{r.get('leader_strategy_name', '—')}`")
+                    st.markdown(f"**Type / Dataset**: `{r.get('strategy_type', '—')}` / `{r.get('dataset', '—')}`")
+                    st.markdown(f"**Quality flag**: `{r.get('quality_flag', '—')}`")
+                    st.markdown(f"**Filter combination**: `{r.get('best_combo_filter_class_names', '—')}`")
+                    st.markdown(f"**Discovered in run**: `{r.get('run_id', '—')}`")
+                    st.markdown(f"**Source file**: `{r.get('source_file', '—')}`")
+            else:
+                st.info("No strategies match the current filters.")

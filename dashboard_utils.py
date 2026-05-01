@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import glob
 import json
 import logging
 import re
+import socket
 import subprocess
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,23 +21,20 @@ RESULT_FILE_NAMES = [
     "correlation_matrix.csv",
     "yearly_stats_breakdown.csv",
     "strategy_returns.csv",
+    "strategy_trades.csv",
     "family_leaderboard_results.csv",
     "family_summary_results.csv",
     "cross_timeframe_correlation_matrix.csv",
     "cross_timeframe_portfolio_review.csv",
     "cross_timeframe_yearly_stats.csv",
+    "master_leaderboard_cfd.csv",
+    "ultimate_leaderboard_FUTURES.csv",
+    "ultimate_leaderboard_cfd.csv",
+    "ultimate_leaderboard_cfd_gated.csv",
 ]
 
 UPLOAD_SUFFIXES = {".csv", ".parquet", ".txt", ".zip", ".gz"}
 EXPORT_SUFFIXES = {".csv", ".zip", ".json", ".gz"}
-
-HOURLY_RATE_ESTIMATES: dict[str, dict[str, float]] = {
-    "n2-highcpu-96": {"STANDARD": 3.31, "SPOT": 0.72},
-    "n2-highcpu-48": {"STANDARD": 1.66, "SPOT": 0.36},
-    "n2-highcpu-32": {"STANDARD": 1.10, "SPOT": 0.24},
-    "n2-highcpu-16": {"STANDARD": 0.55, "SPOT": 0.12},
-    "n2-highcpu-8":  {"STANDARD": 0.28, "SPOT": 0.06},
-}
 
 BADGE_MAP = {
     "run_completed_verified": "Verified Complete",
@@ -101,6 +100,7 @@ MONITOR_FAMILY_LABELS = {
     "mean_reversion": "Mean Reversion",
     "breakout": "Breakout",
 }
+CLUSTER_HOSTS = ["c240", "gen8", "r630", "g9"]
 
 
 def read_json_file(path: Path) -> dict[str, Any]:
@@ -222,14 +222,12 @@ def collect_launcher_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
 
 
 def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
-    """Fetch per-dataset status.json files from the active compute VM via SSH.
+    """Fetch per-dataset status.json files from local disk or worker via SSH.
 
-    During an active run the status files only exist on the compute VM, not on
-    the console VM.  This function:
-    1. Reads run_manifest.json for instance_name, zone, run_id, and datasets.
-    2. Reads launcher_status.json to confirm the run is still active (state == "running").
-    3. If active: SSHs into the compute VM and cats each dataset's status.json.
-    4. If completed or manifest missing: falls back to collect_launcher_dataset_statuses().
+    1. Reads run_manifest.json for host, run_id, and datasets.
+    2. Reads launcher_status.json to confirm state.
+    3. If active: checks local artifacts first, then SSHs into worker host.
+    4. Falls back to collect_launcher_dataset_statuses().
 
     SSH commands use a 10-second timeout and fail gracefully (returns [] on error).
     """
@@ -248,15 +246,14 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
     if not is_active or not manifest:
         return collect_launcher_dataset_statuses(run_dir)
 
-    instance_name = str(manifest.get("instance_name", "")).strip()
-    zone = str(manifest.get("zone", "")).strip()
+    host_name = str(manifest.get("host") or manifest.get("instance_name", "")).strip()
     run_id = str(manifest.get("run_id", "")).strip()
     datasets = manifest.get("datasets", [])
 
-    if not instance_name or not zone or not run_id or not isinstance(datasets, list):
+    if not host_name or not run_id or not isinstance(datasets, list):
         return collect_launcher_dataset_statuses(run_dir)
 
-    remote_base = f"/tmp/strategy_engine_runs/{run_id}/repo/Outputs"
+    remote_base = f"/tmp/psc_{run_id}/Outputs" if "_" not in run_id else f"/tmp/{run_id}/Outputs"
     results: list[dict[str, Any]] = []
 
     for ds in datasets:
@@ -273,20 +270,26 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
         if not ds_name:
             continue
 
+        # Check local first (c240 ingest might be happening)
+        local_status = run_dir / "artifacts" / "Outputs" / ds_name / "status.json"
+        if local_status.exists():
+            status = read_json_file(local_status)
+            if status:
+                results.append(status)
+                continue
+
+        # Otherwise, SSH to worker
         remote_path = f"{remote_base}/{ds_name}/status.json"
-        cmd = [
-            "gcloud", "compute", "ssh", instance_name,
-            f"--zone={zone}",
-            f"--command=cat {remote_path}",
-            "--quiet",
-        ]
+        # Simplified local cluster SSH
+        cmd = ["ssh", "-o", "ConnectTimeout=3", host_name, f"cat {remote_path}"]
+
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
             if proc.returncode == 0 and proc.stdout.strip():
                 status = json.loads(proc.stdout.strip())
                 results.append(status)
         except Exception as exc:
-            log.warning("SSH status fetch failed for %s/%s: %s", instance_name, ds_name, exc)
+            log.warning("SSH status fetch failed for %s/%s: %s", host_name, ds_name, exc)
 
     if results:
         return results
@@ -336,7 +339,8 @@ def load_launcher_run_record(run_dir: Path) -> dict[str, Any]:
     artifact_status = read_json_file(run_dir / "artifacts" / "run_status.json")
     dataset_statuses = collect_launcher_dataset_statuses(run_dir)
     outputs_dir = _resolve_outputs_dir(run_dir)
-    if outputs_dir is None and (run_dir / "leaderboard.csv").exists():
+    # Prefer neutral leaderboard names if generic 'leaderboard.csv' is missing
+    if outputs_dir is None and any((run_dir / f).exists() for f in RESULT_FILE_NAMES):
         outputs_dir = run_dir
     return {
         "run_dir": run_dir,
@@ -391,6 +395,7 @@ def badge_for_value(value: str | None) -> str:
 
 
 def billing_status_for_launcher(launcher_status: dict[str, Any]) -> str:
+    state = launcher_status.get("state", "unknown")
     vm_outcome = str(launcher_status.get("vm_outcome", "")).strip()
     instance_exists_at_end = launcher_status.get("instance_exists_at_end")
     artifact_verified = bool(launcher_status.get("artifact_verified"))
@@ -403,7 +408,11 @@ def billing_status_for_launcher(launcher_status: dict[str, Any]) -> str:
         return "still_running"
     if vm_outcome == "vm_already_gone":
         return "maybe_stopped"
-    return "unknown"
+    if state == "running":
+        return "active_compute"
+    if state == "completed":
+        return "idle"
+    return state
 
 
 def operator_action_summary(launcher_status: dict[str, Any]) -> str:
@@ -553,31 +562,162 @@ def infer_provisioning_model(record: dict[str, Any]) -> str:
 
 
 def estimate_run_cost(record: dict[str, Any]) -> dict[str, Any]:
+    # This is now cluster runtime estimation, not dollars
     launcher_status = record.get("launcher_status", {})
-    run_manifest = record.get("run_manifest", {})
-    machine_type = str(run_manifest.get("machine_type") or launcher_status.get("machine_type") or "unknown").strip()
-    provisioning_model = infer_provisioning_model(record)
-    created_at = parse_timestamp(launcher_status.get("created_utc") or run_manifest.get("created_utc"))
+    created_at = parse_timestamp(launcher_status.get("created_utc"))
     updated_at = parse_timestamp(launcher_status.get("updated_utc"))
-    elapsed_seconds = 0.0
-    if created_at and updated_at:
-        elapsed_seconds = max((updated_at - created_at).total_seconds(), 0.0)
+    elapsed_seconds = (updated_at - created_at).total_seconds() if created_at and updated_at else 0.0
 
-    pricing = HOURLY_RATE_ESTIMATES.get(machine_type, {})
-    hourly_rate = pricing.get(provisioning_model)
-    if hourly_rate is None and len(pricing) == 1:
-        hourly_rate = next(iter(pricing.values()))
-
-    total_cost = None if hourly_rate is None else hourly_rate * (elapsed_seconds / 3600)
-    billing_active = billing_status_for_launcher(launcher_status) == "still_running"
     return {
-        "machine_type": machine_type or "unknown",
-        "provisioning_model": provisioning_model,
+        "machine_type": record.get("run_manifest", {}).get("host")
+        or record.get("run_manifest", {}).get("machine_type", "local"),
+        "provisioning_model": record.get("run_manifest", {}).get("provisioning_model", "LOCAL"),
         "elapsed_seconds": elapsed_seconds,
-        "hourly_rate": hourly_rate,
-        "estimated_total_cost": total_cost,
-        "billing_active": billing_active,
+        "hourly_rate": None,
+        "estimated_total_cost": None,
+        "billing_active": billing_status_for_launcher(launcher_status) in {"active_compute", "still_running"},
+        "status": launcher_status.get("state", "unknown"),
     }
+
+
+def _is_local_host(host: str) -> bool:
+    """True when host resolves to the current machine — no SSH needed."""
+    try:
+        local = socket.gethostname().split(".")[0].lower()
+    except Exception:
+        local = ""
+    return host.lower() in {local, "localhost", "127.0.0.1"}
+
+
+def _probe_local_statuses() -> list[dict[str, Any]]:
+    """Read active status.json files from local /tmp without SSH."""
+    results: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    patterns = [
+        "/tmp/psc_*/Outputs/*/status.json",
+        "/tmp/strategy_engine_runs/*/repo/Outputs/*/status.json",
+    ]
+    for pattern in patterns:
+        for path_str in sorted(glob.glob(pattern)):
+            if path_str in seen:
+                continue
+            seen.add(path_str)
+            try:
+                data = json.loads(Path(path_str).read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            stage = str(data.get("current_stage", "")).strip().upper()
+            pct = float(data.get("progress_pct", 0) or 0)
+            remaining = data.get("families_remaining", [])
+            if stage not in {"DONE", "COMPLETE", "COMPLETED"} or pct < 100.0 or remaining:
+                data["_status_path"] = path_str
+                results.append(data)
+    return results
+
+
+def estimate_total_eta_seconds(status: dict[str, Any]) -> float | None:
+    """Estimate seconds remaining for the ENTIRE dataset run (all families).
+
+    Uses elapsed / families_completed as avg-per-family, then projects forward
+    over the remaining queue. Falls back to the current-family eta_seconds when
+    there is insufficient history.
+    """
+    stage = str(status.get("current_stage", "")).strip().upper()
+    if stage in {"DONE", "COMPLETE", "COMPLETED"}:
+        return 0.0
+    elapsed = float(status.get("elapsed_seconds", 0) or 0)
+    current_eta = float(status.get("eta_seconds", 0) or 0)
+    completed = status.get("families_completed", []) or []
+    remaining = status.get("families_remaining", []) or []
+    n_completed = len(completed)
+    n_remaining = len(remaining)
+    if n_completed > 0 and elapsed > 0:
+        avg_per_family = elapsed / n_completed
+        return current_eta + n_remaining * avg_per_family
+    return current_eta if current_eta > 0 else None
+
+
+def fetch_cluster_live_statuses(hosts: list[str] | None = None) -> list[dict[str, Any]]:
+    """Fetch currently active status.json payloads directly from cluster hosts.
+
+    This is the local-cluster replacement for the old cloud-console assumption
+    that every live run would already be represented under strategy_console_storage.
+    It is intentionally lightweight and best-effort:
+    - probes each known host over SSH
+    - inspects `/tmp/*/Outputs/*/status.json`
+    - returns only statuses that still look active or recently transitioning
+    """
+    active_hosts = hosts or CLUSTER_HOSTS
+    payload: list[dict[str, Any]] = []
+    remote_script = (
+        "python3 - <<'PY'\n"
+        "from __future__ import annotations\n"
+        "import glob, json\nfrom pathlib import Path\n"
+        "paths = []\n"
+        "for pat in ('/tmp/psc_*/Outputs/*/status.json', '/tmp/strategy_engine_runs/*/repo/Outputs/*/status.json'):\n"
+        "    paths.extend(glob.glob(pat))\n"
+        "seen = set(); results = []\n"
+        "for p in sorted(paths):\n"
+        "    if p in seen: continue\n"
+        "    seen.add(p)\n"
+        "    try: data = json.loads(Path(p).read_text(encoding='utf-8'))\n"
+        "    except: continue\n"
+        "    stage = str(data.get('current_stage','')).strip().upper()\n"
+        "    pct = float(data.get('progress_pct',0) or 0)\n"
+        "    rem = data.get('families_remaining',[])\n"
+        "    if stage not in {'DONE','COMPLETE','COMPLETED'} or pct < 100.0 or rem:\n"
+        "        data['_status_path'] = p; results.append(data)\n"
+        "print(json.dumps(results))\nPY"
+    )
+
+    for host in active_hosts:
+        if _is_local_host(host):
+            try:
+                host_results = _probe_local_statuses()
+            except Exception as exc:
+                log.warning("Local status probe failed: %s", exc)
+                continue
+        else:
+            try:
+                proc = subprocess.run(
+                    ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes",
+                     host, remote_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=12,
+                )
+            except Exception as exc:
+                log.warning("Cluster live-status probe failed for %s: %s", host, exc)
+                continue
+
+            if proc.returncode != 0 or not proc.stdout.strip():
+                continue
+
+            try:
+                host_results = json.loads(proc.stdout)
+            except json.JSONDecodeError:
+                log.warning("Could not decode live-status payload from %s", host)
+                continue
+
+        if not isinstance(host_results, list):
+            continue
+
+        for entry in host_results:
+            if not isinstance(entry, dict):
+                continue
+            normalized = normalize_dataset_status(entry)
+            normalized["host"] = host
+            normalized["status_path"] = entry.get("_status_path", "")
+            payload.append(normalized)
+
+    payload.sort(
+        key=lambda item: (
+            str(item.get("host") or ""),
+            str(item.get("market") or ""),
+            _timeframe_sort_key(str(item.get("timeframe") or "")),
+        )
+    )
+    return payload
 
 
 def parse_dataset_identity(dataset_name: str) -> tuple[str, str]:
@@ -959,31 +1099,29 @@ def load_log_tail(run_dir: Path, line_count: int = 60) -> str:
         guard_state == "running" and not guard_terminal and guard_runner_active
     )
 
-    instance_name = str(manifest.get("instance_name", "")).strip()
-    zone = str(manifest.get("zone", "")).strip()
+    host_name = str(manifest.get("host") or manifest.get("instance_name", "")).strip()
     run_id = str(manifest.get("run_id", "")).strip()
-    if is_active and instance_name and zone and run_id:
-        remote_root = f"/tmp/strategy_engine_runs/{run_id}"
+    if is_active and host_name and run_id:
+        remote_root = f"/tmp/psc_{run_id}" if "_" not in run_id else f"/tmp/{run_id}"
         remote_command = (
             "if [ -f \"{root}/logs/engine_run.log\" ]; then tail -n {count} \"{root}/logs/engine_run.log\"; "
             "elif [ -f \"{root}/runner.log\" ]; then tail -n {count} \"{root}/runner.log\"; "
+            "elif [ -f \"/tmp/psc_logs/{run_id}.log\" ]; then tail -n {count} \"/tmp/psc_logs/{run_id}.log\"; "
             "elif [ -f \"{root}/run_status.json\" ]; then cat \"{root}/run_status.json\"; fi"
-        ).format(root=remote_root, count=max(int(line_count), 20))
+        ).format(root=remote_root, run_id=run_id, count=max(int(line_count), 20))
         cmd = [
-            "gcloud",
-            "compute",
             "ssh",
-            instance_name,
-            f"--zone={zone}",
-            f"--command={remote_command}",
-            "--quiet",
+            "-o",
+            "ConnectTimeout=3",
+            host_name,
+            remote_command,
         ]
         try:
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if proc.returncode == 0 and proc.stdout.strip():
                 return proc.stdout.strip()
         except Exception as exc:
-            log.warning("Remote log tail failed for %s in %s: %s", instance_name, zone, exc)
+            log.warning("Remote log tail failed for %s: %s", host_name, exc)
     return ""
 
 
