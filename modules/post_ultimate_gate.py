@@ -298,9 +298,22 @@ def build_post_ultimate_gate(
     storage_root: Path,
     source_path: Path,
     output_dir: Path | None = None,
+    # Sprint 84 finding: original concentration thresholds (gini 0.60, top_5pct 0.40,
+    # flat_time 0.40) were never calibrated against real trade data because the gate
+    # ran on empty trade lists pre-Sprint84. With real data:
+    #   - gini ranges 0.38-0.59 across the OK pool - 0.60 cap catches genuinely
+    #     pathological strategies, leave as-is.
+    #   - top_5pct_profit_contribution > 1.0 is normal: any strategy with grinding
+    #     losses and concentrated wins has its top 5% deliver more than the net.
+    #     0.40 cap is wrong shape; loosen to 5.0 to catch only single-trade-dependent
+    #     strategies.
+    #   - equity_flat_time_pct routinely 0.90-0.97: strategies are below peak 95%
+    #     of the time, this is geometric. 0.40 was wrong shape; loosen to 0.99 to
+    #     catch only strategies that literally never make new highs.
+    # Sprint 86 will replace these heuristics with data-driven percentile thresholds.
     max_profit_gini: float = 0.60,
-    max_top_5pct_profit_contribution: float = 0.40,
-    max_equity_flat_time_pct: float = 0.40,
+    max_top_5pct_profit_contribution: float = 5.0,
+    max_equity_flat_time_pct: float = 0.99,
     min_neighbor_count: int = 3,
     min_neighbor_median_ratio: float = 0.70,
     max_neighbor_weak_frac: float = 0.20,
