@@ -132,9 +132,55 @@ The four live EAs are NOT affected because they're not driven by the rebuild pat
 - [ ] Add diagnostic logging committed BEFORE running diagnostic (so log output is reproducible)
 - [ ] Run validation backfill in baseline and post-fix mode
 
-## 8. Result (filled in at sprint close)
+## 8. Result (interim, Phase A closed 2026-05-03)
 
-TBD
+**Phase A verdict: CANDIDATES (partial)**
+
+Root cause for the dominant bug class identified and fixed: `_rebuild_strategy_from_leaderboard_row` was constructing `EngineConfig` with futures defaults (tick_value=12.50, dollars_per_point=50.0, commission=$2/contract, slippage=4 ticks). On CFD data sweeps, the original engine ran with `cfd_markets.yaml` per-market values (tick_value=0.01, dollars_per_point=1.0, commission=0, slippage=1 tick for indices). The position-sizing math `floor(risk_amount / (stop_dist * dollars_per_point))` partially compensates between the two but slippage `half_slip = slippage_ticks * tick_value / dollars_per_point` does not — original CFD slippage was 0.01 points/side, rebuild was 1.0 points/side (100x larger). Stack ~12k trades on top of 100x slippage and you get $-6.4M phantom losses where leaderboard reports $+1.75M.
+
+Fix shipped (commit `27292b6`): `_load_cfd_market_engine_values()` reads `configs/cfd_markets.yaml` at module-import time (cached) and supplies per-market engine values to the rebuild's `EngineConfig`. Falls back to futures defaults when the market is not in `cfd_markets.yaml`.
+
+### Empirical verification
+
+After fix, on validation run `2026-04-30_es_nq_validation` (ES_30m, ES_60m so far):
+
+| Strategy class | ES_30m parity | ES_60m parity |
+|---|---|---|
+| Trend (combo) | OK exact | TBD |
+| Trend subtypes | All 3 OK exact | OK |
+| Mean reversion (base) | OK exact | TBD |
+| Mean reversion subtypes | vol_dip OK, trend_pullback FAIL, mom_exhaustion FAIL | mixed (HB12 OK, HB others FAIL) |
+| Breakout (base + 3 subtypes) | All FAIL ~25% under | mixed (HB10 OK, HB others FAIL) |
+| Short_* | All FAIL ~50-80% under | TBD |
+
+Total ES_30m: 6 OK / 9 FAIL out of 15. Up from 0/15 before the fix.
+
+### Phase B - residual bug class (deferred to follow-up sprint)
+
+The remaining PARITY_FAILED rows have parameter-specific divergence, not strategy-type-specific. Pattern: when a refined leader has `min_avg_range = 0.0` (sentinel value indicating "use default"), the rebuild's default differs from what the original refinement used because `precomputed_signals` were generated under different conditions.
+
+Examples:
+- `breakout_compression_squeeze_RefinedBreakout_HB6_ATR0.5_COMP0.6_MOM0` -> exact match
+- `breakout_compression_squeeze_RefinedBreakout_HB16_ATR0.5_COMP0.0_MOM0` -> 35% under leader (FAIL)
+- `breakout_range_expansion_RefinedBreakout_HB10_ATR0.5_COMP0.0_MOM0` -> exact match (different timeframe)
+- `breakout_range_expansion_RefinedBreakout_HB16_ATR0.5_COMP0.0_MOM0` -> 30% under leader (FAIL)
+
+So `COMP=0.0` is not always a problem - it depends on how the original refinement composed `precomputed_signals` (which the rebuild does not see).
+
+**Hypothesis for Phase B:** Use the original `_promoted_candidates.csv` row to populate filter parameters precisely (rather than relying on the strategy class's compile-time defaults). The leaderboard's `best_combo_filter_class_names` gives only class names; the original row had per-filter parameter values that the rebuild discards.
+
+**Consequence:** A subset of strategies (estimated 30-50% of refined subtypes) will be flagged PARITY_FAILED until Phase B is resolved. Post-ultimate gate's fail-closed behaviour is the right conservative response - those strategies will be excluded from selector input until parity is restored.
+
+**Sprint sequence:**
+- Phase A: ✓ shipped
+- Phase B: future sprint, scope = filter-parameter round-trip from `_promoted_candidates.csv`
+- Live EA strategies (NQ Daily MR, YM Daily Short Trend, GC Daily MR, NQ 15m MR) tested in 10market backfill - will determine whether Phase B blocks live-trading parity or only research-validation parity.
+
+### Commits / branches
+
+- Pre-registration: `45b9499`
+- Phase A fix: `27292b6`
+- Branch: `main` (committed direct since this was an unblocking fix to Sprint 84's pipeline)
 
 ---
 
