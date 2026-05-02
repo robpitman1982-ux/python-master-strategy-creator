@@ -23,6 +23,42 @@ from modules.strategy_types import get_strategy_type
 
 _DEFAULT_OOS_SPLIT_DATE = "2019-01-01"
 
+# Cache for cfd_markets.yaml engine values by market symbol.
+_CFD_MARKET_CACHE: dict[str, dict[str, Any]] | None = None
+
+
+def _load_cfd_market_engine_values(market_symbol: str) -> dict[str, Any] | None:
+    """Return the engine block from configs/cfd_markets.yaml for a market.
+
+    The CFD sweeps run with per-market engine values (tick_value, dollars_per_point,
+    commission_per_contract, slippage_ticks) that differ from futures defaults. The
+    rebuild path must use the same values or PnL math diverges catastrophically
+    (Sprint 85 finding: rebuild used 50x dollars_per_point and 1250x tick_value
+    when CFD configs were ignored).
+
+    Returns None if the market is not in cfd_markets.yaml or the file is missing,
+    in which case the caller should fall back to global defaults.
+    """
+    global _CFD_MARKET_CACHE
+    if _CFD_MARKET_CACHE is None:
+        try:
+            import yaml
+            cfg_path = Path(__file__).resolve().parent.parent / "configs" / "cfd_markets.yaml"
+            if cfg_path.exists():
+                with cfg_path.open("r", encoding="utf-8") as fh:
+                    raw = yaml.safe_load(fh) or {}
+                _CFD_MARKET_CACHE = {
+                    str(k).upper(): (v or {}).get("engine", {})
+                    for k, v in raw.items()
+                    if isinstance(v, dict)
+                }
+            else:
+                _CFD_MARKET_CACHE = {}
+        except Exception:
+            _CFD_MARKET_CACHE = {}
+
+    return _CFD_MARKET_CACHE.get(str(market_symbol).strip().upper())
+
 
 def generate_run_id(market: str, timeframe: str) -> tuple[str, str]:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -276,10 +312,19 @@ def _rebuild_strategy_from_leaderboard_row(
         signal_exit_reference=signal_exit_reference,
     )
 
+    # Sprint 85: load CFD-market-specific engine values (tick_value, dollars_per_point,
+    # commission_per_contract, slippage_ticks). Without this, rebuild uses futures
+    # defaults (50x dollars_per_point) on CFD data, causing massive parity divergence.
+    market_engine = _load_cfd_market_engine_values(market_symbol) or {}
     cfg = EngineConfig(
         initial_capital=250_000.0,
         risk_per_trade=0.01,
         symbol=market_symbol,
+        commission_per_contract=float(market_engine.get("commission_per_contract", 2.00)),
+        slippage_ticks=int(market_engine.get("slippage_ticks", 4)),
+        tick_value=float(market_engine.get("tick_value", 12.50)),
+        dollars_per_point=float(market_engine.get("dollars_per_point", 50.0)),
+        timeframe=timeframe,
         use_vectorized_trades=True,  # 14-23x speedup, zero-tolerance parity (Session 61)
     )
 
