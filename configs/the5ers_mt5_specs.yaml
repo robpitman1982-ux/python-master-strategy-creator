@@ -1,0 +1,337 @@
+# The5ers MT5 Per-Symbol Cost Overlay
+# =====================================================================
+# Canonical, firm-specific cost data for The5ers (FivePercentOnline).
+# Selector reads this overlay first; falls back to configs/cfd_markets.yaml.
+#
+# Sources consolidated:
+#   - archive/sessions/SESSION_HANDOVER_swap_discovery.md (swap rates, 7 Apr 2026)
+#   - modules/cfd_mapping.py (contract specs, account 26213568, 1 Apr 2026)
+#   - docs/the5ers_program_rules.md (verified 30 Apr 2026)
+#
+# Verified against: account 26213568, server FivePercentOnline-Real
+# Last verified: 2026-04-07 (swap), 2026-04-01 (contract), 2026-04-30 (rules)
+#
+# Key conventions:
+#   - swap_long_per_micro / swap_short_per_micro are USD per micro per night
+#   - "micro" here = 1/10 of full futures contract (matches selector micro_weight = 0.1)
+#   - triple_day = weekday whose swap is multiplied by triple_multiplier
+#     (e.g. holding overnight Wed->Thu but weekend rollover charged on Fri)
+#   - "Points" swap type already converted to USD via:
+#       USD_per_micro = swap_points * cfd_contract_size * 10^(-cfd_digits) / 100
+#   - "USD" swap type (BTC) is direct USD per lot, divided by 100 for micro
+# =====================================================================
+
+# Firm-level metadata
+firm:
+  name: "The5ers"
+  account_server: "FivePercentOnline-Real"
+  account_id: 26213568
+  mt5_hedge_mode: true
+  base_currency: "USD"
+
+# Markets NOT available on The5ers MT5 (Symbol Watch confirmed)
+# These should be excluded by the selector at hard-filter time.
+excluded_markets:
+  - W      # Wheat - no symbol
+  - NG     # Natural Gas - no symbol
+  - US     # US Bonds - no symbol
+  - TY     # Treasury Notes - no symbol
+  - RTY    # Russell 2000 - no symbol
+  - HG     # Copper - no symbol
+
+# =====================================================================
+# Per-symbol specifications
+# Key = futures market code (matches sweep config), value = MT5 spec block
+# =====================================================================
+
+ES:
+  cfd_symbol: "SP500"
+  description: "Standard and Poor's 500 Index"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 50.0
+  cfd_dollars_per_point: 1.0          # 1 lot SP500 = $1 per point
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 500
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.50
+  commission_pct: 0.0                  # No commission on indices
+  margin_pct: 4.0
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -144
+  swap_points_short: -144
+  swap_long_per_micro: -0.014          # USD per micro per night
+  swap_short_per_micro: -0.014
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+NQ:
+  cfd_symbol: "NAS100"
+  description: "NASDAQ 100 Index"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 20.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 500
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 1.50
+  commission_pct: 0.0
+  margin_pct: 4.0
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -480
+  swap_points_short: -466
+  swap_long_per_micro: -0.048
+  swap_short_per_micro: -0.0466
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+YM:
+  cfd_symbol: "US30"
+  description: "US Dow Jones 30 Index"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 5.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 500
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 2.00
+  commission_pct: 0.0
+  margin_pct: 4.0
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -720
+  swap_points_short: -720
+  swap_long_per_micro: -0.072
+  swap_short_per_micro: -0.072
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+GC:
+  cfd_symbol: "XAUUSD"
+  description: "Gold vs US Dollar"
+  contract_size: 100                   # 1 lot = 100 oz
+  digits: 2
+  futures_dollars_per_point: 100.0
+  cfd_dollars_per_point: 100.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.30
+  commission_pct: 0.001                # 0.001% per lot
+  margin_pct: 4.0
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -220
+  swap_points_short: -220
+  swap_long_per_micro: -2.20           # MEDIUM - avoid weekends
+  swap_short_per_micro: -2.20
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+SI:
+  cfd_symbol: "XAGUSD"
+  description: "Silver vs US Dollar"
+  contract_size: 5000                  # 1 lot = 5000 oz
+  digits: 3
+  futures_dollars_per_point: 5000.0
+  cfd_dollars_per_point: 5000.0
+  min_lot: 0.01
+  lot_step: 0.001                      # finer granularity than other symbols
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.030
+  commission_pct: 0.001
+  margin_pct: 4.0
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -81
+  swap_points_short: -78.9
+  swap_long_per_micro: -4.05           # HIGH - intraday only at scale
+  swap_short_per_micro: -3.95
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+CL:
+  cfd_symbol: "XTIUSD"
+  description: "US Crude Spot vs US Dollar"
+  contract_size: 100                   # 1 lot = 100 barrels
+  digits: 2
+  futures_dollars_per_point: 1000.0
+  cfd_dollars_per_point: 100.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.03
+  commission_pct: 0.03                 # 0.03% per lot - highest of all
+  margin_pct: 20.0                     # 20% notional margin (much higher than indices)
+  execution: "Instant"                 # Different from indices!
+  swap_type: "points"
+  swap_points_long: -70
+  swap_points_short: -40               # ASYMMETRIC
+  swap_long_per_micro: -0.70           # DANGER - 10x Friday rollover
+  swap_short_per_micro: -0.40
+  triple_day: "friday"
+  triple_multiplier: 10                # CL Friday is 10x, not 3x
+  sessions_server_time: "Mon-Fri 01:05-23:50"
+
+# =====================================================================
+# FX pairs (mapped to futures FX codes)
+# =====================================================================
+
+JY:
+  cfd_symbol: "USDJPY"
+  description: "US Dollar vs Japanese Yen"
+  contract_size: 100000
+  digits: 3
+  futures_dollars_per_point: 125000.0  # JPY futures are reciprocal; preserved for selector compat
+  cfd_dollars_per_point: null          # FX uses pip math; selector should use swap_*_per_micro directly
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.010
+  commission_pct: 0.0
+  margin_pct: 3.33                     # ~30:1 leverage on FX
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -41.4
+  swap_points_short: -40.3
+  swap_long_per_micro: -0.26
+  swap_short_per_micro: -0.25
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Sun-Fri 24h"
+
+EC:
+  cfd_symbol: "EURUSD"
+  description: "Euro vs US Dollar"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.00010
+  commission_pct: 0.0
+  margin_pct: 3.33
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -21
+  swap_points_short: -19.5
+  swap_long_per_micro: -0.21
+  swap_short_per_micro: -0.20
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Sun-Fri 24h"
+
+BP:
+  cfd_symbol: "GBPUSD"
+  description: "Pound Sterling vs US Dollar"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 62500.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.00015
+  commission_pct: 0.0
+  margin_pct: 3.33
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -22.8
+  swap_points_short: -21.6
+  swap_long_per_micro: -0.23
+  swap_short_per_micro: -0.22
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Sun-Fri 24h"
+
+AD:
+  cfd_symbol: "AUDUSD"
+  description: "Australian Dollar vs US Dollar"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 100000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 0.00012
+  commission_pct: 0.0
+  margin_pct: 3.33
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: -9.8
+  swap_points_short: -8.2
+  swap_long_per_micro: -0.10           # LOWEST swap of all - excellent for overnight FX holds
+  swap_short_per_micro: -0.082
+  triple_day: "friday"
+  triple_multiplier: 3
+  sessions_server_time: "Sun-Fri 24h"
+
+# =====================================================================
+# Crypto (note: BTC charged daily, not Friday-tripled)
+# =====================================================================
+
+BTC:
+  cfd_symbol: "BTCUSD"
+  description: "Bitcoin vs US Dollar"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 5.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 10
+  stops_level_pts: 10
+  spread_type: "floating"
+  typical_spread_pts: 30.0
+  commission_pct: 0.0
+  margin_pct: 50.0                     # 2:1 leverage on crypto
+  execution: "Market"
+  swap_type: "usd"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: -1.25           # Asymmetric, charged DAILY (no Friday triple)
+  swap_short_per_micro: -0.90
+  triple_day: "none"
+  triple_multiplier: 1                 # BTC charged daily, every day = 1x
+  sessions_server_time: "24/7"
+
+# =====================================================================
+# Swap-friendliness tiers (operator reference, not consumed by selector)
+#
+#   LOW (safe for daily holds):    SP500, NAS100, US30, AUDUSD, EURUSD, GBPUSD, USDJPY
+#   MEDIUM (avoid weekends):       XAUUSD, BTCUSD
+#   HIGH (intraday only at scale): XAGUSD, XTIUSD (10x Friday!)
+#
+# =====================================================================
