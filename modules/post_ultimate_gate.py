@@ -211,6 +211,13 @@ def _fragility_metrics(raw_pool: pd.DataFrame, row: pd.Series) -> dict[str, Any]
 
 
 def _post_gate_pass(row: pd.Series) -> bool:
+    # Sprint 84: fail-closed on missing or parity-failed trade artifacts.
+    artifact_status = str(row.get("trade_artifact_status", "")).strip().upper()
+    gate_status = str(row.get("gate_status", "")).strip().upper()
+    if gate_status in {"MISSING_TRADE_ARTIFACTS", "PARITY_FAILED", "REBUILD_FAILED", "NO_TRADES"}:
+        return False
+    if artifact_status in {"PARITY_FAILED", "REBUILD_FAILED", "NO_TRADES"}:
+        return False
     concentration_pass = _parse_bool(row.get("gate_concentration_pass", False))
     fragility_state = str(row.get("gate_fragility_status", ""))
     fragility_pass = _parse_bool(row.get("gate_fragility_pass", False))
@@ -332,6 +339,12 @@ def build_post_ultimate_gate(
     for _, row in df.iterrows():
         row_dict = row.to_dict()
 
+        # Sprint 84: track trade-artifact availability and parity explicitly.
+        # Upstream emit_trade_artifacts() may have stamped trade_artifact_status onto
+        # the family leaderboard rows; that flows through to ultimate via the master
+        # aggregation. Default to UNKNOWN if the upstream stage never ran.
+        artifact_status = str(row.get("trade_artifact_status", "")).strip().upper() or "UNKNOWN"
+
         trades_path = _find_trades_file(row, runs_root)
         trade_metrics = {
             "trade_pnl_gini": math.nan,
@@ -339,22 +352,41 @@ def build_post_ultimate_gate(
             "equity_flat_time_pct": math.nan,
             "loaded_trade_count": 0.0,
         }
+        gate_status = ""
         if trades_path is not None:
             try:
                 trades_df = pd.read_csv(trades_path)
                 trade_series = _match_trade_strategy_column(trades_df, row)
-                trade_metrics = _concentration_metrics(trade_series.tolist())
+                if int(trade_series.size) == 0:
+                    gate_status = "MISSING_TRADE_ARTIFACTS"
+                else:
+                    trade_metrics = _concentration_metrics(trade_series.tolist())
             except Exception:
-                pass
+                gate_status = "MISSING_TRADE_ARTIFACTS"
+        else:
+            gate_status = "MISSING_TRADE_ARTIFACTS"
+
+        # Upstream parity / rebuild failures take precedence over the file-read state.
+        if artifact_status in {"PARITY_FAILED", "REBUILD_FAILED", "NO_TRADES"}:
+            gate_status = artifact_status
 
         fragility = _fragility_metrics(raw_pool, row)
-        concentration_pass = True
-        if math.isfinite(trade_metrics["trade_pnl_gini"]):
-            concentration_pass &= trade_metrics["trade_pnl_gini"] <= max_profit_gini
-        if math.isfinite(trade_metrics["top_5pct_profit_contribution"]):
-            concentration_pass &= trade_metrics["top_5pct_profit_contribution"] <= max_top_5pct_profit_contribution
-        if math.isfinite(trade_metrics["equity_flat_time_pct"]):
-            concentration_pass &= trade_metrics["equity_flat_time_pct"] <= max_equity_flat_time_pct
+
+        # Concentration gate: requires real trade data to be a real signal. If trades
+        # are missing or parity-failed, fail closed instead of silently passing.
+        if gate_status:
+            concentration_pass = False
+        else:
+            concentration_pass = True
+            if math.isfinite(trade_metrics["trade_pnl_gini"]):
+                concentration_pass &= trade_metrics["trade_pnl_gini"] <= max_profit_gini
+            if math.isfinite(trade_metrics["top_5pct_profit_contribution"]):
+                concentration_pass &= trade_metrics["top_5pct_profit_contribution"] <= max_top_5pct_profit_contribution
+            if math.isfinite(trade_metrics["equity_flat_time_pct"]):
+                concentration_pass &= trade_metrics["equity_flat_time_pct"] <= max_equity_flat_time_pct
+            if int(trade_metrics["loaded_trade_count"]) == 0:
+                concentration_pass = False
+                gate_status = "MISSING_TRADE_ARTIFACTS"
 
         fragility_pass = True
         if fragility["fragility_status"] == "EVIDENCED":
@@ -376,6 +408,9 @@ def build_post_ultimate_gate(
         row_dict["gate_neighbor_weak_frac"] = fragility["neighbor_weak_frac"]
         row_dict["gate_fragility_status"] = fragility["fragility_status"]
         row_dict["gate_fragility_pass"] = fragility_pass
+        row_dict["gate_status"] = gate_status if gate_status else "OK"
+        if "trade_artifact_status" not in row_dict:
+            row_dict["trade_artifact_status"] = artifact_status
         row_dict["post_gate_pass"] = _post_gate_pass(pd.Series(row_dict))
         enriched_rows.append(row_dict)
 

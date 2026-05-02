@@ -36,6 +36,7 @@ from modules.portfolio_evaluator import evaluate_portfolio
 from modules.progress import ProgressTracker
 from modules.statistics import annotate_dataframe_with_pvalues
 from modules.strategy_types import get_strategy_type, list_strategy_types
+from modules.trade_emission import apply_parity_status, emit_trade_artifacts
 
 # =============================================================================
 # CONFIGURATION
@@ -1141,6 +1142,24 @@ def _run_dataset(
         if not bootcamp_leaderboard_df.empty:
             print(f"\nBOOTCAMP LEADERBOARD - {ds_market} {ds_timeframe} (Saved to {bootcamp_leaderboard_path})")
             print(bootcamp_leaderboard_df[[c for c in preview_cols if c in bootcamp_leaderboard_df.columns]].to_string(index=False))
+
+        # Sprint 84: emit per-trade artifacts unconditionally for every accepted strategy.
+        # Runs regardless of skip_portfolio_evaluation so the post-ultimate gate concentration
+        # check and selector cost-aware MC always have real strategy_trades.csv to consume.
+        try:
+            print("\n" + "=" * 72 + "\nEMITTING PER-TRADE ARTIFACTS\n" + "=" * 72)
+            emission_results = emit_trade_artifacts(
+                leaderboard_csv=leaderboard_path,
+                data=raw_data,
+                output_dir=ds_output_dir,
+                market=ds_market,
+                timeframe=ds_timeframe,
+            )
+            apply_parity_status(leaderboard_path, emission_results)
+        except Exception as exc:
+            print(f"\n  [WARN] Trade artifact emission failed: {exc}")
+            import traceback as _tb
+            _tb.print_exc()
 
         skip_portfolio = get_nested(_cfg, "pipeline", "skip_portfolio_evaluation", default=False)
         if skip_portfolio:

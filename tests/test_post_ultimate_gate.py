@@ -166,3 +166,125 @@ def test_build_post_ultimate_gate_creates_audit_and_culls_fragile_or_concentrate
         assert (exports_root / "ultimate_leaderboard_gated.csv").exists()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+# -----------------------------------------------------------------------------
+# Sprint 84 - fail-closed behaviour on missing or parity-failed trade artifacts
+# -----------------------------------------------------------------------------
+
+
+def test_post_gate_fails_closed_when_trade_artifacts_missing() -> None:
+    """A row with no strategy_trades.csv must fail post-gate, not pass vacuously."""
+    tmp = _make_tmp()
+    try:
+        storage_root = tmp / "storage"
+        exports_root = storage_root / "exports"
+        exports_root.mkdir(parents=True, exist_ok=True)
+
+        # Write a single accepted strategy with NO trade_map - so no strategy_trades.csv exists.
+        _write_run(
+            storage_root,
+            "run-no-trades",
+            [
+                _master_row(
+                    leader_strategy_name="OrphanA",
+                    run_id="run-no-trades",
+                    hold_bars=5,
+                    stop_atr=0.50,
+                    oos_pf=2.0,
+                ),
+            ],
+            trade_map=None,
+        )
+
+        source_df = pd.DataFrame(
+            [
+                _master_row(
+                    leader_strategy_name="OrphanA",
+                    run_id="run-no-trades",
+                    hold_bars=5,
+                    stop_atr=0.50,
+                    oos_pf=2.0,
+                ),
+            ]
+        )
+        source_df.insert(0, "rank", [1])
+        source_path = exports_root / "ultimate_leaderboard_FUTURES.csv"
+        source_df.to_csv(source_path, index=False)
+
+        result = build_post_ultimate_gate(
+            storage_root=storage_root,
+            source_path=source_path,
+            output_dir=exports_root,
+        )
+
+        audit = pd.read_csv(result["audit_path"])
+        gated = pd.read_csv(result["gated_path"])
+
+        orphan = audit.loc[audit["leader_strategy_name"] == "OrphanA"].iloc[0]
+        assert bool(orphan["gate_concentration_pass"]) is False
+        assert orphan["gate_status"] == "MISSING_TRADE_ARTIFACTS"
+        assert int(orphan["gate_loaded_trade_count"]) == 0
+        assert bool(orphan["post_gate_pass"]) is False
+
+        # Gated file should not contain OrphanA.
+        assert "OrphanA" not in list(gated.get("leader_strategy_name", []))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_post_gate_fails_closed_on_upstream_parity_failed_status() -> None:
+    """A row carrying trade_artifact_status=PARITY_FAILED must fail post-gate."""
+    tmp = _make_tmp()
+    try:
+        storage_root = tmp / "storage"
+        exports_root = storage_root / "exports"
+        exports_root.mkdir(parents=True, exist_ok=True)
+
+        # Trade artifacts exist but the upstream emission flagged a parity failure.
+        _write_run(
+            storage_root,
+            "run-parity-fail",
+            [
+                _master_row(
+                    leader_strategy_name="DiscordantC",
+                    run_id="run-parity-fail",
+                    hold_bars=5,
+                    stop_atr=0.50,
+                    oos_pf=2.0,
+                ),
+            ],
+            trade_map={"DiscordantC": [50.0, 60.0, 40.0, 30.0, 25.0, 20.0, 15.0, 10.0, 5.0, 5.0]},
+        )
+
+        row = _master_row(
+            leader_strategy_name="DiscordantC",
+            run_id="run-parity-fail",
+            hold_bars=5,
+            stop_atr=0.50,
+            oos_pf=2.0,
+        )
+        # Inject Sprint 84 parity-status column on the source ultimate row.
+        row["trade_artifact_status"] = "PARITY_FAILED"
+        row["trade_artifact_rebuilt_net_pnl"] = 200.0  # diverges from leader_net_pnl 5000
+
+        source_df = pd.DataFrame([row])
+        source_df.insert(0, "rank", [1])
+        source_path = exports_root / "ultimate_leaderboard_FUTURES.csv"
+        source_df.to_csv(source_path, index=False)
+
+        result = build_post_ultimate_gate(
+            storage_root=storage_root,
+            source_path=source_path,
+            output_dir=exports_root,
+        )
+
+        audit = pd.read_csv(result["audit_path"])
+        gated = pd.read_csv(result["gated_path"])
+
+        discord = audit.loc[audit["leader_strategy_name"] == "DiscordantC"].iloc[0]
+        assert discord["gate_status"] == "PARITY_FAILED"
+        assert bool(discord["post_gate_pass"]) is False
+        assert "DiscordantC" not in list(gated.get("leader_strategy_name", []))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
