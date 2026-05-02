@@ -374,7 +374,10 @@ def build_post_ultimate_gate(
 
         # Concentration gate: requires real trade data to be a real signal. If trades
         # are missing or parity-failed, fail closed instead of silently passing.
-        if gate_status:
+        # Note: gate_status is "" (empty) when no failure was detected; only the
+        # known failure tokens should fail-close concentration here.
+        FAIL_CLOSE_STATES = {"MISSING_TRADE_ARTIFACTS", "PARITY_FAILED", "REBUILD_FAILED", "NO_TRADES"}
+        if gate_status in FAIL_CLOSE_STATES:
             concentration_pass = False
         else:
             concentration_pass = True
