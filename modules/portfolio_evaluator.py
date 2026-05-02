@@ -280,6 +280,7 @@ def _rebuild_strategy_from_leaderboard_row(
         initial_capital=250_000.0,
         risk_per_trade=0.01,
         symbol=market_symbol,
+        use_vectorized_trades=True,  # 14-23x speedup, zero-tolerance parity (Session 61)
     )
 
     engine = MasterStrategyEngine(data=eval_data, config=cfg)
