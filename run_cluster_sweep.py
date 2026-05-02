@@ -126,10 +126,14 @@ def build_distributed_plan(
     data_dir: str,
     remote_root: str = ".",
     dry_run: bool = False,
+    run_id: str | None = None,
+    backup_root: str | None = None,
+    poll_seconds: int = 300,
 ) -> dict:
     """Build a weighted multi-host execution plan for exact sweep jobs."""
     hosts = parse_host_specs(host_specs)
     assignments = assign_jobs_to_hosts(jobs, hosts)
+    run_id = run_id or f"distributed_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     plan_hosts: list[dict] = []
     for host in hosts:
@@ -156,12 +160,73 @@ def build_distributed_plan(
 
     return {
         "created": datetime.now().isoformat(),
+        "run_id": run_id,
         "data_dir": data_dir,
         "remote_root": remote_root,
         "dry_run": dry_run,
         "total_jobs": len(jobs),
+        "auto_ingest": {
+            "enabled": True,
+            "poll_seconds": poll_seconds,
+            "backup_root": backup_root,
+            "command": build_auto_ingest_command(
+                run_id=run_id,
+                plan_path="<PLAN_JSON_PATH>",
+                remote_root=remote_root,
+                backup_root=backup_root,
+                poll_seconds=poll_seconds,
+            ),
+            "powershell_start_command": build_auto_ingest_powershell_command(
+                run_id=run_id,
+                plan_path="<PLAN_JSON_PATH>",
+                remote_root=remote_root,
+                backup_root=backup_root,
+                poll_seconds=poll_seconds,
+            ),
+        },
         "hosts": plan_hosts,
     }
+
+
+def build_auto_ingest_command(
+    *,
+    run_id: str,
+    plan_path: str,
+    remote_root: str,
+    backup_root: str | None,
+    poll_seconds: int = 300,
+) -> str:
+    command = (
+        f"python -u scripts/auto_ingest_distributed_run.py "
+        f"--run-id {run_id} "
+        f"--plan {plan_path} "
+        f"--remote-root {remote_root} "
+        f"--state-path .tmp_auto_ingest_{run_id}.json "
+        f"--poll-seconds {poll_seconds}"
+    )
+    if backup_root:
+        command += f' --backup-root "{backup_root}"'
+    return command
+
+
+def build_auto_ingest_powershell_command(
+    *,
+    run_id: str,
+    plan_path: str,
+    remote_root: str,
+    backup_root: str | None,
+    poll_seconds: int = 300,
+) -> str:
+    command = (
+        "powershell -ExecutionPolicy Bypass -File scripts\\start_auto_ingest_watcher.ps1 "
+        f"-RunId {run_id} "
+        f'-PlanPath "{plan_path}" '
+        f"-RemoteRoot {remote_root} "
+        f"-PollSeconds {poll_seconds}"
+    )
+    if backup_root:
+        command += f' -BackupRoot "{backup_root}"'
+    return command
 
 
 def print_distributed_plan(plan: dict) -> None:
@@ -170,6 +235,7 @@ def print_distributed_plan(plan: dict) -> None:
     print(f"  Jobs:       {plan.get('total_jobs', 0)}")
     print(f"  Data dir:   {plan.get('data_dir', '?')}")
     print(f"  Remote root:{plan.get('remote_root', '?')}")
+    print(f"  Run id:     {plan.get('run_id', '?')}")
     print(f"  Dry run:    {plan.get('dry_run', False)}")
     print("=" * 72)
     for host in plan.get("hosts", []):
@@ -184,6 +250,12 @@ def print_distributed_plan(plan: dict) -> None:
             print(f"  Command: {host['command']}")
         else:
             print("  No jobs assigned")
+    auto_ingest = plan.get("auto_ingest", {})
+    if auto_ingest.get("enabled"):
+        print("\nAuto-ingest watcher:")
+        print(f"  Poll:    {auto_ingest.get('poll_seconds')} seconds")
+        print(f"  Command: {auto_ingest.get('command')}")
+        print(f"  Hidden:  {auto_ingest.get('powershell_start_command')}")
 
 
 def show_status() -> None:
@@ -506,6 +578,12 @@ def main() -> None:
                         help="Build a weighted multi-host execution plan instead of running sequentially")
     parser.add_argument("--plan-output", type=str, default=None,
                         help="Optional JSON file path for distributed plan output")
+    parser.add_argument("--run-id", type=str, default=None,
+                        help="Canonical run id for distributed auto-ingest; generated when omitted")
+    parser.add_argument("--auto-ingest-backup-root", type=str, default=r"G:\My Drive\strategy-data-backup",
+                        help="Backup root for the generated auto-ingest watcher command")
+    parser.add_argument("--auto-ingest-poll-seconds", type=int, default=300,
+                        help="Poll interval for the generated auto-ingest watcher command")
     parser.add_argument("--resume", action="store_true",
                         help="Resume from manifest, skipping completed jobs")
     parser.add_argument("--status", action="store_true",
@@ -576,14 +654,32 @@ def main() -> None:
                 data_dir=args.data_dir,
                 remote_root=args.remote_root,
                 dry_run=args.dry_run,
+                run_id=args.run_id,
+                backup_root=args.auto_ingest_backup_root,
+                poll_seconds=args.auto_ingest_poll_seconds,
             )
         except ValueError as exc:
             print(f"ERROR: {exc}")
             sys.exit(1)
 
-        print_distributed_plan(plan)
         if args.plan_output:
             plan_path = Path(args.plan_output)
+            plan["auto_ingest"]["command"] = build_auto_ingest_command(
+                run_id=plan["run_id"],
+                plan_path=str(plan_path),
+                remote_root=plan["remote_root"],
+                backup_root=plan["auto_ingest"].get("backup_root"),
+                poll_seconds=int(plan["auto_ingest"].get("poll_seconds", 300)),
+            )
+            plan["auto_ingest"]["powershell_start_command"] = build_auto_ingest_powershell_command(
+                run_id=plan["run_id"],
+                plan_path=str(plan_path),
+                remote_root=plan["remote_root"],
+                backup_root=plan["auto_ingest"].get("backup_root"),
+                poll_seconds=int(plan["auto_ingest"].get("poll_seconds", 300)),
+            )
+        print_distributed_plan(plan)
+        if args.plan_output:
             plan_path.parent.mkdir(parents=True, exist_ok=True)
             with open(plan_path, "w", encoding="utf-8") as f:
                 json.dump(plan, f, indent=2)

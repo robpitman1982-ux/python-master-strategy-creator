@@ -228,7 +228,7 @@ def test_pick_best_candidate_file_prefers_master_leaderboard():
         shutil.rmtree(tmp_path, ignore_errors=True)
 
 
-def test_estimate_run_cost_uses_local_price_map():
+def test_estimate_run_cost_reports_runtime_for_local_cluster_mode():
     record = {
         "launcher_status": {
             "created_utc": "2026-03-21T00:00:00+00:00",
@@ -248,7 +248,7 @@ def test_estimate_run_cost_uses_local_price_map():
     assert estimate["machine_type"] == "n2-highcpu-96"
     assert estimate["provisioning_model"] == "SPOT"
     assert estimate["elapsed_seconds"] == 7200
-    assert round(float(estimate["estimated_total_cost"]), 2) == 1.44  # $0.72/hr SPOT × 2h
+    assert estimate["estimated_total_cost"] is None
     assert estimate["billing_active"] is True
 
 

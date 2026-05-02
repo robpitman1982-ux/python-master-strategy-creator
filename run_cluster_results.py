@@ -23,12 +23,33 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
         log_path=args.log_path,
         storage_root=Path(args.storage_root).expanduser() if args.storage_root else None,
         commit=args.commit,
+        finalize_after_ingest=not args.no_finalize,
+        publish_exports=not args.no_publish_exports,
+        backup_root=Path(args.backup_root).expanduser() if args.backup_root else None,
+        mirror_backup=not args.no_mirror_backup,
     )
     print(
         f"Ingested {len(result['copied_datasets'])} dataset(s) for {args.host} into run {args.run_id}"
     )
     for dataset_name in result["copied_datasets"]:
         print(f"  - {dataset_name}")
+    if result.get("finalization"):
+        finalization = result["finalization"]
+        print(
+            f"Published after ingest: "
+            f"master_rows={finalization['master_rows']}, ultimate_rows={finalization['ultimate_rows']}"
+        )
+        for path_text in finalization["exported_files"]:
+            print(f"  Exported: {path_text}")
+        if finalization.get("backup_mirror"):
+            mirror = finalization["backup_mirror"]
+            print(f"Mirrored backup into: {mirror['backup_root']}")
+            for path_text in mirror.get("archived_existing", []):
+                print(f"  Archived backup file: {path_text}")
+            for path_text in mirror["copied_exports"]:
+                print(f"  Backup export: {path_text}")
+            for path_text in mirror["copied_runs"]:
+                print(f"  Backup run: {path_text}")
     print(f"Manifest: {result['manifest_path']}")
     return 0
 
@@ -39,6 +60,8 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
         storage_root=Path(args.storage_root).expanduser() if args.storage_root else None,
         emit_cfd_alias=not args.no_cfd_alias,
         publish_exports=not args.no_publish_exports,
+        backup_root=Path(args.backup_root).expanduser() if args.backup_root else None,
+        mirror_backup=not args.no_mirror_backup,
     )
     print(
         f"Finalized run {result['run_id']}: "
@@ -46,6 +69,15 @@ def _cmd_finalize(args: argparse.Namespace) -> int:
     )
     for path_text in result["exported_files"]:
         print(f"  Exported: {path_text}")
+    if result.get("backup_mirror"):
+        mirror = result["backup_mirror"]
+        print(f"Mirrored backup into: {mirror['backup_root']}")
+        for path_text in mirror.get("archived_existing", []):
+            print(f"  Archived backup file: {path_text}")
+        for path_text in mirror["copied_exports"]:
+            print(f"  Backup export: {path_text}")
+        for path_text in mirror["copied_runs"]:
+            print(f"  Backup run: {path_text}")
     print(f"Manifest: {result['manifest_path']}")
     return 0
 
@@ -60,6 +92,8 @@ def _cmd_mirror_backup(args: argparse.Namespace) -> int:
     print(f"Mirrored backup into: {result['backup_root']}")
     if result["latest_run_id"]:
         print(f"Latest run: {result['latest_run_id']}")
+    for path_text in result.get("archived_existing", []):
+        print(f"  Archived: {path_text}")
     for path_text in result["copied_exports"]:
         print(f"  Export: {path_text}")
     for path_text in result["copied_runs"]:
@@ -93,13 +127,41 @@ def main() -> int:
     ingest.add_argument("--log-path", help="Optional path to the host log file")
     ingest.add_argument("--storage-root", help="Override strategy_console_storage root")
     ingest.add_argument("--commit", help="Commit SHA used for the run")
+    ingest.add_argument(
+        "--backup-root",
+        help="Google Drive clone root. Defaults to STRATEGY_BACKUP_ROOT/PSC_BACKUP_ROOT or a discovered local Drive folder.",
+    )
+    ingest.add_argument(
+        "--no-finalize",
+        action="store_true",
+        help="Only stage artifacts; do not immediately rebuild master/ultimate exports.",
+    )
+    ingest.add_argument(
+        "--no-publish-exports",
+        action="store_true",
+        help="When auto-finalizing, do not mirror master / ultimate into exports/.",
+    )
+    ingest.add_argument(
+        "--no-mirror-backup",
+        action="store_true",
+        help="Do not mirror finalized exports/run artifacts into the Google Drive backup root.",
+    )
     ingest.set_defaults(func=_cmd_ingest)
 
     finalize = subparsers.add_parser("finalize-run", help="Build run-scoped master and cumulative ultimate leaderboards.")
     finalize.add_argument("--run-id", required=True)
     finalize.add_argument("--storage-root", help="Override strategy_console_storage root")
+    finalize.add_argument(
+        "--backup-root",
+        help="Google Drive clone root. Defaults to STRATEGY_BACKUP_ROOT/PSC_BACKUP_ROOT or a discovered local Drive folder.",
+    )
     finalize.add_argument("--no-cfd-alias", action="store_true", help="Do not emit master_leaderboard_cfd.csv")
     finalize.add_argument("--no-publish-exports", action="store_true", help="Do not mirror run master / ultimate into exports/")
+    finalize.add_argument(
+        "--no-mirror-backup",
+        action="store_true",
+        help="Do not mirror finalized exports/run artifacts into the Google Drive backup root.",
+    )
     finalize.set_defaults(func=_cmd_finalize)
 
     mirror = subparsers.add_parser(

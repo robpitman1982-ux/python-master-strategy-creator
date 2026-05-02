@@ -121,6 +121,26 @@ class TestHardFilter:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    def test_hard_filter_excluded_markets(self) -> None:
+        from modules.portfolio_selector import hard_filter_candidates
+
+        tmp = _make_tmp_dir()
+        try:
+            rows = [
+                {"leader_strategy_name": "keep_es", "market": "ES", "best_refined_strategy_name": "keep_es_ref"},
+                {"leader_strategy_name": "drop_rty", "market": "RTY", "best_refined_strategy_name": "drop_rty_ref"},
+            ]
+            df = _make_leaderboard_df(rows)
+            csv_path = tmp / "test_lb_excluded.csv"
+            df.to_csv(csv_path, index=False)
+
+            result = hard_filter_candidates(str(csv_path), excluded_markets=["RTY"])
+            names = [r["leader_strategy_name"] for r in result]
+            assert "keep_es" in names
+            assert "drop_rty" not in names
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
 
 class TestCorrelation:
     """Test Stage 4: correlation-based rejection in sweep_combinations."""
@@ -166,6 +186,61 @@ class TestCorrelation:
             names = r["strategy_names"]
             assert not ("ES_60m_StratA" in names and "CL_daily_StratB" in names), \
                 f"High-correlation pair should be rejected: {names}"
+
+
+class TestCostModeling:
+    """Test cost and hold-behavior helpers for CFD challenge realism."""
+
+    def test_estimate_swap_charge_units_handles_friday_multiplier(self) -> None:
+        from modules.portfolio_selector import _estimate_swap_charge_units
+
+        units, touched_weekend = _estimate_swap_charge_units(
+            "2026-05-01 10:00:00",  # Friday
+            "2026-05-04 10:00:00",  # Monday
+            weekend_multiplier=10.0,
+        )
+
+        assert units == 10.0
+        assert touched_weekend is True
+
+    def test_compute_trade_cost_adjustment_applies_spread_and_swap(self) -> None:
+        from modules.portfolio_selector import _compute_trade_cost_adjustment
+
+        trade = {
+            "entry_time": "2026-05-01 10:00:00",
+            "exit_time": "2026-05-04 10:00:00",
+            "net_pnl": 100.0,
+        }
+        costs = _compute_trade_cost_adjustment(
+            trade,
+            market="CL",
+            timeframe="60m",
+            weight=0.1,  # 1 micro
+        )
+
+        assert costs["spread_cost"] > 0.0
+        assert costs["swap_cost"] >= 7.0  # CL 10x Friday should be materially non-zero
+        assert costs["weekend_hold"] == 1.0
+
+    def test_trade_behavior_diagnostics_detect_weekend_exposure(self) -> None:
+        from modules.portfolio_selector import _compute_trade_behavior_diagnostics
+
+        trades = [
+            {
+                "entry_time": "2026-05-01 10:00:00",
+                "exit_time": "2026-05-04 10:00:00",
+                "net_pnl": 50.0,
+            },
+            {
+                "entry_time": "2026-05-05 10:00:00",
+                "exit_time": "2026-05-05 15:00:00",
+                "net_pnl": 25.0,
+            },
+        ]
+        diag = _compute_trade_behavior_diagnostics(trades, market="CL", timeframe="60m")
+
+        assert diag["overnight_hold_share"] == 0.5
+        assert diag["weekend_hold_share"] == 0.5
 
 
 class TestPortfolioMC:
@@ -517,6 +592,129 @@ class TestEndToEnd:
             assert "worst_rolling_20_p95" in report_df.columns
             assert "max_losing_streak_p95" in report_df.columns
             assert "max_recovery_trades_p95" in report_df.columns
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_selector_prefers_gated_input_and_applies_program_exclusions(self) -> None:
+        from modules.portfolio_selector import _resolve_selector_leaderboard_path, hard_filter_candidates
+
+        tmp = _make_tmp_dir()
+        try:
+            rows = [
+                {
+                    "leader_strategy_name": "ESStrat",
+                    "best_refined_strategy_name": "RefinedES",
+                    "market": "ES",
+                    "timeframe": "60m",
+                    "strategy_type": "mean_reversion",
+                    "dataset": "ES_60m_2008_2026_tradestation.csv",
+                    "run_id": "test-run",
+                },
+                {
+                    "leader_strategy_name": "NQStrat",
+                    "best_refined_strategy_name": "RefinedNQ",
+                    "market": "NQ",
+                    "timeframe": "30m",
+                    "strategy_type": "breakout",
+                    "dataset": "NQ_30m_2008_2026_tradestation.csv",
+                    "run_id": "test-run",
+                },
+                {
+                    "leader_strategy_name": "CLStrat",
+                    "best_refined_strategy_name": "RefinedCL",
+                    "market": "CL",
+                    "timeframe": "daily",
+                    "strategy_type": "short_trend",
+                    "dataset": "CL_daily_2008_2026_tradestation.csv",
+                    "run_id": "test-run",
+                },
+                {
+                    "leader_strategy_name": "RTYStrat",
+                    "best_refined_strategy_name": "RefinedRTY",
+                    "market": "RTY",
+                    "timeframe": "60m",
+                    "strategy_type": "trend",
+                    "dataset": "RTY_60m_2008_2026_tradestation.csv",
+                    "run_id": "test-run",
+                },
+            ]
+            gated_df = _make_leaderboard_df(rows)
+            raw_df = _make_leaderboard_df(
+                [
+                    {
+                        "leader_strategy_name": "OnlyRaw",
+                        "best_refined_strategy_name": "OnlyRawRefined",
+                        "market": "ES",
+                        "timeframe": "daily",
+                        "strategy_type": "breakout",
+                        "dataset": "ES_daily_2008_2026_tradestation.csv",
+                        "run_id": "test-run",
+                    }
+                ]
+            )
+
+            lb_dir = tmp / "leaderboards"
+            lb_dir.mkdir()
+            raw_path = lb_dir / "ultimate_leaderboard_cfd.csv"
+            gated_path = lb_dir / "ultimate_leaderboard_cfd_gated.csv"
+            raw_df.to_csv(raw_path, index=False)
+            gated_df.to_csv(gated_path, index=False)
+
+            resolved = _resolve_selector_leaderboard_path(str(raw_path), prefer_gated=True)
+            assert Path(resolved) == gated_path
+
+            filtered = hard_filter_candidates(
+                str(resolved),
+                excluded_markets=["W", "NG", "US", "TY", "RTY", "HG"],
+            )
+            names = [row["leader_strategy_name"] for row in filtered]
+            assert "ESStrat" in names
+            assert "NQStrat" in names
+            assert "CLStrat" in names
+            assert "RTYStrat" not in names
+            assert "OnlyRaw" not in names
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_cfd_selector_does_not_fall_back_to_futures_gated(self) -> None:
+        from modules.portfolio_selector import _resolve_selector_leaderboard_path
+
+        tmp = _make_tmp_dir()
+        try:
+            lb_dir = tmp / "leaderboards"
+            lb_dir.mkdir()
+            raw_path = lb_dir / "ultimate_leaderboard_cfd.csv"
+            futures_gated_path = lb_dir / "ultimate_leaderboard_FUTURES_gated.csv"
+            _make_leaderboard_df(
+                [
+                    {
+                        "leader_strategy_name": "OnlyRawCFD",
+                        "best_refined_strategy_name": "OnlyRawCFDRefined",
+                        "market": "ES",
+                        "timeframe": "daily",
+                        "strategy_type": "breakout",
+                        "dataset": "ES_daily_dukascopy.csv",
+                        "run_id": "test-run",
+                    }
+                ]
+            ).to_csv(raw_path, index=False)
+            _make_leaderboard_df(
+                [
+                    {
+                        "leader_strategy_name": "WrongUniverse",
+                        "best_refined_strategy_name": "WrongUniverseRefined",
+                        "market": "ES",
+                        "timeframe": "daily",
+                        "strategy_type": "trend",
+                        "dataset": "ES_daily_2008_2026_tradestation.csv",
+                        "run_id": "futures-run",
+                    }
+                ]
+            ).to_csv(futures_gated_path, index=False)
+
+            resolved = _resolve_selector_leaderboard_path(str(raw_path), prefer_gated=True)
+
+            assert Path(resolved) == raw_path
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

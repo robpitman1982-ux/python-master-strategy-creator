@@ -142,3 +142,41 @@ def test_aggregate_filters_to_accepted_only(monkeypatch):
         assert result.iloc[0]["strategy_type"] == "mean_reversion"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_aggregate_splits_futures_and_cfd_exports(monkeypatch):
+    """Futures-named exports must not contain Dukascopy/CFD rows."""
+    import pandas as pd
+    from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
+
+    tmp = _make_tmp()
+    try:
+        storage_root = tmp / "storage"
+
+        _make_leaderboard_csv(
+            storage_root / "runs" / "run-cfd" / "artifacts" / "Outputs" / "master_leaderboard.csv",
+            dataset="DAX_daily_dukascopy.csv",
+            leader_strategy_name="CFDStrategy",
+            filters="DistanceBelowSMAFilter",
+            leader_pf=2.0,
+        )
+        _make_leaderboard_csv(
+            storage_root / "runs" / "run-futures" / "artifacts" / "Outputs" / "master_leaderboard.csv",
+            dataset="ES_daily_tradestation.csv",
+            leader_strategy_name="FuturesStrategy",
+            filters="TrendDirectionFilter",
+            leader_pf=1.8,
+        )
+
+        result = aggregate_ultimate_leaderboard(storage_root=storage_root)
+
+        futures = pd.read_csv(storage_root / "ultimate_leaderboard_FUTURES.csv")
+        legacy = pd.read_csv(storage_root / "ultimate_leaderboard.csv")
+        cfd = pd.read_csv(storage_root / "ultimate_leaderboard_cfd.csv")
+
+        assert len(result) == 2
+        assert list(futures["dataset"].astype(str)) == ["ES_daily_tradestation.csv"]
+        assert list(legacy["dataset"].astype(str)) == ["ES_daily_tradestation.csv"]
+        assert list(cfd["dataset"].astype(str)) == ["DAX_daily_dukascopy.csv"]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

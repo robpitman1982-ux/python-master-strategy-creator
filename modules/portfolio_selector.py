@@ -30,6 +30,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from modules.prop_firm_simulator import (
     The5ersBootcampConfig,
@@ -43,6 +44,7 @@ from modules.prop_firm_simulator import (
 )
 
 logger = logging.getLogger(__name__)
+_CFD_MARKET_CONFIG_CACHE: dict[str, dict[str, Any]] | None = None
 
 _PROGRAM_FACTORIES = {
     "bootcamp": The5ersBootcampConfig,
@@ -92,18 +94,237 @@ def _resolve_leaderboard_path(leaderboard_path: str | os.PathLike[str]) -> str:
     if requested.exists():
         return str(requested)
 
-    candidates = [
-        requested,
-        requested.parent / "ultimate_leaderboard_cfd.csv",
-        requested.parent / "ultimate_leaderboard_FUTURES.csv",
-        requested.parent / "ultimate_leaderboard.csv",
-        requested.parent / "ultimate_leaderboard_bootcamp.csv",
-    ]
+    requested_name = requested.name.lower()
+    if "cfd" in requested_name:
+        candidates = [requested, requested.parent / "ultimate_leaderboard_cfd.csv"]
+    elif "futures" in requested_name:
+        candidates = [requested, requested.parent / "ultimate_leaderboard_FUTURES.csv"]
+    else:
+        candidates = [
+            requested,
+            requested.parent / "ultimate_leaderboard_cfd.csv",
+            requested.parent / "ultimate_leaderboard_FUTURES.csv",
+            requested.parent / "ultimate_leaderboard.csv",
+            requested.parent / "ultimate_leaderboard_bootcamp.csv",
+        ]
     for candidate in candidates:
         if candidate.exists():
             logger.info(f"Leaderboard path fallback: using {candidate}")
             return str(candidate)
     return str(requested)
+
+
+def _resolve_selector_leaderboard_path(
+    leaderboard_path: str | os.PathLike[str],
+    *,
+    prefer_gated: bool = False,
+) -> str:
+    """Resolve selector input, optionally preferring gated outputs first."""
+    requested = Path(leaderboard_path)
+
+    gated_candidates: list[Path] = []
+    if prefer_gated:
+        requested_name = requested.name.lower()
+        if requested.suffix.lower() == ".csv":
+            gated_candidates.append(requested.with_name(f"{requested.stem}_gated.csv"))
+        if "cfd" in requested_name:
+            gated_candidates.append(requested.parent / "ultimate_leaderboard_cfd_gated.csv")
+        elif "futures" in requested_name:
+            gated_candidates.append(requested.parent / "ultimate_leaderboard_FUTURES_gated.csv")
+        else:
+            gated_candidates.extend(
+                [
+                    requested.parent / "ultimate_leaderboard_cfd_gated.csv",
+                    requested.parent / "ultimate_leaderboard_FUTURES_gated.csv",
+                    requested.parent / "ultimate_leaderboard_gated.csv",
+                ]
+            )
+
+    for candidate in gated_candidates:
+        if candidate.exists():
+            logger.info(f"Selector leaderboard preference: using gated input {candidate}")
+            return str(candidate)
+
+    return _resolve_leaderboard_path(leaderboard_path)
+
+
+def _load_cfd_market_configs(config_path: str | os.PathLike[str] = "configs/cfd_markets.yaml") -> dict[str, dict[str, Any]]:
+    global _CFD_MARKET_CONFIG_CACHE
+    if _CFD_MARKET_CONFIG_CACHE is not None:
+        return _CFD_MARKET_CONFIG_CACHE
+
+    path = Path(config_path)
+    if not path.exists():
+        _CFD_MARKET_CONFIG_CACHE = {}
+        return _CFD_MARKET_CONFIG_CACHE
+
+    with open(path, "r", encoding="utf-8") as f:
+        payload = yaml.safe_load(f) or {}
+
+    result: dict[str, dict[str, Any]] = {}
+    for market, cfg in payload.items():
+        if not isinstance(cfg, dict):
+            continue
+        result[str(market)] = cfg
+    _CFD_MARKET_CONFIG_CACHE = result
+    return result
+
+
+def _get_market_cost_context(market: str) -> dict[str, float]:
+    cfg = _load_cfd_market_configs().get(str(market), {})
+    engine = cfg.get("engine", {}) if isinstance(cfg, dict) else {}
+    cost_profile = cfg.get("cost_profile", {}) if isinstance(cfg, dict) else {}
+    dollars_per_point = float(engine.get("dollars_per_point", 0.0) or 0.0)
+    spread_pts = float(cost_profile.get("spread_pts", 0.0) or 0.0)
+    swap_per_micro = float(cost_profile.get("swap_per_micro_per_night", 0.0) or 0.0)
+    weekend_multiplier = float(cost_profile.get("weekend_multiplier", 3.0) or 3.0)
+    return {
+        "dollars_per_point": dollars_per_point,
+        "spread_pts": spread_pts,
+        "spread_cost_per_micro": spread_pts * dollars_per_point,
+        "swap_per_micro_per_night": swap_per_micro,
+        "weekend_multiplier": weekend_multiplier,
+    }
+
+
+def _timeframe_minutes(timeframe: str) -> int:
+    tf = str(timeframe).strip().lower()
+    mapping = {
+        "1m": 1,
+        "5m": 5,
+        "15m": 15,
+        "30m": 30,
+        "60m": 60,
+        "daily": 390,
+    }
+    return mapping.get(tf, 60)
+
+
+def _estimate_swap_charge_units(
+    entry_time: Any,
+    exit_time: Any,
+    *,
+    bars_held: Any = None,
+    timeframe: str = "60m",
+    weekend_multiplier: float = 3.0,
+) -> tuple[float, bool]:
+    entry_ts = pd.to_datetime(entry_time, errors="coerce")
+    exit_ts = pd.to_datetime(exit_time, errors="coerce")
+
+    if pd.notna(entry_ts) and pd.notna(exit_ts):
+        entry_date = entry_ts.normalize()
+        exit_date = exit_ts.normalize()
+        if exit_date <= entry_date:
+            return 0.0, False
+
+        units = 0.0
+        touched_weekend = False
+        current = entry_date
+        while current < exit_date:
+            weekday = current.weekday()
+            if weekday == 4:
+                units += weekend_multiplier
+                touched_weekend = True
+            elif weekday < 5:
+                units += 1.0
+            current += pd.Timedelta(days=1)
+        return units, touched_weekend
+
+    try:
+        held = int(float(bars_held))
+    except Exception:
+        held = 0
+    if held <= 0:
+        return 0.0, False
+
+    tf_minutes = _timeframe_minutes(timeframe)
+    approx_days = (held * tf_minutes) / 1440.0
+    approx_nights = max(0.0, np.floor(approx_days))
+    return float(approx_nights), False
+
+
+def _compute_trade_cost_adjustment(
+    trade: dict[str, Any],
+    *,
+    market: str,
+    timeframe: str,
+    weight: float,
+) -> dict[str, float]:
+    ctx = _get_market_cost_context(market)
+    micro_count = max(0.0, float(weight) * 10.0)
+    spread_cost = ctx["spread_cost_per_micro"] * micro_count
+    swap_units, touched_weekend = _estimate_swap_charge_units(
+        trade.get("entry_time"),
+        trade.get("exit_time"),
+        bars_held=trade.get("bars_held"),
+        timeframe=timeframe,
+        weekend_multiplier=ctx["weekend_multiplier"],
+    )
+    swap_cost = ctx["swap_per_micro_per_night"] * micro_count * swap_units
+    total_cost = spread_cost + swap_cost
+    return {
+        "spread_cost": spread_cost,
+        "swap_cost": swap_cost,
+        "total_cost": total_cost,
+        "swap_units": swap_units,
+        "weekend_hold": 1.0 if touched_weekend else 0.0,
+        "overnight_hold": 1.0 if swap_units > 0 else 0.0,
+    }
+
+
+def _compute_trade_behavior_diagnostics(
+    trades: list[dict[str, Any]],
+    *,
+    market: str,
+    timeframe: str,
+) -> dict[str, float]:
+    if not trades:
+        return {
+            "trade_count": 0.0,
+            "overnight_hold_share": 0.0,
+            "weekend_hold_share": 0.0,
+            "avg_swap_units_per_trade": 0.0,
+            "spread_cost_per_micro": 0.0,
+            "swap_per_micro_per_night": 0.0,
+        }
+
+    overnight_count = 0.0
+    weekend_count = 0.0
+    total_swap_units = 0.0
+    ctx = _get_market_cost_context(market)
+    for trade in trades:
+        swap_units, touched_weekend = _estimate_swap_charge_units(
+            trade.get("entry_time"),
+            trade.get("exit_time"),
+            bars_held=trade.get("bars_held"),
+            timeframe=timeframe,
+            weekend_multiplier=ctx["weekend_multiplier"],
+        )
+        if swap_units > 0:
+            overnight_count += 1.0
+        if touched_weekend:
+            weekend_count += 1.0
+        total_swap_units += swap_units
+
+    n = float(len(trades))
+    return {
+        "trade_count": n,
+        "overnight_hold_share": overnight_count / n,
+        "weekend_hold_share": weekend_count / n,
+        "avg_swap_units_per_trade": total_swap_units / n,
+        "spread_cost_per_micro": ctx["spread_cost_per_micro"],
+        "swap_per_micro_per_night": ctx["swap_per_micro_per_night"],
+    }
+
+
+def _supports_cost_modeling(trade_artifacts: dict[str, list[dict[str, Any]]] | None) -> bool:
+    if not trade_artifacts:
+        return False
+    for trades in trade_artifacts.values():
+        for trade in trades:
+            if trade.get("entry_time") is not None or trade.get("bars_held") is not None:
+                return True
+    return False
 
 
 # ============================================================================
@@ -115,6 +336,7 @@ def hard_filter_candidates(
     oos_pf_threshold: float = 1.0,
     candidate_cap: int = 50,
     quality_flags: list[str] | None = None,
+    excluded_markets: list[str] | None = None,
 ) -> list[dict]:
     """Load a neutral strategy pool and apply hard filters.
 
@@ -128,6 +350,11 @@ def hard_filter_candidates(
     df = pd.read_csv(leaderboard_path)
     n_total = len(df)
     logger.info(f"Loaded {n_total} rows from {leaderboard_path}")
+
+    excluded = {str(m).strip().upper() for m in (excluded_markets or []) if str(m).strip()}
+    if excluded and "market" in df.columns:
+        df = df[~df["market"].astype(str).str.strip().str.upper().isin(excluded)].copy()
+        logger.info(f"After excluded_markets filter ({', '.join(sorted(excluded))}): {len(df)}")
 
     # Quality filter
     valid_flags = set(f.upper().strip() for f in (quality_flags or ["ROBUST", "STABLE"]))
@@ -384,19 +611,16 @@ def _find_trades_file(candidate: dict, runs_base: str) -> str | None:
     return None
 
 
-def _load_raw_trade_lists(
+def _load_trade_artifacts(
     candidates: list[dict],
     return_matrix_columns: list[str],
     runs_base_path: str,
-) -> dict[str, list[float]]:
-    """Load raw per-trade PnL for each candidate present in return_matrix.
+) -> dict[str, list[dict[str, Any]]]:
+    """Load per-trade artifacts for each strategy present in the return matrix.
 
-    Prefers strategy_trades.csv (one row per trade) for accurate MC simulation.
-    Falls back to strategy_returns.csv (daily resampled) if trades file not found.
-
-    Returns dict mapping strategy label -> list of individual trade PnLs.
+    Returns dict mapping strategy label -> list of trade dicts.
     """
-    result: dict[str, list[float]] = {}
+    result: dict[str, list[dict[str, Any]]] = {}
 
     for cand in candidates:
         leader_name = str(cand.get("leader_strategy_name", "")).strip()
@@ -413,7 +637,6 @@ def _load_raw_trade_lists(
         strat_type = str(cand.get("strategy_type", "")).strip()
         qualified_name = f"{strat_type}_{leader_name}" if strat_type else leader_name
 
-        # Try strategy_trades.csv first (per-trade PnL)
         trades_path = _find_trades_file(cand, runs_base_path)
         if trades_path:
             try:
@@ -421,17 +644,25 @@ def _load_raw_trade_lists(
                 if "strategy" in df.columns and "net_pnl" in df.columns:
                     mask = df["strategy"] == qualified_name
                     if mask.sum() == 0:
-                        # Try partial match
-                        mask = df["strategy"].str.contains(leader_name, na=False)
-                    trades = pd.to_numeric(df.loc[mask, "net_pnl"], errors="coerce").dropna().tolist()
-                    if trades:
-                        result[label] = trades
-                        logger.debug(f"Raw trades for {label}: {len(trades)} trades (from strategy_trades.csv)")
-                        continue
+                        mask = df["strategy"].astype(str).str.contains(leader_name, na=False)
+                    subset = df.loc[mask].copy()
+                    if not subset.empty:
+                        trades: list[dict[str, Any]] = []
+                        for _, row in subset.iterrows():
+                            trade = {"net_pnl": float(pd.to_numeric(row.get("net_pnl"), errors="coerce") or 0.0)}
+                            for col in ("entry_time", "exit_time", "direction", "entry_price", "exit_price", "bars_held"):
+                                if col in subset.columns and pd.notna(row.get(col)):
+                                    trade[col] = row.get(col)
+                            trades.append(trade)
+                        if trades:
+                            result[label] = trades
+                            diagnostics = _compute_trade_behavior_diagnostics(trades, market=market, timeframe=timeframe)
+                            cand.update(diagnostics)
+                            logger.debug(f"Trade artifacts for {label}: {len(trades)} trades (from strategy_trades.csv)")
+                            continue
             except Exception as e:
                 logger.debug(f"Could not read {trades_path}: {e}")
 
-        # Fall back to strategy_returns.csv (daily resampled)
         returns_path = _find_returns_file(cand, runs_base_path)
         if returns_path is None:
             continue
@@ -439,7 +670,7 @@ def _load_raw_trade_lists(
         try:
             df = pd.read_csv(returns_path)
         except Exception as e:
-            logger.warning(f"Could not read {returns_path} for raw trades: {e}")
+            logger.warning(f"Could not read {returns_path} for trade artifacts: {e}")
             continue
 
         if "exit_time" not in df.columns:
@@ -447,23 +678,43 @@ def _load_raw_trade_lists(
 
         cols = [c for c in df.columns if c != "exit_time"]
         matched_col = _match_column(cols, leader_name, strategy_type=strat_type)
-
         if matched_col is None:
             refined_name = str(cand.get("best_refined_strategy_name", "")).strip()
             if refined_name:
                 matched_col = _match_column(cols, refined_name, strategy_type=strat_type)
-
         if matched_col is None:
             continue
 
-        # Extract ALL non-zero values as individual trades (NOT resampled)
         raw_vals = pd.to_numeric(df[matched_col], errors="coerce").fillna(0.0)
-        trades = [float(v) for v in raw_vals if v != 0.0]
-
+        trades = [{"net_pnl": float(v), "exit_time": df.iloc[i]["exit_time"]} for i, v in enumerate(raw_vals) if v != 0.0]
         if trades:
             result[label] = trades
-            logger.debug(f"Raw trades for {label}: {len(trades)} trades (from strategy_returns.csv fallback)")
+            diagnostics = _compute_trade_behavior_diagnostics(trades, market=market, timeframe=timeframe)
+            cand.update(diagnostics)
+            logger.debug(f"Trade artifacts for {label}: {len(trades)} trades (from strategy_returns.csv fallback)")
 
+    logger.info(f"Loaded trade artifacts for {len(result)}/{len(return_matrix_columns)} strategies")
+    return result
+
+
+def _load_raw_trade_lists(
+    candidates: list[dict],
+    return_matrix_columns: list[str],
+    runs_base_path: str,
+) -> dict[str, list[float]]:
+    """Load raw per-trade PnL for each candidate present in return_matrix.
+
+    Prefers strategy_trades.csv (one row per trade) for accurate MC simulation.
+    Falls back to strategy_returns.csv (daily resampled) if trades file not found.
+
+    Returns dict mapping strategy label -> list of individual trade PnLs.
+    """
+    artifacts = _load_trade_artifacts(candidates, return_matrix_columns, runs_base_path)
+    result: dict[str, list[float]] = {}
+    for label, trades in artifacts.items():
+        pnls = [float(t.get("net_pnl", 0.0) or 0.0) for t in trades if float(t.get("net_pnl", 0.0) or 0.0) != 0.0]
+        if pnls:
+            result[label] = pnls
     logger.info(f"Loaded raw trade lists for {len(result)}/{len(return_matrix_columns)} strategies")
     return result
 
@@ -1334,6 +1585,52 @@ def _build_shuffled_interleave_matrix(
     return matrix
 
 
+def _build_cost_adjusted_shuffled_interleave_matrix(
+    strategy_trade_lists: dict[str, list[float]],
+    trade_artifacts: dict[str, list[dict[str, Any]]],
+    contract_weights: dict[str, float],
+    n_sims: int,
+    seed: int,
+) -> np.ndarray:
+    """Build shuffled interleave matrix with spread/swap costs applied per trade."""
+    rng = random.Random(seed)
+    strategy_names = list(strategy_trade_lists.keys())
+    artifact_lists = {
+        s: [dict(t) for t in trade_artifacts.get(s, []) if float(t.get("net_pnl", 0.0) or 0.0) != 0.0]
+        for s in strategy_names
+    }
+    max_len = max(len(artifact_lists[s]) for s in strategy_names) if strategy_names else 0
+    n_trades_per_sim = max_len * len(strategy_names)
+
+    matrix = np.zeros((n_sims, n_trades_per_sim))
+    for sim in range(n_sims):
+        shuffled: dict[str, list[dict[str, Any]]] = {}
+        for s in strategy_names:
+            t = artifact_lists[s].copy()
+            rng.shuffle(t)
+            shuffled[s] = t
+
+        idx = 0
+        for trade_idx in range(max_len):
+            for s in strategy_names:
+                if trade_idx < len(shuffled[s]):
+                    trade = shuffled[s][trade_idx]
+                    w = contract_weights.get(s, 1.0)
+                    market = str(s).split("_")[0] if "_" in s else ""
+                    timeframe = str(s).split("_")[1] if s.count("_") >= 2 else "60m"
+                    costs = _compute_trade_cost_adjustment(
+                        trade,
+                        market=market,
+                        timeframe=timeframe,
+                        weight=w,
+                    )
+                    gross_pnl = float(trade.get("net_pnl", 0.0) or 0.0) * w
+                    matrix[sim, idx] = gross_pnl - costs["total_cost"]
+                    idx += 1
+
+    return matrix
+
+
 def portfolio_monte_carlo(
     strategy_trade_lists: dict[str, list[float]],
     config: PropFirmConfig,
@@ -1341,6 +1638,7 @@ def portfolio_monte_carlo(
     n_sims: int = 10_000,
     seed: int = 42,
     contract_weights: dict[str, float] | None = None,
+    trade_artifacts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict:
     """Monte Carlo for a PORTFOLIO of strategies.
 
@@ -1355,9 +1653,14 @@ def portfolio_monte_carlo(
     if contract_weights is None:
         contract_weights = {s: 1.0 for s in strategy_trade_lists}
 
-    trade_matrix = _build_shuffled_interleave_matrix(
-        strategy_trade_lists, contract_weights, n_sims, seed,
-    )
+    if trade_artifacts:
+        trade_matrix = _build_cost_adjusted_shuffled_interleave_matrix(
+            strategy_trade_lists, trade_artifacts, contract_weights, n_sims, seed,
+        )
+    else:
+        trade_matrix = _build_shuffled_interleave_matrix(
+            strategy_trade_lists, contract_weights, n_sims, seed,
+        )
 
     return simulate_challenge_batch(trade_matrix, config, source_capital)
 
@@ -1454,12 +1757,14 @@ def _mc_worker_init(
     return_matrix_cols: list[str],
     return_matrix_idx: list,
     raw_trade_lists: dict[str, list[float]] | None,
+    trade_artifacts: dict[str, list[dict[str, Any]]] | None,
 ) -> None:
     """Initialize per-worker shared data for MC workers."""
     _mc_shared["return_matrix"] = pd.DataFrame(
         return_matrix_vals, columns=return_matrix_cols, index=return_matrix_idx,
     )
     _mc_shared["raw_trade_lists"] = raw_trade_lists
+    _mc_shared["trade_artifacts"] = trade_artifacts
 
 
 def _mc_worker(args: tuple) -> dict | None:
@@ -1471,6 +1776,7 @@ def _mc_worker(args: tuple) -> dict | None:
     config = PropFirmConfig(**config_dict)
     return_matrix = _mc_shared["return_matrix"]
     raw_trade_lists = _mc_shared.get("raw_trade_lists")
+    trade_artifacts = _mc_shared.get("trade_artifacts")
 
     if mc_method == "block_bootstrap":
         mc = portfolio_monte_carlo_block_bootstrap(
@@ -1488,7 +1794,15 @@ def _mc_worker(args: tuple) -> dict | None:
                     trade_lists[name] = trades
         if not trade_lists:
             return None
-        mc = portfolio_monte_carlo(trade_lists, config, n_sims=n_sims)
+        artifact_subset = None
+        if trade_artifacts:
+            artifact_subset = {name: trade_artifacts.get(name, []) for name in names if trade_artifacts.get(name)}
+        mc = portfolio_monte_carlo(
+            trade_lists,
+            config,
+            n_sims=n_sims,
+            trade_artifacts=artifact_subset,
+        )
 
     return {**combo, **mc}
 
@@ -1498,6 +1812,7 @@ def run_bootcamp_mc(
     return_matrix: pd.DataFrame,
     n_sims: int = 10_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
+    trade_artifacts: dict[str, list[dict[str, Any]]] | None = None,
     prop_config: PropFirmConfig | None = None,
     mc_method: str = "block_bootstrap",
 ) -> list[dict]:
@@ -1515,27 +1830,34 @@ def run_bootcamp_mc(
     """
     config = prop_config or The5ersBootcampConfig()
     n_workers = min(len(combinations), os.cpu_count() or 4)
+    effective_mc_method = mc_method
+    if trade_artifacts and mc_method == "block_bootstrap":
+        logger.info("Trade-artifact cost modeling available; switching MC method from block_bootstrap to shuffle_interleave")
+        effective_mc_method = "shuffle_interleave"
+    if trade_artifacts:
+        n_workers = 1
 
-    # Serialize config to dict for pickling
     from dataclasses import asdict
     config_dict = asdict(config)
 
     args_list = [
-        (combo, n_sims, mc_method, config_dict)
+        (combo, n_sims, effective_mc_method, config_dict)
         for combo in combinations
     ]
 
     logger.info(
-        f"Portfolio MC: {len(combinations)} combos × {n_sims} sims ({mc_method}), "
+        f"Portfolio MC: {len(combinations)} combos x {n_sims} sims ({effective_mc_method}), "
         f"{n_workers} workers"
     )
 
     results: list[dict] = []
     if n_workers <= 1 or len(combinations) <= 2:
-        # Single-threaded for small jobs
         _mc_worker_init(
-            return_matrix.values, list(return_matrix.columns),
-            list(return_matrix.index), raw_trade_lists,
+            return_matrix.values,
+            list(return_matrix.columns),
+            list(return_matrix.index),
+            raw_trade_lists,
+            trade_artifacts,
         )
         for i, args in enumerate(args_list):
             result = _mc_worker(args)
@@ -1547,8 +1869,11 @@ def run_bootcamp_mc(
             max_workers=n_workers,
             initializer=_mc_worker_init,
             initargs=(
-                return_matrix.values, list(return_matrix.columns),
-                list(return_matrix.index), raw_trade_lists,
+                return_matrix.values,
+                list(return_matrix.columns),
+                list(return_matrix.index),
+                raw_trade_lists,
+                trade_artifacts,
             ),
         ) as executor:
             futures = {executor.submit(_mc_worker, args): i for i, args in enumerate(args_list)}
@@ -1712,6 +2037,7 @@ def optimise_sizing(
     n_sims: int = 1_000,
     final_n_sims: int = 10_000,
     raw_trade_lists: dict[str, list[float]] | None = None,
+    trade_artifacts: dict[str, list[dict[str, Any]]] | None = None,
     min_pass_rate: float = 0.40,
     prop_config: PropFirmConfig | None = None,
     dd_p95_limit_pct: float = 0.70,
@@ -1818,6 +2144,7 @@ def optimise_sizing(
                 trade_lists, config,
                 n_sims=n_sims,
                 contract_weights=weights,
+                trade_artifacts={s: trade_artifacts.get(s, []) for s in trade_lists} if trade_artifacts else None,
             )
 
             final_step_key = f"step{config.n_steps}_pass_rate"
@@ -1868,6 +2195,7 @@ def optimise_sizing(
             n_sims=final_n_sims,
             contract_weights=best_weights,
             seed=99,
+            trade_artifacts={s: trade_artifacts.get(s, []) for s in trade_lists} if trade_artifacts else None,
         )
         portfolio["micro_multiplier"] = best_weights
         portfolio["sizing_optimised"] = True
@@ -1898,6 +2226,7 @@ def portfolio_robustness_test(
     portfolios: list[dict],
     return_matrix: pd.DataFrame,
     raw_trade_lists: dict[str, list[float]] | None = None,
+    trade_artifacts: dict[str, list[dict[str, Any]]] | None = None,
     prop_config: PropFirmConfig | None = None,
     n_sims: int = 1_000,
 ) -> list[dict]:
@@ -1935,6 +2264,7 @@ def portfolio_robustness_test(
         baseline_mc = portfolio_monte_carlo(
             trade_lists, config, n_sims=n_sims,
             contract_weights=weights,
+            trade_artifacts={s: trade_artifacts.get(s, []) for s in trade_lists} if trade_artifacts else None,
         )
         baseline_rate = baseline_mc.get(final_step_key, baseline_mc.get("pass_rate", 0.0))
 
@@ -1952,6 +2282,7 @@ def portfolio_robustness_test(
                 mc = portfolio_monte_carlo(
                     trade_lists, config, n_sims=n_sims,
                     contract_weights=perturbed,
+                    trade_artifacts={s: trade_artifacts.get(s, []) for s in trade_lists} if trade_artifacts else None,
                 )
                 rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
                 weight_changes.append(abs(rate - baseline_rate))
@@ -1967,6 +2298,7 @@ def portfolio_robustness_test(
                 mc = portfolio_monte_carlo(
                     reduced_lists, config, n_sims=n_sims,
                     contract_weights=reduced_weights,
+                    trade_artifacts={s: trade_artifacts.get(s, []) for s in reduced_lists} if trade_artifacts else None,
                 )
                 rate = mc.get(final_step_key, mc.get("pass_rate", 0.0))
                 remove_changes.append(abs(rate - baseline_rate))
@@ -2013,8 +2345,6 @@ def run_portfolio_selection(
     logger.info("PORTFOLIO SELECTOR — Starting")
     logger.info("=" * 60)
 
-    leaderboard_path = _resolve_leaderboard_path(leaderboard_path)
-
     # Read config overrides
     if config is None:
         try:
@@ -2037,6 +2367,22 @@ def run_portfolio_selection(
     logger.info(f"Prop firm: {prop_config.firm_name} {prop_config.program_name} "
                 f"(${prop_config.target_balance:,.0f}, {prop_config.n_steps} steps)")
 
+    prefer_gated = bool(ps_cfg.get("prefer_gated_leaderboard", False))
+    leaderboard_path = _resolve_selector_leaderboard_path(
+        leaderboard_path,
+        prefer_gated=prefer_gated,
+    )
+
+    excluded_markets_cfg = ps_cfg.get("excluded_markets")
+    if excluded_markets_cfg is None:
+        excluded_markets = list(prop_config.excluded_markets)
+    elif isinstance(excluded_markets_cfg, str):
+        excluded_markets = [excluded_markets_cfg]
+    else:
+        excluded_markets = list(excluded_markets_cfg)
+    if excluded_markets:
+        logger.info("Excluded markets for selector: %s", ", ".join(sorted(str(m) for m in excluded_markets)))
+
     # Stage 1: Hard filter
     quality_flags_cfg = ps_cfg.get("quality_flags", ["ROBUST", "STABLE"])
     if isinstance(quality_flags_cfg, str):
@@ -2046,6 +2392,7 @@ def run_portfolio_selection(
         oos_pf_threshold=float(ps_cfg.get("oos_pf_threshold", 1.0)),
         candidate_cap=int(ps_cfg.get("candidate_cap", 60)),
         quality_flags=quality_flags_cfg,
+        excluded_markets=excluded_markets,
     )
     if not candidates:
         logger.warning("No candidates passed hard filter. Aborting.")
@@ -2057,7 +2404,11 @@ def run_portfolio_selection(
         logger.warning("Return matrix is empty. Aborting.")
         return {"status": "no_returns"}
 
-    # Stage 2b: Load raw per-trade PnL for MC (preserves individual trades)
+    # Stage 2b: Load per-trade artifacts / PnL for MC and diagnostics
+    trade_artifacts = _load_trade_artifacts(
+        candidates, list(return_matrix.columns), runs_base_path,
+    )
+    cost_aware_trade_artifacts = trade_artifacts if _supports_cost_modeling(trade_artifacts) else None
     raw_trades = _load_raw_trade_lists(
         candidates, list(return_matrix.columns), runs_base_path,
     )
@@ -2115,6 +2466,7 @@ def run_portfolio_selection(
     mc_results = run_bootcamp_mc(
         combinations, return_matrix, n_sims=n_sims_mc,
         raw_trade_lists=raw_trades if raw_trades else None,
+        trade_artifacts=cost_aware_trade_artifacts,
         prop_config=prop_config,
         mc_method=mc_method,
     )
@@ -2144,6 +2496,7 @@ def run_portfolio_selection(
         mc_results, return_matrix, n_sims=n_sims_sizing,
         final_n_sims=n_sims_final,
         raw_trade_lists=raw_trades if raw_trades else None,
+        trade_artifacts=cost_aware_trade_artifacts,
         min_pass_rate=min_pass_rate,
         prop_config=prop_config,
         dd_p95_limit_pct=dd_p95_limit,
@@ -2161,6 +2514,7 @@ def run_portfolio_selection(
     optimised = portfolio_robustness_test(
         optimised, return_matrix,
         raw_trade_lists=raw_trades if raw_trades else None,
+        trade_artifacts=cost_aware_trade_artifacts,
         prop_config=prop_config,
         n_sims=n_sims_sizing,
     )
@@ -2253,6 +2607,14 @@ def _write_report(
         trades_per_month = total_trades_per_year / 12 if total_trades_per_year > 0 else 0
         est_months_median = median_trades / trades_per_month if trades_per_month > 0 else 0
         est_months_p75 = p75_trades / trades_per_month if trades_per_month > 0 else 0
+        overnight_shares: list[float] = []
+        weekend_shares: list[float] = []
+        swap_rates: list[float] = []
+        for name in strat_names:
+            cand = cand_by_label.get(name, {})
+            overnight_shares.append(float(cand.get("overnight_hold_share", 0.0) or 0.0))
+            weekend_shares.append(float(cand.get("weekend_hold_share", 0.0) or 0.0))
+            swap_rates.append(float(cand.get("swap_per_micro_per_night", 0.0) or 0.0))
 
         row: dict = {
             "rank": rank,
@@ -2274,6 +2636,9 @@ def _write_report(
             "p75_trades_to_fund": round(p75_trades, 0),
             "est_months_median": round(est_months_median, 1),
             "est_months_p75": round(est_months_p75, 1),
+            "max_overnight_hold_share": round(max(overnight_shares) if overnight_shares else 0.0, 4),
+            "max_weekend_hold_share": round(max(weekend_shares) if weekend_shares else 0.0, 4),
+            "max_swap_per_micro_per_night": round(max(swap_rates) if swap_rates else 0.0, 4),
             "robustness_score": round(p.get("robustness_score", 0.0), 4),
             "worst_rolling_20_p95": round(p.get("worst_rolling_20_p95", 0.0), 2),
             "max_losing_streak_p95": int(p.get("max_losing_streak_p95", 0)),

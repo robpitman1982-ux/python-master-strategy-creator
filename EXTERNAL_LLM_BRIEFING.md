@@ -4,7 +4,7 @@
 > Refresh this file at every checkpoint or session-end ritual.
 > Paste the whole file into an external chat, then ask the consultation question.
 >
-> **Last refreshed:** 2026-05-01 (Codex briefing refresh: recovery + cluster status + post-ultimate gate question)
+> **Last refreshed:** 2026-05-01 (Codex briefing refresh: challenge realism tranche - cost-aware selector MC)
 > **Maintained by:** Claude Code on Latitude
 
 ---
@@ -27,7 +27,19 @@ It is **research, not a live trading system**. The output feeds Portfolio EAs de
 - Google Drive cold backup now also includes compact recovery exports under `strategy-data-backup/recovery/`, including `ultimate_leaderboard_*_recovery.csv` plus `recovery_manifest.json`; these preserve strategy-defining fields for disaster recovery, but they do **not** replace the repo/code for exact rebuild parity
 - Portfolio selector: 3-layer correlation + Expected Conditional Drawdown + block bootstrap MC + regime survival gate
 - 4 prop firm programs: Bootcamp $250K, High Stakes $100K, Pro Growth $5K, Hyper Growth $5K
+- Post-ultimate gate is now live in the canonical finalize path and emits `*_post_gate_audit.csv` plus `*_gated.csv`; however, the current 88-row CFD pool passed through unchanged because the finalized run did not preserve `strategy_trades.csv` and the pool is too thin for neighbor-based fragility evidence
 - Focused tests for the latest naming/mirror work are green; broader suite was 287/287 earlier in the 2026-04-30 session block
+
+### Portfolio selector reality check (code, not aspiration)
+- Live selector entrypoint is `modules/portfolio_selector.py::run_portfolio_selection()`
+- The selector currently resolves prop-firm behavior from two config fields only: `prop_firm_program` and `prop_firm_target`, which map into `The5ersBootcampConfig`, `The5ersHighStakesConfig`, `The5ersHyperGrowthConfig`, or `The5ersProGrowthConfig`
+- Program-specific rule differences that ARE implemented in code: step count, per-step profit targets, total drawdown, daily drawdown / pause behavior, leverage, minimum profitable days, funded-stage rules
+- The selector currently runs this pipeline: hard filter -> return matrix -> raw trade list load -> daily correlation -> multi-layer correlation -> correlation dedup -> combinatorial sweep -> regime gate -> portfolio MC -> sizing optimization -> robustness test -> CSV report
+- Selector hardening done today: `run_portfolio_selection()` can now explicitly prefer `*_gated.csv` inputs, and live hard-filtering now honors per-program `excluded_markets` from `PropFirmConfig` (The5ers configs now carry `W, NG, US, TY, RTY, HG`)
+- New challenge-realism tranche now live: the selector can consume market cost data from `configs/cfd_markets.yaml` during Monte Carlo when rich per-trade artifacts exist. `generate_returns.py` now preserves richer `strategy_trades.csv` fields (`entry_time`, `exit_time`, `direction`, `entry_price`, `exit_price`, `bars_held`) so selector MC can model spread drag, overnight swap accrual, and weekend carry exposure instead of treating all trades as costless PnL vectors
+- The selector now emits simple behavior diagnostics into portfolio reports too: max overnight-hold share, max weekend-hold share, and max swap-per-micro-per-night across chosen strategies. This is the first live safeguard against challenge-inappropriate behavior like expensive weekend oil holds slipping through unnoticed
+- Important gap: several docs/spec ideas are still ahead of code. The live selector still does **not** currently implement a full explicit `selection_mode` or walk-forward pass/fail consumption inside `run_portfolio_selection()`, and cost-aware MC only activates when run artifacts are rich enough to support it
+- Important consequence: CFD challenge recommendations are now less idealized than before, but still not fully complete until rich per-trade artifacts are reliably preserved for finalized runs and challenge-vs-funded scoring is explicit
 
 ### In-flight / latest cluster state
 - The validated CFD run `2026-04-30_es_nq_validation` is finalized on c240 and mirrored into Drive with full run artifacts
@@ -70,14 +82,16 @@ It is **research, not a live trading system**. The output feeds Portfolio EAs de
 
 ## Open questions / blockers (priority order)
 
-1. **CFD swap costs not modeled in MC simulator.** Cost profiles defined in `configs/cfd_markets.yaml` but not yet consumed by portfolio selector. Critical for trustworthy funding timelines for The5ers programs.
-2. **Post-ultimate gating design.** Should ultimate-leaderboard strategies flow into a new audited gate stage (for example parameter fragility + trade concentration), and if so should survivors be re-ranked, hard-culled, or both?
-3. **Walk-forward gate threshold tuning.** Module is built; default thresholds (mean_test_t >= 1.0, min_test_t >= -0.5) are reasonable but not empirically calibrated against real strategy results. May filter too strict or too loose.
-4. **BH-FDR alpha selection.** Configurable but no operator-pre-registered value. With about 50 combos per sweep family, alpha=0.05 is reasonable but the trade-off vs power is untested.
-5. **g9 onboarding to cluster** - repo clone, market_data sync, and `post_sweep.sh` deployment are still pending in the durable cluster sense, even though it was used ad hoc for a manual ES:daily catch-up job.
-6. **Throughput refactor on `run_cluster_sweep.py`** - per-host dispatch needs implementation.
-7. **Dashboard Live Monitor broken** - engine log + promoted candidates panels do not work during active runs.
-8. **Per-trade DSR** - DSR uses leader PF and trade count. It could become more accurate if it consumed per-trade PnL with skew/kurtosis from `strategy_trades.csv`.
+1. **Per-trade artifacts are not reliably preserved into canonical run storage.** Without rich `strategy_trades.csv`, the new concentration gate cannot do real work and selector MC falls back to weaker return sources that cannot price swap / weekend carry cleanly.
+2. **Cost-aware selector MC is now live, but only when rich trade artifacts exist.** This is the right direction, but current finalized CFD runs still underuse it because the artifact coverage is incomplete.
+3. **Selector can now prefer gated inputs, but still defaults to raw ultimate unless configured.** This is intentional for now because the current CFD gate output is still evidence-thin.
+4. **Walk-forward module exists but is not wired into live selector orchestration.** Threshold tuning is still open, but the first problem is that the current entrypoint does not consume walk-forward pass/fail fields.
+5. **Challenge vs funded mode spec exists, but live selector does not yet implement `selection_mode` / recency-weighted challenge scoring.**
+6. **Per-firm tradeable universe filtering is now live at hard-filter level, and basic CFD cost realism is partially live in MC.** The5ers market exclusions are enforced; spread/swap modeling exists when trade artifacts are rich enough; explicit challenge-mode scoring still does not.
+7. **BH-FDR alpha selection.** Configurable but no operator-pre-registered value. With about 50 combos per sweep family, alpha=0.05 is reasonable but the trade-off vs power is untested.
+8. **g9 onboarding to cluster** - repo clone, market_data sync, and `post_sweep.sh` deployment are still pending in the durable cluster sense, even though it was used ad hoc for a manual ES:daily catch-up job.
+9. **Throughput refactor on `run_cluster_sweep.py`** - per-host dispatch needs implementation.
+10. **Dashboard Live Monitor broken** - engine log + promoted candidates panels do not work during active runs.
 
 ---
 
@@ -144,23 +158,26 @@ For more detail beyond this brief:
 
 Use this exact question after pasting the briefing:
 
-> We are considering a new **post-ultimate gate** for strategy candidates. Right now `ultimate_leaderboard_*` is a cross-run accepted pool, not yet the final "safe to portfolio" layer.
+> We now have a working **post-ultimate gate** and a working but partially incomplete **portfolio selector**. Please review the current architecture and recommend the cleanest path from universal CFD/futures strategy pool -> gated candidate pool -> prop-firm-specific portfolio output.
 >
-> Proposed extra gates:
-> 1. **Parameter fragility gate**: test a small neighborhood around the chosen params (for example `hold_bars +/- 1`, ATR stop +/- 0.1 to 0.25, nearby profit target or trailing values where relevant) and reject strategies whose edge collapses outside the exact optimum.
-> 2. **Trade concentration gate**: reject or penalize strategies whose PnL is too dependent on a few monster trades, one hot month/quarter/year, or one narrow regime.
+> Current reality in code:
+> 1. Post-ultimate gate exists and emits audited + survivor-only outputs, but the current 88-row CFD pool passed through unchanged because the finalized run did not preserve `strategy_trades.csv` and there were no fragility neighbors.
+> 2. The portfolio selector already supports program-specific rule simulation via `prop_firm_program` + `prop_firm_target` -> `PropFirmConfig` factories for Bootcamp / High Stakes / Hyper Growth / Pro Growth.
+> 3. The live selector now supports per-program `excluded_markets`, can prefer gated leaderboard inputs, and can apply spread/swap costs in MC when rich `strategy_trades.csv` artifacts exist, but it still does **not** clearly implement explicit `selection_mode` or walk-forward results in the main orchestration path.
 >
-> Design question:
-> - Should we keep `ultimate_leaderboard_*` as the raw pool and create a new audited derived layer such as `ultimate_leaderboard_post_gate_audit.csv` plus `ultimate_leaderboard_gated.csv`?
-> - Or should we mutate/re-rank the existing ultimate leaderboard in place?
-> - For survivors, should we re-rank by gate scores, hard-cull fails, or both?
+> Design questions:
+> - Should portfolio selection switch its default input from raw `ultimate_leaderboard_cfd.csv` to `ultimate_leaderboard_cfd_gated.csv`, or should that remain an explicit mode/flag for now?
+> - What is the right implementation order for the remaining selector pieces: reliable rich trade-artifact preservation, walk-forward integration, challenge-vs-funded mode, and richer post-ultimate fragility?
+> - Should per-firm tradeability constraints live in `PropFirmConfig`, separate YAML, or a higher-level selector config layer?
+> - How should we think about selector architecture so one universal strategy pool can feed multiple prop firms cleanly without duplicating logic?
 >
 > Constraints:
 > - We care about auditability and not losing visibility into what originally qualified.
+> - We want universal discovery, but firm-specific portfolio construction.
+> - We do not want CFD challenge pass rates that ignore swap/spread reality.
 > - We do not want a fragile "one lucky optimum" or "one lucky regime" strategy reaching portfolio selection.
-> - We already have BH-FDR, walk-forward, random-flip, and portfolio-level MC realism elsewhere in the pipeline.
 >
-> Please recommend the cleanest architecture, the minimum useful gate metrics, and any failure modes or blind spots you think we are missing.
+> Please recommend the cleanest architecture, the implementation order with the highest leverage, and any failure modes or blind spots you think we are missing.
 
 ---
 

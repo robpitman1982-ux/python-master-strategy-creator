@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -54,6 +55,13 @@ RECOVERY_COLUMNS = [
     "discovered_at",
 ]
 
+VISIBLE_BACKUP_LEADERBOARDS = {
+    CFD_ULTIMATE_FILENAME,
+    FUTURES_ULTIMATE_FILENAME,
+    "ultimate_leaderboard_cfd_gated.csv",
+    "ultimate_leaderboard_FUTURES_gated.csv",
+}
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
@@ -95,6 +103,18 @@ def _copy_path(src: Path, dst: Path) -> None:
         shutil.copy2(src, dst)
 
 
+def _copy_path_with_locked_fallback(src: Path, dst: Path, *, fallback_dir: Path | None = None) -> Path:
+    try:
+        _copy_path(src, dst)
+        return dst
+    except OSError:
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        fallback_parent = fallback_dir or dst.parent
+        fallback = fallback_parent / f"{dst.stem}_UPDATED_{timestamp}{dst.suffix}"
+        _copy_path(src, fallback)
+        return fallback
+
+
 def _copy_if_exists(src: Path, dst: Path) -> bool:
     if not src.exists():
         return False
@@ -110,10 +130,47 @@ def _latest_run_id(runs_root: Path) -> str | None:
     return text or None
 
 
+def _default_backup_root() -> Path | None:
+    for env_name in ("STRATEGY_BACKUP_ROOT", "PSC_BACKUP_ROOT"):
+        env_value = os.environ.get(env_name)
+        if env_value:
+            return Path(env_value).expanduser()
+
+    candidates = [
+        Path("G:/My Drive/strategy-data-backup"),
+        Path("/mnt/gdrive/strategy-data-backup"),
+        Path.home() / "Google Drive" / "strategy-data-backup",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _iter_export_files(exports_dir: Path) -> Iterable[Path]:
     if not exports_dir.exists():
         return []
     return sorted(path for path in exports_dir.iterdir() if path.is_file())
+
+
+def _archive_existing_backup_leaderboard_clutter(leaderboards_dir: Path, storage_dir: Path) -> list[str]:
+    if not leaderboards_dir.exists():
+        return []
+    archived: list[str] = []
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    for path in sorted(leaderboards_dir.iterdir()):
+        if not path.is_file() or path.name in VISIBLE_BACKUP_LEADERBOARDS:
+            continue
+        dst = storage_dir / path.name
+        if dst.exists():
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+            dst = storage_dir / f"{path.stem}_ARCHIVED_{timestamp}{path.suffix}"
+        try:
+            shutil.move(str(path), str(dst))
+        except OSError:
+            continue
+        archived.append(str(dst))
+    return archived
 
 
 def export_recovery_artifacts(*, backup_root: Path) -> dict:
@@ -224,6 +281,10 @@ def ingest_host_results(
     log_path: str | Path | None = None,
     storage_root: Path | None = None,
     commit: str | None = None,
+    finalize_after_ingest: bool = True,
+    publish_exports: bool = True,
+    backup_root: Path | None = None,
+    mirror_backup: bool = False,
 ) -> dict:
     paths = resolve_cluster_run_paths(run_id, storage_root=storage_root)
     paths.outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -298,11 +359,24 @@ def ingest_host_results(
             host_entry["log_path"] = str(log_dst)
 
     _write_json(paths.manifest_path, manifest)
+
+    finalization_result = None
+    if finalize_after_ingest:
+        finalization_result = finalize_cluster_run(
+            run_id=run_id,
+            storage_root=storage_root,
+            publish_exports=publish_exports,
+            backup_root=backup_root,
+            mirror_backup=mirror_backup,
+        )
+
     return {
         "run_id": run_id,
         "host": host,
         "copied_datasets": copied_datasets,
         "copied_files": copied_files,
+        "finalized": finalization_result is not None,
+        "finalization": finalization_result,
         "manifest_path": str(paths.manifest_path),
     }
 
@@ -313,6 +387,8 @@ def finalize_cluster_run(
     storage_root: Path | None = None,
     emit_cfd_alias: bool = True,
     publish_exports: bool = True,
+    backup_root: Path | None = None,
+    mirror_backup: bool = False,
 ) -> dict:
     storage_root = storage_root or RUNS_DIR.parent
     paths = resolve_cluster_run_paths(run_id, storage_root=storage_root)
@@ -387,6 +463,28 @@ def finalize_cluster_run(
     manifest["published_exports"] = publish_exports
     manifest["master_rows"] = 0 if classic_df.empty else int(len(classic_df))
     manifest["ultimate_rows"] = 0 if ultimate_df.empty else int(len(ultimate_df))
+
+    backup_result = None
+    if mirror_backup and publish_exports:
+        resolved_backup_root = backup_root or _default_backup_root()
+        if resolved_backup_root is not None:
+            backup_result = mirror_storage_to_backup(
+                storage_root=storage_root,
+                backup_root=resolved_backup_root,
+                run_id=run_id,
+            )
+            manifest["backup_mirror"] = {
+                "backup_root": backup_result["backup_root"],
+                "mirrored_utc": _utc_now(),
+                "archived_existing": backup_result["archived_existing"],
+                "copied_exports": backup_result["copied_exports"],
+                "copied_runs": backup_result["copied_runs"],
+            }
+        else:
+            manifest["backup_mirror"] = {
+                "skipped": True,
+                "reason": "No backup root configured or discovered",
+            }
     _write_json(paths.manifest_path, manifest)
 
     return {
@@ -394,6 +492,7 @@ def finalize_cluster_run(
         "master_rows": 0 if classic_df.empty else int(len(classic_df)),
         "ultimate_rows": 0 if ultimate_df.empty else int(len(ultimate_df)),
         "exported_files": exported_files,
+        "backup_mirror": backup_result,
         "manifest_path": str(paths.manifest_path),
     }
 
@@ -411,11 +510,17 @@ def mirror_storage_to_backup(
     exports_dir = storage_root / "exports"
     runs_root = storage_root / "runs"
     leaderboards_backup_dir = backup_root / "leaderboards"
+    leaderboards_storage_dir = leaderboards_backup_dir / "storage"
     sweep_results_backup_dir = backup_root / "sweep_results"
     runs_backup_dir = sweep_results_backup_dir / "runs"
 
     leaderboards_backup_dir.mkdir(parents=True, exist_ok=True)
+    leaderboards_storage_dir.mkdir(parents=True, exist_ok=True)
     runs_backup_dir.mkdir(parents=True, exist_ok=True)
+    archived_existing = _archive_existing_backup_leaderboard_clutter(
+        leaderboards_backup_dir,
+        leaderboards_storage_dir,
+    )
 
     copied_exports: list[str] = []
     copied_runs: list[str] = []
@@ -423,15 +528,24 @@ def mirror_storage_to_backup(
     for export_path in _iter_export_files(exports_dir):
         if export_path.suffix.lower() not in {".csv", ".txt", ".json"}:
             continue
-        dst = leaderboards_backup_dir / export_path.name
-        _copy_path(export_path, dst)
-        copied_exports.append(str(dst))
+        destination_dir = (
+            leaderboards_backup_dir
+            if export_path.name in VISIBLE_BACKUP_LEADERBOARDS
+            else leaderboards_storage_dir
+        )
+        dst = destination_dir / export_path.name
+        copied_path = _copy_path_with_locked_fallback(
+            export_path,
+            dst,
+            fallback_dir=leaderboards_storage_dir,
+        )
+        copied_exports.append(str(copied_path))
 
     latest_run_id = _latest_run_id(runs_root)
     if latest_run_id is not None:
         latest_run_dst = sweep_results_backup_dir / "LATEST_RUN.txt"
-        _copy_path(runs_root / "LATEST_RUN.txt", latest_run_dst)
-        copied_exports.append(str(latest_run_dst))
+        copied_path = _copy_path_with_locked_fallback(runs_root / "LATEST_RUN.txt", latest_run_dst)
+        copied_exports.append(str(copied_path))
 
     run_ids: list[str] = []
     if include_all_runs:
@@ -454,6 +568,7 @@ def mirror_storage_to_backup(
     return {
         "backup_root": str(backup_root),
         "copied_exports": copied_exports,
+        "archived_existing": archived_existing,
         "copied_runs": copied_runs,
         "latest_run_id": latest_run_id,
         "recovery_files": recovery_result["copied_files"],

@@ -13,3 +13,7 @@ sweep_manifest.json
 .tmp_*
 .pytest_cache/
 tmp*/
+logs/
+strategy_console_storage/
+*_ingest.tar.gz
+.venv/

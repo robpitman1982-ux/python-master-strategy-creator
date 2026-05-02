@@ -45,6 +45,7 @@ class PropFirmConfig:
     """Generic prop firm challenge configuration."""
     firm_name: str = "Generic"
     program_name: str = "Challenge"
+    excluded_markets: list[str] = field(default_factory=list)
 
     # --- Challenge structure ---
     n_steps: int = 1
@@ -139,6 +140,7 @@ def The5ersBootcampConfig(target: float = 250_000.0) -> PropFirmConfig:
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="Bootcamp",
+        excluded_markets=["W", "NG", "US", "TY", "RTY", "HG"],
         n_steps=3,
         step_balances=step_balances,
         target_balance=target,
@@ -205,6 +207,7 @@ def The5ersHighStakesConfig(target: float = 100_000.0) -> PropFirmConfig:
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="HighStakes",
+        excluded_markets=["W", "NG", "US", "TY", "RTY", "HG"],
         n_steps=2,
         step_balances=[target, target],  # Same balance both steps
         target_balance=target,
@@ -245,6 +248,7 @@ def The5ersHyperGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="HyperGrowth",
+        excluded_markets=["W", "NG", "US", "TY", "RTY", "HG"],
         n_steps=1,
         step_balances=[target],
         target_balance=target,
@@ -299,6 +303,7 @@ def The5ersProGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
     return PropFirmConfig(
         firm_name="The5ers",
         program_name="ProGrowth",
+        excluded_markets=["W", "NG", "US", "TY", "RTY", "HG"],
         n_steps=1,
         step_balances=[target],
         target_balance=target,

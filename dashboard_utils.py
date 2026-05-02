@@ -3,6 +3,8 @@ from __future__ import annotations
 import glob
 import json
 import logging
+import os
+import platform
 import re
 import socket
 import subprocess
@@ -14,6 +16,117 @@ from typing import Any
 from paths import CONSOLE_SELECTION_PATH, CONSOLE_STORAGE_ROOT, EXPORTS_DIR, LEGACY_RESULTS_DIR, RUN_STATUS_PATH, UPLOADS_DIR
 
 log = logging.getLogger(__name__)
+
+
+# Windows OpenSSH client + Python subprocess + capture_output combination hangs
+# on remote `ssh host cmd` calls (no TTY, pipes confuse the client). Use
+# paramiko as a drop-in replacement on Windows when available.
+_USE_PARAMIKO_SSH = (
+    platform.system().lower() == "windows"
+    and os.environ.get("PSC_DASHBOARD_USE_PARAMIKO", "1") != "0"
+)
+try:
+    import paramiko  # type: ignore
+except ImportError:
+    paramiko = None  # type: ignore
+    _USE_PARAMIKO_SSH = False
+
+
+class _SshResult:
+    __slots__ = ("returncode", "stdout", "stderr")
+
+    def __init__(self, returncode: int, stdout: str, stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _resolve_ssh_target(alias: str) -> tuple[str, str]:
+    """Resolve hostname + user from ~/.ssh/config (alias may be a hostname or alias)."""
+    cfg_path = Path.home() / ".ssh" / "config"
+    user = os.environ.get("USERNAME") or os.environ.get("USER") or "rob"
+    if paramiko is None or not cfg_path.exists():
+        return alias, user
+    try:
+        cfg = paramiko.SSHConfig()
+        cfg.parse(cfg_path.open(encoding="utf-8"))
+        info = cfg.lookup(alias)
+        return info.get("hostname", alias), info.get("user", user)
+    except Exception:
+        return alias, user
+
+
+def _ssh_keys() -> list[str]:
+    home = Path.home()
+    return [str(p) for p in [home / ".ssh" / "id_ed25519", home / ".ssh" / "id_rsa"] if p.exists()]
+
+
+def _ssh_run_paramiko(host: str, remote_cmd: str, *, timeout: int = 12) -> _SshResult:
+    if paramiko is None:
+        return _SshResult(255, "", "paramiko not installed")
+    hostname, user = _resolve_ssh_target(host)
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    keys = _ssh_keys()
+    last_exc: Exception | None = None
+    for key in keys or [None]:
+        try:
+            client.connect(
+                hostname=hostname,
+                port=22,
+                username=user,
+                key_filename=key,
+                timeout=min(timeout, 10),
+                banner_timeout=min(timeout, 10),
+                auth_timeout=min(timeout, 10),
+                allow_agent=False,
+                look_for_keys=False,
+            )
+            try:
+                _stdin, stdout, stderr = client.exec_command(remote_cmd, timeout=timeout)
+                out = stdout.read().decode(errors="replace")
+                err = stderr.read().decode(errors="replace")
+                rc = stdout.channel.recv_exit_status()
+                return _SshResult(rc, out, err)
+            finally:
+                client.close()
+        except Exception as exc:
+            last_exc = exc
+            try:
+                client.close()
+            except Exception:
+                pass
+    return _SshResult(255, "", f"connect failed: {last_exc}")
+
+
+def _ssh_subprocess_run(cmd: list[str], *, timeout: int = 12) -> _SshResult:
+    """Run an `ssh ... host remote_cmd` invocation, paramiko-backed on Windows."""
+    if not _USE_PARAMIKO_SSH:
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            return _SshResult(proc.returncode, proc.stdout or "", proc.stderr or "")
+        except subprocess.TimeoutExpired:
+            return _SshResult(124, "", f"timeout {timeout}s")
+        except Exception as exc:
+            return _SshResult(255, "", str(exc))
+    # Parse out -o flags + host + remote command
+    i = 1
+    host: str | None = None
+    while i < len(cmd):
+        tok = cmd[i]
+        if tok == "-o" and i + 1 < len(cmd):
+            i += 2
+            continue
+        if tok.startswith("-"):
+            i += 1
+            continue
+        host = tok
+        i += 1
+        break
+    remote_cmd = " ".join(cmd[i:]) if i < len(cmd) else ""
+    if host is None:
+        return _SshResult(2, "", "no host in ssh args")
+    return _ssh_run_paramiko(host, remote_cmd, timeout=timeout)
 
 RESULT_FILE_NAMES = [
     "master_leaderboard.csv",
@@ -281,10 +394,10 @@ def fetch_live_dataset_statuses(run_dir: Path) -> list[dict[str, Any]]:
         # Otherwise, SSH to worker
         remote_path = f"{remote_base}/{ds_name}/status.json"
         # Simplified local cluster SSH
-        cmd = ["ssh", "-o", "ConnectTimeout=3", host_name, f"cat {remote_path}"]
+        cmd = ["ssh", "-o", "ConnectTimeout=3", "-o", "BatchMode=yes", host_name, f"cat {remote_path}"]
 
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            proc = _ssh_subprocess_run(cmd, timeout=10)
             if proc.returncode == 0 and proc.stdout.strip():
                 status = json.loads(proc.stdout.strip())
                 results.append(status)
@@ -590,13 +703,22 @@ def _is_local_host(host: str) -> bool:
 
 
 def _probe_local_statuses() -> list[dict[str, Any]]:
-    """Read active status.json files from local /tmp without SSH."""
+    """Read active status.json files from local /tmp without SSH.
+
+    Skips DONE datasets (already finished) and orphan files (untouched 10+ min;
+    leftover from killed cluster_sweep runs).
+    """
+    import time as _time
     results: list[dict[str, Any]] = []
     seen: set[str] = set()
     patterns = [
         "/tmp/psc_*/Outputs/*/status.json",
+        "/tmp/psc_*/Outputs/*/*/status.json",
         "/tmp/strategy_engine_runs/*/repo/Outputs/*/status.json",
+        "/tmp/strategy_engine_runs/*/repo/Outputs/*/*/status.json",
     ]
+    now = _time.time()
+    STALE_SECS = 3600
     for pattern in patterns:
         for path_str in sorted(glob.glob(pattern)):
             if path_str in seen:
@@ -609,18 +731,55 @@ def _probe_local_statuses() -> list[dict[str, Any]]:
             stage = str(data.get("current_stage", "")).strip().upper()
             pct = float(data.get("progress_pct", 0) or 0)
             remaining = data.get("families_remaining", [])
-            if stage not in {"DONE", "COMPLETE", "COMPLETED"} or pct < 100.0 or remaining:
-                data["_status_path"] = path_str
-                results.append(data)
+            is_done = stage in {"DONE", "COMPLETE", "COMPLETED"} and pct >= 100.0 and not remaining
+            if is_done:
+                continue
+            try:
+                mtime = Path(path_str).stat().st_mtime
+            except Exception:
+                mtime = 0
+            if mtime and (now - mtime) > STALE_SECS:
+                continue  # orphan from a killed run
+            data["_status_path"] = path_str
+            data["_status_mtime"] = mtime
+            results.append(data)
     return results
+
+
+# Approximate share of total per-dataset compute consumed by each family.
+# Calibrated against typical CFD sweep timings: the 3 base long families plus
+# the 3 base short families dominate; the 9 subtypes are individually tiny.
+# Used to project total dataset ETA when most families haven't run yet.
+FAMILY_WEIGHTS = {
+    "mean_reversion": 0.35,
+    "trend": 0.16,
+    "breakout": 0.17,
+    "short_mean_reversion": 0.08,
+    "short_trend": 0.05,
+    "short_breakout": 0.05,
+    "mean_reversion_vol_dip": 0.0155,
+    "mean_reversion_mom_exhaustion": 0.0155,
+    "mean_reversion_trend_pullback": 0.0155,
+    "trend_pullback_continuation": 0.0155,
+    "trend_momentum_breakout": 0.0155,
+    "trend_slope_recovery": 0.0155,
+    "breakout_compression_squeeze": 0.0155,
+    "breakout_range_expansion": 0.0155,
+    "breakout_higher_low_structure": 0.0155,
+}
+_DEFAULT_WEIGHT = 0.0155
+
+
+def _family_weight(name: str) -> float:
+    return FAMILY_WEIGHTS.get(str(name), _DEFAULT_WEIGHT)
 
 
 def estimate_total_eta_seconds(status: dict[str, Any]) -> float | None:
     """Estimate seconds remaining for the ENTIRE dataset run (all families).
 
-    Uses elapsed / families_completed as avg-per-family, then projects forward
-    over the remaining queue. Falls back to the current-family eta_seconds when
-    there is insufficient history.
+    Weights families by their typical share of total compute (mean_reversion
+    is ~35%, subtypes ~1.5% each). Project total time = elapsed / done_share,
+    where done_share is sum of completed weights + current_family * pct.
     """
     stage = str(status.get("current_stage", "")).strip().upper()
     if stage in {"DONE", "COMPLETE", "COMPLETED"}:
@@ -629,15 +788,30 @@ def estimate_total_eta_seconds(status: dict[str, Any]) -> float | None:
     current_eta = float(status.get("eta_seconds", 0) or 0)
     completed = status.get("families_completed", []) or []
     remaining = status.get("families_remaining", []) or []
-    n_completed = len(completed)
-    n_remaining = len(remaining)
-    if n_completed > 0 and elapsed > 0:
-        avg_per_family = elapsed / n_completed
-        return current_eta + n_remaining * avg_per_family
+    current_family = str(status.get("current_family", "") or "")
+    pct = float(status.get("progress_pct", 0) or 0)
+
+    done_share = sum(_family_weight(f) for f in completed)
+    if current_family:
+        done_share += _family_weight(current_family) * (pct / 100.0)
+
+    if done_share > 0.01 and elapsed > 60:
+        # Projected total time, then subtract elapsed.
+        total_estimate = elapsed / done_share
+        remaining_eta = max(0.0, total_estimate - elapsed)
+        # Sanity-clip absurd outliers (rare when done_share is tiny)
+        return min(remaining_eta, 48 * 3600.0)
+
+    # Not enough signal yet; sum remaining weights * any avg we have, else current_eta
+    if elapsed > 0 and len(completed) >= 1:
+        avg_per_completed_family = elapsed / sum(_family_weight(f) for f in completed) if sum(_family_weight(f) for f in completed) > 0 else 0
+        rem_weight = sum(_family_weight(f) for f in remaining)
+        if avg_per_completed_family > 0:
+            return min(current_eta + rem_weight * avg_per_completed_family, 48 * 3600.0)
     return current_eta if current_eta > 0 else None
 
 
-def fetch_cluster_live_statuses(hosts: list[str] | None = None) -> list[dict[str, Any]]:
+def fetch_cluster_live_statuses(hosts: list[str] | None = None, remote_root: str | None = None) -> list[dict[str, Any]]:
     """Fetch currently active status.json payloads directly from cluster hosts.
 
     This is the local-cluster replacement for the old cloud-console assumption
@@ -649,14 +823,24 @@ def fetch_cluster_live_statuses(hosts: list[str] | None = None) -> list[dict[str
     """
     active_hosts = hosts or CLUSTER_HOSTS
     payload: list[dict[str, Any]] = []
+    remote_root_literal = json.dumps(str(remote_root or ""))
     remote_script = (
         "python3 - <<'PY'\n"
         "from __future__ import annotations\n"
         "import glob, json\nfrom pathlib import Path\n"
+        f"remote_root = {remote_root_literal}\n"
         "paths = []\n"
-        "for pat in ('/tmp/psc_*/Outputs/*/status.json', '/tmp/strategy_engine_runs/*/repo/Outputs/*/status.json'):\n"
+        "patterns = (\n"
+        "    (f'{remote_root}/Outputs/*/status.json', f'{remote_root}/Outputs/*/*/status.json')\n"
+        "    if remote_root else\n"
+        "    ('/tmp/psc_*/Outputs/*/status.json', '/tmp/psc_*/Outputs/*/*/status.json', '/tmp/strategy_engine_runs/*/repo/Outputs/*/status.json', '/tmp/strategy_engine_runs/*/repo/Outputs/*/*/status.json')\n"
+        ")\n"
+        "for pat in patterns:\n"
         "    paths.extend(glob.glob(pat))\n"
         "seen = set(); results = []\n"
+        "import time\n"
+        "now = time.time()\n"
+        "STALE_SECS = 3600  # status file untouched for 10+ min and not DONE = orphan\n"
         "for p in sorted(paths):\n"
         "    if p in seen: continue\n"
         "    seen.add(p)\n"
@@ -665,8 +849,13 @@ def fetch_cluster_live_statuses(hosts: list[str] | None = None) -> list[dict[str
         "    stage = str(data.get('current_stage','')).strip().upper()\n"
         "    pct = float(data.get('progress_pct',0) or 0)\n"
         "    rem = data.get('families_remaining',[])\n"
-        "    if stage not in {'DONE','COMPLETE','COMPLETED'} or pct < 100.0 or rem:\n"
-        "        data['_status_path'] = p; results.append(data)\n"
+        "    is_done = stage in {'DONE','COMPLETE','COMPLETED'} and pct >= 100.0 and not rem\n"
+        "    if is_done: continue  # finished, not active\n"
+        "    try: mtime = Path(p).stat().st_mtime\n"
+        "    except: mtime = 0\n"
+        "    if mtime and (now - mtime) > STALE_SECS: continue  # orphan from killed run\n"
+        "    data['_status_path'] = p; data['_status_mtime'] = mtime\n"
+        "    results.append(data)\n"
         "print(json.dumps(results))\nPY"
     )
 
@@ -679,11 +868,9 @@ def fetch_cluster_live_statuses(hosts: list[str] | None = None) -> list[dict[str
                 continue
         else:
             try:
-                proc = subprocess.run(
+                proc = _ssh_subprocess_run(
                     ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes",
                      host, remote_script],
-                    capture_output=True,
-                    text=True,
                     timeout=12,
                 )
             except Exception as exc:
@@ -1113,11 +1300,13 @@ def load_log_tail(run_dir: Path, line_count: int = 60) -> str:
             "ssh",
             "-o",
             "ConnectTimeout=3",
+            "-o",
+            "BatchMode=yes",
             host_name,
             remote_command,
         ]
         try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            proc = _ssh_subprocess_run(cmd, timeout=15)
             if proc.returncode == 0 and proc.stdout.strip():
                 return proc.stdout.strip()
         except Exception as exc:
@@ -1297,6 +1486,31 @@ def load_promoted_candidates(outputs_dir: Path | None) -> Any:
     if outputs_dir is None or not outputs_dir.exists():
         return None
 
+    manifest_jobs: dict[str, str] = {}
+    for manifest_path in [
+        outputs_dir.parent.parent / "cluster_run_manifest.json",
+        outputs_dir.parent / "cluster_run_manifest.json",
+        outputs_dir / "cluster_run_manifest.json",
+    ]:
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        jobs = manifest.get("jobs", {})
+        if not isinstance(jobs, dict):
+            continue
+        for job in jobs.values():
+            if not isinstance(job, dict):
+                continue
+            dataset_dir = str(job.get("dataset_dir") or "").strip()
+            ingested_utc = str(job.get("ingested_utc") or "").strip()
+            if dataset_dir and ingested_utc:
+                manifest_jobs[dataset_dir] = ingested_utc
+        if manifest_jobs:
+            break
+
     candidate_files = list(outputs_dir.rglob("*_promoted_candidates.csv"))
     if not candidate_files:
         return None
@@ -1307,6 +1521,11 @@ def load_promoted_candidates(outputs_dir: Path | None) -> Any:
             df = pd.read_csv(path)
             if "dataset" not in df.columns:
                 df["dataset"] = path.parent.name
+            dataset_name = str(df["dataset"].iloc[0] if not df.empty and "dataset" in df.columns else path.parent.name)
+            completed_at = manifest_jobs.get(dataset_name)
+            if not completed_at:
+                completed_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC).isoformat(timespec="seconds")
+            df["completed_at"] = completed_at
             frames.append(df)
         except Exception:
             continue
@@ -1315,6 +1534,12 @@ def load_promoted_candidates(outputs_dir: Path | None) -> Any:
         return None
 
     combined = pd.concat(frames, ignore_index=True)
-    if "profit_factor" in combined.columns:
+    if "completed_at" in combined.columns:
+        combined["_completed_sort"] = pd.to_datetime(combined["completed_at"], errors="coerce", utc=True)
+        combined = combined.sort_values(["_completed_sort", "profit_factor"], ascending=[False, False]).drop(
+            columns=["_completed_sort"],
+            errors="ignore",
+        )
+    elif "profit_factor" in combined.columns:
         combined = combined.sort_values("profit_factor", ascending=False)
     return combined

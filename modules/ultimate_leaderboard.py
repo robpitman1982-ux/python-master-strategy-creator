@@ -76,6 +76,16 @@ def _looks_like_cfd_row(row: "Any") -> bool:
     return "dukascopy" in text or "/cfds/" in text or "\\cfds\\" in text
 
 
+def _rerank_subset(df: "Any") -> "Any":
+    """Return a copy ranked from 1 after filtering an aggregate leaderboard."""
+    ranked = df.copy()
+    if "rank" in ranked.columns:
+        ranked = ranked.drop(columns=["rank"])
+    ranked = ranked.reset_index(drop=True)
+    ranked.insert(0, "rank", ranked.index + 1)
+    return ranked
+
+
 def aggregate_ultimate_leaderboard(
     storage_root: Path | None = None,
     output_path: Path | None = None,
@@ -141,6 +151,9 @@ def aggregate_ultimate_leaderboard(
     # ------------------------------------------------------------------
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    cfd_mask = combined.apply(_looks_like_cfd_row, axis=1)
+    futures_df = _rerank_subset(combined[~cfd_mask])
+
     output_targets: list[Path] = [output_path]
     if output_path.name == FUTURES_ULTIMATE_FILENAME:
         output_targets.append(output_path.parent / LEGACY_ULTIMATE_FILENAME)
@@ -153,14 +166,15 @@ def aggregate_ultimate_leaderboard(
         if target in seen:
             continue
         seen.add(target)
-        combined.to_csv(target, index=False)
+        futures_df.to_csv(target, index=False)
         written_paths.append(target)
 
-    if combined.apply(_looks_like_cfd_row, axis=1).all():
+    if cfd_mask.any():
+        cfd_df = _rerank_subset(combined[cfd_mask])
         cfd_output_path = output_path.parent / CFD_ULTIMATE_FILENAME
-        combined.to_csv(cfd_output_path, index=False)
+        cfd_df.to_csv(cfd_output_path, index=False)
         if verbose:
-            print(f"CFD ultimate leaderboard: {len(combined)} strategies -> {cfd_output_path}")
+            print(f"CFD ultimate leaderboard: {len(cfd_df)} strategies -> {cfd_output_path}")
 
     if verbose:
         print(

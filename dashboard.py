@@ -1,9 +1,13 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import html
+import json
+import os
+import re
 import socket
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 
@@ -40,16 +44,17 @@ from dashboard_utils import (
     read_console_run_status,
     resolve_console_storage_paths,
     status_color,
+    _ssh_subprocess_run,
 )
 from paths import EXPORTS_DIR, LEGACY_RESULTS_DIR, RUNS_DIR, UPLOADS_DIR
 
-# ── Page config ────────────────────────────────────────────────────────────────
+# â”€â”€ Page config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-st.set_page_config(page_title="Strategy Console", layout="wide", page_icon="")
+st.set_page_config(page_title="Current Run", layout="wide", page_icon="")
 
 st.markdown("""
 <style>
-/* ── Base slate theme ─────────────────────────────── */
+/* â”€â”€ Base slate theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .main { background-color: #0f172a; color: #f8fafc; }
 .block-container { padding-top: 1.5rem; padding-bottom: 3rem; }
 
@@ -84,11 +89,22 @@ div[data-testid="metric-container"] {
     box-shadow: inset 0 0 10px rgba(0,0,0,0.2);
 }
 
-[data-testid="stSidebar"] { background: #0f1923; }
+[data-testid="stSidebar"] { background: #f8fafc; }
+[data-testid="stSidebar"] * { color: #0f172a !important; }
+[data-testid="stSidebar"] code {
+    color: #0f172a !important;
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1;
+}
+[data-testid="stSidebar"] [data-testid="stExpander"] {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+}
 .stTabs [data-baseweb="tab"] { font-size: 0.95rem; font-weight: 600; }
 .dataframe { font-size: 0.82rem; }
 
-/* ── Live Monitor: dataset grid ─────────────────── */
+/* â”€â”€ Live Monitor: dataset grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .dataset-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
@@ -299,7 +315,7 @@ div[data-testid="metric-container"] {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Strategy family grouping ───────────────────────────────────────────────────
+# â”€â”€ Strategy family grouping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 FAMILY_GROUPS: list[tuple[str, list[str]]] = [
     ("Trend",    ["trend", "trend_pullback_continuation", "trend_momentum_breakout", "trend_slope_recovery"]),
@@ -310,7 +326,7 @@ FAMILY_GROUPS: list[tuple[str, list[str]]] = [
     ("S.BKT",    ["short_breakout"]),
 ]
 
-# ── Runtime metadata ───────────────────────────────────────────────────────────
+# â”€â”€ Runtime metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @st.cache_resource
 def dashboard_runtime_metadata() -> dict[str, str]:
@@ -324,26 +340,432 @@ def dashboard_runtime_metadata() -> dict[str, str]:
     return {"commit": commit, "hostname": socket.gethostname(), "started_at": started_at}
 
 
-# ── Cached SSH functions (avoid blocking on every page load) ───────────────────
+def _plan_backup_root(plan: dict[str, object]) -> Path | None:
+    auto_ingest = plan.get("auto_ingest")
+    if not isinstance(auto_ingest, dict):
+        return None
+    backup_root = str(auto_ingest.get("backup_root") or "").strip()
+    return Path(backup_root) if backup_root else None
 
-@st.cache_data(ttl=30)
-def _cached_cluster_statuses() -> list[dict]:
-    return fetch_cluster_live_statuses()
+
+def _load_run_manifest(plan: dict[str, object], run_id: str) -> dict[str, object]:
+    if not run_id:
+        return {}
+    candidates: list[Path] = []
+    backup_root = _plan_backup_root(plan)
+    if backup_root is not None:
+        candidates.append(backup_root / "sweep_results" / "runs" / run_id / "cluster_run_manifest.json")
+    candidates.append(Path("G:/My Drive/strategy-data-backup/sweep_results/runs") / run_id / "cluster_run_manifest.json")
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(manifest, dict):
+            return manifest
+    return {}
 
 
-@st.cache_data(ttl=60)
+def _manifest_ingested_keys(manifest: dict[str, object]) -> set[str]:
+    keys: set[str] = set()
+    jobs = manifest.get("jobs")
+    if not isinstance(jobs, dict):
+        return keys
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        host = str(job.get("host") or "").strip()
+        market = str(job.get("market") or "").strip().upper()
+        timeframe = str(job.get("timeframe") or "").strip()
+        if host and market and timeframe:
+            keys.add(f"{host}:{market}:{timeframe}")
+    return keys
+
+
+def _format_local_dt(value: str | datetime | None) -> str:
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        raw = str(value or "").strip()
+        if not raw:
+            return ""
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            return raw
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt.astimezone().strftime("%d %b %Y %H:%M")
+
+
+def _planned_scope_text(plan: dict[str, object]) -> str:
+    jobs: list[dict[str, str]] = []
+    for host_entry in plan.get("hosts", []) if isinstance(plan.get("hosts"), list) else []:
+        if not isinstance(host_entry, dict):
+            continue
+        for job in host_entry.get("jobs", []) if isinstance(host_entry.get("jobs"), list) else []:
+            if isinstance(job, dict):
+                market = str(job.get("market") or "").strip().upper()
+                timeframe = str(job.get("timeframe") or "").strip()
+                if market and timeframe:
+                    jobs.append({"market": market, "timeframe": timeframe})
+    markets = sorted({job["market"] for job in jobs})
+    timeframes = sorted({job["timeframe"] for job in jobs}, key=lambda tf: (tf == "daily", tf))
+    market_text = ", ".join(markets) if markets else "unknown markets"
+    timeframe_text = ", ".join(timeframes) if timeframes else "unknown timeframes"
+    return f"Markets: {market_text} | Timeframes: {timeframe_text}"
+
+
+def _load_auto_ingest_summary() -> dict[str, object]:
+    plan_path = Path(".tmp_10market_plan.json")
+    state_path = Path(".tmp_auto_ingest_10market_state.json")
+    plan: dict[str, object] = {}
+    summary: dict[str, object] = {
+        "run_id": "",
+        "total_jobs": 0,
+        "ingested_count": 0,
+        "remaining_count": 0,
+        "active": False,
+        "last_line": "",
+    }
+    if plan_path.exists():
+        try:
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            summary["run_id"] = str(plan.get("run_id") or "")
+            summary["total_jobs"] = int(plan.get("total_jobs") or 0)
+        except Exception:
+            pass
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            ingested = state.get("ingested", [])
+            if isinstance(ingested, list):
+                summary["ingested_count"] = len(ingested)
+        except Exception:
+            pass
+    manifest = _load_run_manifest(plan, str(summary.get("run_id") or ""))
+    manifest_keys = _manifest_ingested_keys(manifest)
+    if manifest_keys:
+        state_keys = set()
+        if state_path.exists():
+            try:
+                state = json.loads(state_path.read_text(encoding="utf-8"))
+                ingested = state.get("ingested", [])
+                if isinstance(ingested, list):
+                    state_keys = {str(item) for item in ingested}
+            except Exception:
+                state_keys = set()
+        summary["ingested_count"] = len(state_keys | manifest_keys)
+    total_jobs = int(summary.get("total_jobs") or 0)
+    ingested_count = int(summary.get("ingested_count") or 0)
+    summary["remaining_count"] = max(total_jobs - ingested_count, 0)
+    summary["active"] = total_jobs > 0 and ingested_count < total_jobs
+    log_path = Path("logs") / "auto_ingest_10market_fixed.out.log"
+    if log_path.exists():
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if lines:
+                summary["last_line"] = lines[-1]
+        except Exception:
+            pass
+    return summary
+
+
+def _load_auto_ingest_plan() -> dict[str, object]:
+    plan_path = Path(".tmp_10market_plan.json")
+    if not plan_path.exists():
+        return {}
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return plan if isinstance(plan, dict) else {}
+
+
+def _active_backup_outputs_dir(plan: dict[str, object], run_id: str) -> Path | None:
+    if not run_id:
+        return None
+    backup_root = _plan_backup_root(plan)
+    if backup_root is None:
+        return None
+    outputs_dir = backup_root / "sweep_results" / "runs" / run_id / "artifacts" / "Outputs"
+    return outputs_dir if outputs_dir.exists() else None
+
+
+def _load_auto_ingest_detail() -> dict[str, object]:
+    plan_path = Path(".tmp_10market_plan.json")
+    state_path = Path(".tmp_auto_ingest_10market_state.json")
+    log_path = Path("logs") / "auto_ingest_10market_fixed.out.log"
+
+    plan: dict[str, object] = {}
+    state: dict[str, object] = {}
+    if plan_path.exists():
+        try:
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        except Exception:
+            plan = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            state = {}
+    run_id = str(plan.get("run_id") or state.get("run_id") or "")
+    manifest = _load_run_manifest(plan, run_id)
+    manifest_jobs = manifest.get("jobs") if isinstance(manifest.get("jobs"), dict) else {}
+
+    ingested_keys = set()
+    raw_ingested = state.get("ingested", [])
+    if isinstance(raw_ingested, list):
+        ingested_keys = {str(item) for item in raw_ingested}
+    ingested_keys |= _manifest_ingested_keys(manifest)
+
+    host_rows: list[dict[str, object]] = []
+    for host_entry in plan.get("hosts", []) if isinstance(plan.get("hosts"), list) else []:
+        if not isinstance(host_entry, dict):
+            continue
+        host = str(host_entry.get("host") or "unknown")
+        jobs = host_entry.get("jobs", [])
+        job_rows: list[dict[str, object]] = []
+        if isinstance(jobs, list):
+            for job in jobs:
+                if not isinstance(job, dict):
+                    continue
+                market = str(job.get("market") or "?").upper()
+                timeframe = str(job.get("timeframe") or "?")
+                key = f"{host}:{market}:{timeframe}"
+                job_rows.append(
+                    {
+                        "market": market,
+                        "timeframe": timeframe,
+                        "key": key,
+                        "done": key in ingested_keys,
+                    }
+                )
+        done_count = sum(1 for job in job_rows if bool(job["done"]))
+        total_count = len(job_rows)
+        host_rows.append(
+            {
+                "host": host,
+                "done": done_count,
+                "total": total_count,
+                "remaining": max(total_count - done_count, 0),
+                "pct": (done_count / total_count * 100.0) if total_count else 0.0,
+                "jobs": job_rows,
+            }
+        )
+
+    successful_event_times: dict[str, datetime] = {}
+    manifest_event_times: dict[str, str] = {}
+    if isinstance(manifest_jobs, dict):
+        for job in manifest_jobs.values():
+            if not isinstance(job, dict):
+                continue
+            host = str(job.get("host") or "").strip()
+            market = str(job.get("market") or "").strip().upper()
+            timeframe = str(job.get("timeframe") or "").strip()
+            ingested_utc = str(job.get("ingested_utc") or "").strip()
+            if host and market and timeframe and ingested_utc:
+                manifest_event_times[f"{host}:{market}:{timeframe}"] = ingested_utc
+    last_line = ""
+    log_paths = sorted((Path("logs")).glob("auto_ingest_10market*.out.log")) if Path("logs").exists() else []
+    all_lines: list[str] = []
+    for candidate_log in log_paths:
+        try:
+            lines = candidate_log.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception:
+            lines = []
+        all_lines.extend(lines)
+    if all_lines:
+        last_line = all_lines[-1]
+    ingest_re = re.compile(r"^\[(?P<ts>[^\]]+)\]\s+ingesting\s+(?P<host>[^:]+):(?P<market>[^:]+):(?P<timeframe>\S+)")
+    pending_event: tuple[str, datetime] | None = None
+    for line in all_lines:
+        match = ingest_re.search(line)
+        if match:
+            try:
+                event_dt = datetime.fromisoformat(match.group("ts"))
+            except Exception:
+                event_dt = datetime.now(UTC)
+            key = f"{match.group('host')}:{match.group('market').upper()}:{match.group('timeframe')}"
+            pending_event = (key, event_dt)
+            continue
+        if "ERROR:" in line:
+            pending_event = None
+            continue
+        if line.startswith("Ingested ") and pending_event is not None:
+            key, event_dt = pending_event
+            successful_event_times[key] = event_dt
+            pending_event = None
+
+    recent_events: list[dict[str, object]] = []
+    cutoff = datetime.now(UTC).timestamp() - 24 * 3600
+    for host_row in host_rows:
+        host = str(host_row.get("host") or "")
+        jobs = host_row.get("jobs", [])
+        if not isinstance(jobs, list):
+            continue
+        for job in jobs:
+            if not isinstance(job, dict) or not bool(job.get("done")):
+                continue
+            key = str(job.get("key") or "")
+            event_dt = successful_event_times.get(key)
+            manifest_time = manifest_event_times.get(key, "")
+            if event_dt is not None and event_dt.timestamp() < cutoff:
+                continue
+            if event_dt is None and manifest_time:
+                try:
+                    manifest_dt = datetime.fromisoformat(manifest_time.replace("Z", "+00:00"))
+                    if manifest_dt.timestamp() < cutoff:
+                        continue
+                except Exception:
+                    pass
+            recent_events.append(
+                {
+                    "time": (
+                        _format_local_dt(event_dt)
+                        if event_dt
+                        else (_format_local_dt(manifest_time) if manifest_time else _format_local_dt(state.get("updated_utc")))
+                    ),
+                    "host": host,
+                    "market": str(job.get("market") or "").upper(),
+                    "timeframe": str(job.get("timeframe") or ""),
+                    "_sort": (
+                        event_dt.timestamp()
+                        if event_dt
+                        else (
+                            datetime.fromisoformat(manifest_time.replace("Z", "+00:00")).timestamp()
+                            if manifest_time
+                            else 0
+                        )
+                    ),
+                }
+            )
+
+    recent_events.sort(key=lambda item: (float(item.get("_sort") or 0), str(item.get("host") or "")), reverse=True)
+    for event in recent_events:
+        event.pop("_sort", None)
+
+    return {
+        "run_id": run_id,
+        "scope": _planned_scope_text(plan),
+        "host_rows": host_rows,
+        "recent_events": recent_events[:30],
+        "last_line": last_line,
+        "updated_utc": str(state.get("updated_utc") or ""),
+    }
+
+
+# â”€â”€ Cached SSH functions (avoid blocking on every page load) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+@st.cache_data(ttl=300)
+def _cached_cluster_statuses(remote_root: str = "", hosts: tuple[str, ...] = ()) -> list[dict]:
+    return fetch_cluster_live_statuses(hosts=list(hosts) if hosts else None, remote_root=remote_root or None)
+
+
+@st.cache_data(ttl=300)
 def _check_host_alive(host: str) -> bool:
     try:
-        result = subprocess.run(
+        result = _ssh_subprocess_run(
             ["ssh", "-o", "ConnectTimeout=2", "-o", "BatchMode=yes", host, "echo 1"],
-            capture_output=True, text=True, timeout=5,
+            timeout=5,
         )
         return result.returncode == 0
     except Exception:
         return False
 
 
-# ── Data loading ───────────────────────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def _check_host_online(host: str) -> bool:
+    ping_cmd = (
+        ["ping", "-n", "1", "-w", "1000", host]
+        if os.name == "nt"
+        else ["ping", "-c", "1", "-W", "1", host]
+    )
+    try:
+        result = subprocess.run(ping_cmd, capture_output=True, text=True, timeout=3)
+        if result.returncode == 0:
+            return True
+    except Exception:
+        pass
+    return _check_host_alive(host)
+
+
+@st.cache_data(ttl=300)
+def _cached_remote_job_audit(remote_root: str, plan_json: str) -> dict[str, object]:
+    try:
+        plan = json.loads(plan_json)
+    except Exception:
+        return {"rows": [], "skipped": []}
+    rows: list[dict[str, object]] = []
+    skipped: list[str] = []
+    host_entries = plan.get("hosts", [])
+    if not isinstance(host_entries, list):
+        return {"rows": rows, "skipped": skipped}
+    for host_entry in host_entries:
+        if not isinstance(host_entry, dict):
+            continue
+        host = str(host_entry.get("host") or "").strip()
+        jobs = host_entry.get("jobs", [])
+        if not host or not isinstance(jobs, list):
+            continue
+        if not _check_host_alive(host):
+            skipped.append(f"{host}: reachable, SSH unavailable" if _check_host_online(host) else f"{host}: offline")
+            continue
+        job_pairs = [
+            [str(job.get("market") or "").upper(), str(job.get("timeframe") or "")]
+            for job in jobs
+            if isinstance(job, dict)
+        ]
+        script = (
+            "python3 - <<'PY'\n"
+            "import json\n"
+            "from pathlib import Path\n"
+            f"root=Path({json.dumps(str(remote_root))})/'Outputs'\n"
+            f"jobs=json.loads({json.dumps(json.dumps(job_pairs))})\n"
+            "out=[]\n"
+            "for market,timeframe in jobs:\n"
+            "    run=f'{market.lower()}_{timeframe}_cfd'; ds=f'{market}_{timeframe}'\n"
+            "    sp=root/run/ds/'status.json'; lb=root/run/ds/'family_leaderboard_results.csv'\n"
+            "    rec={'market':market,'timeframe':timeframe,'status':'NOT_STARTED','pct':0,'family':'','timestamp':'','leaderboard':False}\n"
+            "    if sp.exists():\n"
+            "        try: data=json.loads(sp.read_text(encoding='utf-8'))\n"
+            "        except Exception: data={}\n"
+            "        rec.update(status=str(data.get('current_stage') or ''), pct=float(data.get('progress_pct') or 0), family=str(data.get('current_family') or ''), timestamp=str(data.get('timestamp') or ''), leaderboard=lb.exists())\n"
+            "    elif (root/run).exists(): rec['status']='DIR_NO_STATUS'\n"
+            "    out.append(rec)\n"
+            "print(json.dumps(out))\n"
+            "PY"
+        )
+        try:
+            proc = _ssh_subprocess_run(
+                ["ssh", "-o", "ConnectTimeout=3", "-o", "ConnectionAttempts=1", "-o", "BatchMode=yes", host, script],
+                timeout=15,
+            )
+        except Exception:
+            skipped.append(f"{host}: SSH probe failed")
+            continue
+        if proc.returncode != 0 or not proc.stdout.strip():
+            skipped.append(f"{host}: SSH status unavailable")
+            continue
+        try:
+            host_rows = json.loads(proc.stdout)
+        except Exception:
+            skipped.append(f"{host}: bad status payload")
+            continue
+        for row in host_rows if isinstance(host_rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            market = str(row.get("market") or "").upper()
+            timeframe = str(row.get("timeframe") or "")
+            row["host"] = host
+            row["job_key"] = f"{host}:{market}:{timeframe}"
+            rows.append(row)
+    return {"rows": rows, "skipped": skipped}
+
+
+# â”€â”€ Data loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 runtime = dashboard_runtime_metadata()
 storage = resolve_console_storage_paths()
@@ -353,19 +775,32 @@ export_files = list_export_files(storage)
 console_run_status = read_console_run_status()
 monitor_run = choose_default_run_record(run_records, prefer_running=True)
 selected_run = choose_default_run_record(run_records, require_outputs=True) or monitor_run
-cluster_live_statuses = _cached_cluster_statuses()
-
-# ── Sidebar ────────────────────────────────────────────────────────────────────
-
+auto_ingest_plan = _load_auto_ingest_plan()
+remote_root = str(auto_ingest_plan.get("remote_root") or "")
 st.sidebar.title("Cluster Console")
+remote_status_enabled = True
+st.sidebar.caption("SSH live checks: on, read-only, cached for 5 minutes.")
+status_hosts = tuple(h for h in ["c240", "gen8", "r630", "g9"] if _check_host_alive(h))
+cluster_live_statuses = _cached_cluster_statuses(remote_root, status_hosts)
+auto_ingest_summary = _load_auto_ingest_summary()
+auto_ingest_detail = _load_auto_ingest_detail()
+active_backup_outputs_dir = _active_backup_outputs_dir(
+    auto_ingest_plan,
+    str(auto_ingest_summary.get("run_id") or auto_ingest_plan.get("run_id") or ""),
+)
+remote_job_audit = _cached_remote_job_audit(remote_root, json.dumps(auto_ingest_plan, sort_keys=True)) if remote_root else {"rows": [], "skipped": []}
+
+# â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
 st.sidebar.code(
     f"commit: {runtime['commit']}\nhost:   {runtime['hostname']}\nup:     {runtime['started_at']}",
 )
 
 with st.sidebar.expander("Cluster Status", expanded=True):
     for h in ["c240", "gen8", "r630", "g9"]:
-        alive = _check_host_alive(h)
-        dot = "o" if alive else "x"
+        alive = _check_host_online(h)
+        icon = "✓" if alive else "✕"
+        color = "#16a34a" if alive else "#dc2626"
         state_label = "Online" if alive else "Offline"
         # Show active dataset count for this host from cached statuses
         active_on_host = [s for s in cluster_live_statuses if str(s.get("host", "")).lower() == h]
@@ -373,13 +808,26 @@ with st.sidebar.expander("Cluster Status", expanded=True):
             datasets_str = ", ".join(
                 f"{s.get('market','?')} {s.get('timeframe','?')}" for s in active_on_host
             )
-            st.caption(f"[{dot}] **{h}** — {datasets_str}")
+            st.markdown(
+                f'<span style="color:{color};font-weight:800">{icon}</span> '
+                f'<strong>{html.escape(h)}</strong> - {html.escape(datasets_str)}',
+                unsafe_allow_html=True,
+            )
         else:
-            st.caption(f"[{dot}] **{h}** ({state_label})")
+            st.markdown(
+                f'<span style="color:{color};font-weight:800">{icon}</span> '
+                f'<strong>{html.escape(h)}</strong> ({state_label})',
+                unsafe_allow_html=True,
+            )
 
 st.sidebar.divider()
 if cluster_live_statuses:
     st.sidebar.caption(f"Active runs: {len(cluster_live_statuses)} dataset(s) across cluster")
+elif auto_ingest_summary.get("active"):
+    st.sidebar.caption(
+        f"Auto-ingest active: {auto_ingest_summary.get('ingested_count')}/"
+        f"{auto_ingest_summary.get('total_jobs')} datasets ingested"
+    )
 elif monitor_run:
     st.sidebar.caption("Live Monitor follows the active run automatically.")
 else:
@@ -425,7 +873,7 @@ else:
     monitor_run_outcome = "unknown"; monitor_host = "none"
     monitor_run_category = "unknown"; monitor_run_state = "unknown"
 
-is_running       = (monitor_run_category == "running") or bool(cluster_live_statuses)
+is_running       = (monitor_run_category == "running") or bool(cluster_live_statuses) or bool(auto_ingest_summary.get("active"))
 display_run_outcome = "running" if is_running else monitor_run_outcome
 display_host     = monitor_host
 
@@ -440,25 +888,36 @@ if monitor_run:
     run_category = monitor_run_category
     run_state    = monitor_run_state
 
-# ── Banner ─────────────────────────────────────────────────────────────────────
+# â”€â”€ Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 run_id_display = (
-    selected_status.get("run_id")
+    (auto_ingest_summary.get("run_id") if auto_ingest_summary.get("active") else "")
+    or selected_status.get("run_id")
     or (selected_run_dir.name if selected_run_dir else "")
     or ("cluster-active" if cluster_live_statuses else "no run")
 )
 n_active = len(cluster_live_statuses)
-active_str = f"{n_active} dataset(s) running" if n_active else display_run_outcome.upper()
+if n_active:
+    active_str = f"{n_active} dataset(s) running"
+elif auto_ingest_summary.get("active"):
+    active_str = (
+        f"{auto_ingest_summary.get('ingested_count')}/"
+        f"{auto_ingest_summary.get('total_jobs')} datasets ingested"
+    )
+else:
+    active_str = display_run_outcome.upper()
+scope_display = str(auto_ingest_detail.get("scope") or "").strip()
 st.markdown(f"""
 <div class="console-banner">
-    <h1>Strategy Console</h1>
+    <h1>Current Run</h1>
     <p>{active_str} &nbsp;|&nbsp;
        Host: <strong><span style="color:#0ea5e9">{runtime['hostname'].upper()}</span></strong> &nbsp;|&nbsp;
        Run: <strong>{html.escape(str(run_id_display))}</strong></p>
+    {f'<p>{html.escape(scope_display)}</p>' if scope_display else ''}
 </div>
 """, unsafe_allow_html=True)
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def render_table(df: pd.DataFrame) -> None:
     try:
@@ -493,12 +952,12 @@ def format_current_leaders(leaders_df: pd.DataFrame | None) -> pd.DataFrame | No
     for mc in ("Net Profit", "Drawdown"):
         if mc in display.columns:
             display[mc] = pd.to_numeric(display[mc], errors="coerce").apply(
-                lambda v: f"${v:,.0f}" if pd.notna(v) else "—"
+                lambda v: f"${v:,.0f}" if pd.notna(v) else "â€”"
             )
     return display
 
 
-# ── Live Monitor rendering ──────────────────────────────────────────────────────
+# â”€â”€ Live Monitor rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _dataset_card_html(status: dict) -> str:
     host = str(status.get("host", "?")).lower()
@@ -515,27 +974,36 @@ def _dataset_card_html(status: dict) -> str:
         and not remaining
     ) or (pct >= 100 and not remaining)
 
-    # ETA
+    # ETA: show whole-dataset projection (current family + remaining families).
     total_eta = estimate_total_eta_seconds(status)
+    n_completed = len(completed)
+    n_remaining = len(remaining)
+    total_families = n_completed + 1 + n_remaining if not is_done else max(n_completed, 1)
+    if is_done:
+        total_pct = 100.0
+    else:
+        total_pct = ((n_completed + (pct / 100.0)) / total_families) * 100.0
+    total_pct = max(0.0, min(100.0, total_pct))
+
     if is_done:
         eta_html = f'<div class="eta-done">Done</div>'
         stage_html = f'<div class="stage-line">Elapsed: {format_duration_short(elapsed)}</div>'
-    elif total_eta is not None and total_eta > 0:
+    elif total_eta and total_eta > 0:
         eta_html = f'<div class="eta-value">{format_duration_short(total_eta)}</div>'
         fam_clean = current_family.replace("_", " ") or "starting"
-        stage_html = f'<div class="stage-line">{html.escape(current_stage)} &bull; {html.escape(fam_clean)}</div>'
+        stage_html = f'<div class="stage-line">ETA whole timeframe &bull; on {html.escape(fam_clean)} ({n_completed}/{total_families} families)</div>'
     else:
         eta_html = '<div class="eta-unknown">calculating...</div>'
         fam_clean = current_family.replace("_", " ") or "starting"
-        stage_html = f'<div class="stage-line">{html.escape(current_stage)} &bull; {html.escape(fam_clean)}</div>'
+        stage_html = f'<div class="stage-line">{html.escape(current_stage)} &bull; {html.escape(fam_clean)} ({n_completed}/{total_families} families)</div>'
 
-    # Progress bar
-    bar_cls = "prog-done" if is_done else ("prog-waiting" if pct < 1 else "prog-active")
+    # Progress bar = total dataset progress (all families)
+    bar_cls = "prog-done" if is_done else ("prog-waiting" if total_pct < 1 else "prog-active")
     prog_html = (
         f'<div class="prog-outer">'
-        f'<div class="prog-inner {bar_cls}" style="width:{min(pct, 100):.1f}%"></div>'
+        f'<div class="prog-inner {bar_cls}" style="width:{total_pct:.1f}%"></div>'
         f'</div>'
-        f'<div class="prog-pct">{pct:.0f}%</div>'
+        f'<div class="prog-pct">{total_pct:.0f}% complete</div>'
     )
 
     # Host badge
@@ -588,6 +1056,65 @@ def _dataset_card_html(status: dict) -> str:
 
 def render_live_monitor(statuses: list[dict]) -> None:
     if not statuses:
+        if auto_ingest_summary.get("active"):
+            total = int(auto_ingest_summary.get("total_jobs") or 0)
+            done = int(auto_ingest_summary.get("ingested_count") or 0)
+            remaining = max(total - done, 0)
+            pct = (done / total * 100.0) if total else 0.0
+            k1, k2, k3, k4 = st.columns(4)
+            k1.metric("Published", f"{done}/{total}")
+            k2.metric("Remaining", remaining)
+            k3.metric("Overall", f"{pct:.0f}%")
+            k4.metric("Remote SSH", "On")
+            st.progress(min(max(pct / 100.0, 0.0), 1.0))
+
+            host_rows = auto_ingest_detail.get("host_rows", [])
+            if host_rows:
+                st.subheader("Server Progress")
+                for row in host_rows:
+                    host = str(row.get("host") or "unknown")
+                    host_done = int(row.get("done") or 0)
+                    host_total = int(row.get("total") or 0)
+                    host_pct = float(row.get("pct") or 0.0)
+                    st.markdown(f"**{host}** - {host_done}/{host_total} datasets published ({host_pct:.0f}%)")
+                    st.progress(min(max(host_pct / 100.0, 0.0), 1.0))
+                    jobs = row.get("jobs", [])
+                    if isinstance(jobs, list):
+                        recent_done = [
+                            f"{job.get('market')} {job.get('timeframe')}"
+                            for job in jobs
+                            if isinstance(job, dict) and bool(job.get("done"))
+                        ][-6:]
+                        remaining_jobs = [
+                            f"{job.get('market')} {job.get('timeframe')}"
+                            for job in jobs
+                            if isinstance(job, dict) and not bool(job.get("done"))
+                        ][:8]
+                        c_done, c_wait = st.columns(2)
+                        c_done.caption("Recent published: " + (", ".join(recent_done) if recent_done else "none yet"))
+                        c_wait.caption("Next/remaining: " + (", ".join(remaining_jobs) if remaining_jobs else "none"))
+
+            recent_events = auto_ingest_detail.get("recent_events", [])
+            if recent_events:
+                st.subheader("Completed / Published In Last 24 Hours")
+                recent_df = pd.DataFrame(recent_events)
+                st.dataframe(
+                    recent_df.rename(
+                        columns={
+                            "time": "Time",
+                            "host": "Host",
+                            "market": "Market",
+                            "timeframe": "Timeframe",
+                        }
+                    ),
+                    use_container_width=True,
+                    height=min(380, 36 + len(recent_events) * 35),
+                )
+
+            last_line = auto_ingest_detail.get("last_line") or auto_ingest_summary.get("last_line") or ""
+            if last_line:
+                st.caption(f"Watcher: {last_line}")
+            return
         st.info(
             "No active sweep detected on c240, gen8, r630, or g9.  "
             "Start a run with: python run_cluster_sweep.py --jobs ES:daily --workers 72"
@@ -595,25 +1122,69 @@ def render_live_monitor(statuses: list[dict]) -> None:
         return
 
     # KPI strip
-    n_active_hosts = len({str(s.get("host", "")).lower() for s in statuses if s.get("host")})
+    reporting_hosts = len({str(s.get("host", "")).lower() for s in statuses if s.get("host")})
+    reachable_hosts = sum(1 for h in ["c240", "gen8", "r630", "g9"] if _check_host_online(h))
     n_fam_done = sum(len(s.get("families_completed", []) or []) for s in statuses)
     n_fam_remaining = sum(len(s.get("families_remaining", []) or []) for s in statuses)
     n_fam_total = n_fam_done + n_fam_remaining or len(statuses)
-    etas = [estimate_total_eta_seconds(s) for s in statuses]
-    max_eta = max((e for e in etas if e is not None and e > 0), default=None)
+    etas = [float(s.get("eta_seconds", 0) or 0) for s in statuses]
+    max_eta = max((e for e in etas if e > 0), default=None)
 
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Active Hosts", n_active_hosts)
-    k2.metric("Running Datasets", len(statuses))
-    k3.metric("Families Complete", f"{n_fam_done} / {n_fam_total}")
-    k4.metric("Est. Completion", format_duration_short(max_eta) if max_eta else "—")
+    k1.metric("Reachable Hosts", f"{reachable_hosts}/4")
+    k2.metric("Reporting Datasets", len(statuses))
+    k3.metric("Live Families Done", f"{n_fam_done} / {n_fam_total}")
+    k4.metric("Max Current ETA", format_duration_short(max_eta) if max_eta else "â€”")
 
     # Dataset cards
     cards = "".join(_dataset_card_html(s) for s in statuses)
     st.markdown(f'<div class="dataset-grid">{cards}</div>', unsafe_allow_html=True)
+    status_hosts = {str(s.get("host", "")).lower() for s in statuses if s.get("host")}
+    missing_hosts = []
+    for host in ["c240", "gen8", "r630", "g9"]:
+        if host in status_hosts:
+            continue
+        if _check_host_online(host):
+            ssh_note = "reachable; SSH status unavailable" if not _check_host_alive(host) else "online; no active status file"
+            missing_hosts.append(f"{host}: {ssh_note}")
+    if missing_hosts:
+        st.caption("Other hosts: " + " | ".join(missing_hosts))
+
+    published_keys = {
+        str(job.get("key") or "")
+        for row in auto_ingest_detail.get("host_rows", [])
+        if isinstance(row, dict)
+        for job in (row.get("jobs", []) if isinstance(row.get("jobs"), list) else [])
+        if isinstance(job, dict) and bool(job.get("done"))
+    }
+    audit_rows = remote_job_audit.get("rows", []) if isinstance(remote_job_audit, dict) else []
+    completed_unpublished = []
+    for row in audit_rows if isinstance(audit_rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        status = str(row.get("status") or "").upper()
+        job_key = str(row.get("job_key") or "")
+        if status in {"DONE", "COMPLETE", "COMPLETED"} and job_key not in published_keys:
+            completed_unpublished.append(
+                {
+                    "Completed": _format_local_dt(str(row.get("timestamp") or "")),
+                    "Host": str(row.get("host") or ""),
+                    "Dataset": f"{row.get('market')} {row.get('timeframe')}",
+                    "Publish": "waiting for ingest",
+                    "_sort": str(row.get("timestamp") or ""),
+                }
+            )
+    completed_unpublished.sort(key=lambda item: str(item.get("_sort") or ""), reverse=True)
+    if completed_unpublished:
+        st.subheader("Completed On Servers, Not Yet Published")
+        table = pd.DataFrame([{k: v for k, v in row.items() if k != "_sort"} for row in completed_unpublished])
+        st.dataframe(table, use_container_width=True, height=min(300, 36 + len(table) * 35))
+    skipped = remote_job_audit.get("skipped", []) if isinstance(remote_job_audit, dict) else []
+    if skipped:
+        st.caption("Audit gaps: " + " | ".join(str(item) for item in skipped))
 
 
-# ── Secondary: console-run monitor (old pipeline) ─────────────────────────────
+# â”€â”€ Secondary: console-run monitor (old pipeline) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def render_monitor_progress(summary: dict) -> None:
     rows = summary.get("rows", [])
@@ -661,25 +1232,25 @@ def render_monitor_progress(summary: dict) -> None:
     st.markdown("".join(cards) + "</div></div>", unsafe_allow_html=True)
 
 
-# ── TABS ────────────────────────────────────────────────────────────────────────
+# â”€â”€ TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 tab_monitor, tab_results, tab_history, tab_system, tab_ultimate = st.tabs(
     ["Live Monitor", "Results", "Run History", "System", "Ultimate Leaderboard"]
 )
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — LIVE MONITOR
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 1 â€” LIVE MONITOR
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 with tab_monitor:
 
     if is_running:
-        st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
+        st.markdown('<meta http-equiv="refresh" content="300">', unsafe_allow_html=True)
 
-    # ── Primary: direct cluster activity ────────────────────────────────────
+    # â”€â”€ Primary: direct cluster activity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     render_live_monitor(cluster_live_statuses)
 
-    # ── Secondary: console-storage run progress ──────────────────────────────
+    # â”€â”€ Secondary: console-storage run progress â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if selected_run_dir or monitor_run:
         with st.expander("Console Run Records", expanded=False):
             dataset_statuses = fetch_live_dataset_statuses(selected_run_dir) if selected_run_dir else []
@@ -730,19 +1301,21 @@ with tab_monitor:
                 else:
                     st.info("No leaders yet for this focus.")
 
-    # ── Promoted candidates ──────────────────────────────────────────────────
-    if selected_outputs_dir:
+    # â”€â”€ Promoted candidates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    promoted_outputs_dir = active_backup_outputs_dir or selected_outputs_dir
+    if promoted_outputs_dir:
         st.divider()
         st.subheader("Promoted Candidates")
-        st.caption("Strategies that passed the promotion gate.")
-        candidates_df = load_promoted_candidates(selected_outputs_dir)
+        st.caption(f"Strategies that passed the promotion gate. Source: {promoted_outputs_dir}")
+        candidates_df = load_promoted_candidates(promoted_outputs_dir)
         if candidates_df is not None and not candidates_df.empty:
             col_map = {
+                "completed_at": "Completed",
+                "dataset": "Dataset",
                 "strategy_name": "Strategy", "strategy_type": "Family",
                 "profit_factor": "PF", "is_pf": "IS PF", "oos_pf": "OOS PF",
                 "net_pnl": "Net PnL ($)", "total_trades": "Trades",
                 "trades_per_year": "Trades/yr", "quality_flag": "Quality",
-                "dataset": "Dataset",
             }
             existing = {k: v for k, v in col_map.items() if k in candidates_df.columns}
             if existing:
@@ -751,20 +1324,25 @@ with tab_monitor:
                 for col in ["PF", "IS PF", "OOS PF", "Trades/yr"]:
                     if col in disp.columns:
                         disp[col] = pd.to_numeric(disp[col], errors="coerce").round(2)
+                if "Completed" in disp.columns:
+                    completed = pd.to_datetime(disp["Completed"], errors="coerce", utc=True).dt.tz_convert(
+                        datetime.now().astimezone().tzinfo
+                    )
+                    disp["Completed"] = completed.dt.strftime("%d %b %Y %H:%M").fillna("")
                 if "Net PnL ($)" in disp.columns:
                     disp["Net PnL ($)"] = pd.to_numeric(disp["Net PnL ($)"], errors="coerce").apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                        lambda x: f"${x:,.0f}" if pd.notna(x) else "â€”"
                     )
                 st.dataframe(disp, use_container_width=True, height=min(400, 36 + len(disp) * 35))
                 st.caption(f"{len(candidates_df)} candidates promoted")
             else:
                 render_table(candidates_df.head(20))
         elif is_running:
-            st.info("No candidates yet — families still running.")
+            st.info("No candidates yet â€” families still running.")
         else:
             st.info("No promoted candidates file found for this run.")
 
-    # ── Engine log ───────────────────────────────────────────────────────────
+    # â”€â”€ Engine log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     with st.expander("Engine log (last 40 lines)", expanded=False):
         log_tail_text = load_log_tail(selected_run_dir) if selected_run_dir else ""
         if log_tail_text:
@@ -773,12 +1351,12 @@ with tab_monitor:
             st.info("No engine log found.")
 
     if is_running:
-        st.caption("Auto-refreshes every 30 seconds while runs are active.")
+        st.caption("Auto-refreshes every 5 minutes while runs are active.")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — RESULTS
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 2 â€” RESULTS
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 with tab_results:
 
@@ -819,7 +1397,7 @@ with tab_results:
                 for mc in ["Net PnL", "Max DD"]:
                     if mc in disp.columns:
                         disp[mc] = pd.to_numeric(disp[mc], errors="coerce").apply(
-                            lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                            lambda x: f"${x:,.0f}" if pd.notna(x) else "â€”"
                         )
                 for rc in ["PF", "IS PF", "OOS PF", "R12m PF", "Calmar", "Win%", "Prof Yrs%", "Trades/Yr"]:
                     if rc in disp.columns:
@@ -945,9 +1523,9 @@ with tab_results:
                 st.caption(f"Heatmap error: {e}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — RUN HISTORY
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 3 â€” RUN HISTORY
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 with tab_history:
 
@@ -962,7 +1540,7 @@ with tab_history:
             datasets = manifest.get("datasets", [])
             ds_str   = (
                 ", ".join(f"{d.get('market','?')} {d.get('timeframe','?')}" for d in datasets)
-                if datasets else "—"
+                if datasets else "â€”"
             )
             rows.append({
                 "Run ID":   status.get("run_id", record["run_dir"].name),
@@ -994,9 +1572,9 @@ with tab_history:
                 st.code("\n".join(recovery), language="bash")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — SYSTEM
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 4 â€” SYSTEM
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 with tab_system:
 
@@ -1077,13 +1655,13 @@ with tab_system:
     st.code("sudo systemctl restart strategy-dashboard", language="bash")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — ULTIMATE LEADERBOARD
-# ══════════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# TAB 5 â€” ULTIMATE LEADERBOARD
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 with tab_ultimate:
 
-    @st.cache_data(ttl=120)
+    @st.cache_data(ttl=300)
     def _load_ultimate_leaderboard(use_gated: bool = False) -> pd.DataFrame:
         try:
             from modules.ultimate_leaderboard import aggregate_ultimate_leaderboard
@@ -1118,7 +1696,7 @@ with tab_ultimate:
         total_strats   = len(ul_df)
         robust_count   = int((ul_df.get("quality_flag", pd.Series()) == "ROBUST").sum()) if "quality_flag" in ul_df.columns else 0
         stable_count   = int(ul_df["quality_flag"].str.startswith("STABLE").sum()) if "quality_flag" in ul_df.columns else 0
-        unique_markets = ul_df["market"].nunique() if "market" in ul_df.columns else "—"
+        unique_markets = ul_df["market"].nunique() if "market" in ul_df.columns else "â€”"
         unique_tfs     = ul_df["timeframe"].nunique() if "timeframe" in ul_df.columns else (
             ul_df["dataset"].nunique() if "dataset" in ul_df.columns else 0
         )
@@ -1198,7 +1776,7 @@ with tab_ultimate:
             for mc in ["Net PnL", "Max DD"]:
                 if mc in disp.columns:
                     disp[mc] = pd.to_numeric(disp[mc], errors="coerce").apply(
-                        lambda x: f"${x:,.0f}" if pd.notna(x) else "—"
+                        lambda x: f"${x:,.0f}" if pd.notna(x) else "â€”"
                     )
             st.dataframe(disp, use_container_width=True)
         else:
@@ -1211,11 +1789,11 @@ with tab_ultimate:
                 row = filtered[filtered["rank"] == sel_rank]
                 if not row.empty:
                     r = row.iloc[0]
-                    st.markdown(f"**Strategy**: `{r.get('leader_strategy_name', '—')}`")
-                    st.markdown(f"**Type / Dataset**: `{r.get('strategy_type', '—')}` / `{r.get('dataset', '—')}`")
-                    st.markdown(f"**Quality flag**: `{r.get('quality_flag', '—')}`")
-                    st.markdown(f"**Filter combination**: `{r.get('best_combo_filter_class_names', '—')}`")
-                    st.markdown(f"**Discovered in run**: `{r.get('run_id', '—')}`")
-                    st.markdown(f"**Source file**: `{r.get('source_file', '—')}`")
+                    st.markdown(f"**Strategy**: `{r.get('leader_strategy_name', 'â€”')}`")
+                    st.markdown(f"**Type / Dataset**: `{r.get('strategy_type', 'â€”')}` / `{r.get('dataset', 'â€”')}`")
+                    st.markdown(f"**Quality flag**: `{r.get('quality_flag', 'â€”')}`")
+                    st.markdown(f"**Filter combination**: `{r.get('best_combo_filter_class_names', 'â€”')}`")
+                    st.markdown(f"**Discovered in run**: `{r.get('run_id', 'â€”')}`")
+                    st.markdown(f"**Source file**: `{r.get('source_file', 'â€”')}`")
             else:
                 st.info("No strategies match the current filters.")

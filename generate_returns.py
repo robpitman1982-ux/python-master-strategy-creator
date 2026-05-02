@@ -98,11 +98,15 @@ def _rebuild_one(args: tuple) -> tuple[str, pd.Series, list[dict]] | None:
 
         per_trade: list[dict] = []
         for _, trade in trades_df.iterrows():
-            per_trade.append({
+            row = {
                 "exit_time": str(trade["exit_time"]),
                 "strategy": col_key,
                 "net_pnl": float(trade["net_pnl"]),
-            })
+            }
+            for optional_col in ("entry_time", "direction", "entry_price", "exit_price", "bars_held"):
+                if optional_col in trade.index and pd.notna(trade[optional_col]):
+                    row[optional_col] = trade[optional_col]
+            per_trade.append(row)
 
         # Convert daily_pnl index to strings for pickling
         return (col_key, daily_pnl.to_dict(), per_trade)

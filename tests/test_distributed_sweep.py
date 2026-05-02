@@ -8,7 +8,12 @@ from modules.distributed_sweep import (
     build_host_command,
     parse_host_specs,
 )
-from run_cluster_sweep import build_distributed_plan, build_job_list, parse_job_specs
+from run_cluster_sweep import (
+    build_auto_ingest_command,
+    build_distributed_plan,
+    build_job_list,
+    parse_job_specs,
+)
 
 
 def test_parse_job_specs_deduplicates_and_normalizes_market():
@@ -94,9 +99,17 @@ def test_build_distributed_plan_includes_commands_and_weights():
         data_dir="/data/market_data/cfds/ohlc_engine",
         remote_root="/tmp/psc",
         dry_run=True,
+        run_id="run-test",
+        backup_root=r"G:\My Drive\strategy-data-backup",
     )
 
     assert plan["total_jobs"] == 3
+    assert plan["run_id"] == "run-test"
+    assert plan["auto_ingest"]["enabled"] is True
+    assert "scripts/auto_ingest_distributed_run.py" in plan["auto_ingest"]["command"]
+    assert "--run-id run-test" in plan["auto_ingest"]["command"]
+    assert '--backup-root "G:\\My Drive\\strategy-data-backup"' in plan["auto_ingest"]["command"]
+    assert "scripts\\start_auto_ingest_watcher.ps1" in plan["auto_ingest"]["powershell_start_command"]
     assert len(plan["hosts"]) == 3
     assigned = sum(len(host["job_specs"]) for host in plan["hosts"])
     assert assigned == 3
@@ -105,3 +118,19 @@ def test_build_distributed_plan_includes_commands_and_weights():
             assert host["command"].startswith("cd /tmp/psc && python run_cluster_sweep.py --jobs ")
             assert "--data-dir /data/market_data/cfds/ohlc_engine" in host["command"]
             assert "--dry-run" in host["command"]
+
+
+def test_build_auto_ingest_command_includes_plan_and_run_id():
+    command = build_auto_ingest_command(
+        run_id="run-123",
+        plan_path=".tmp_plan.json",
+        remote_root="/tmp/psc_run",
+        backup_root=r"G:\My Drive\strategy-data-backup",
+        poll_seconds=60,
+    )
+
+    assert "--run-id run-123" in command
+    assert "--plan .tmp_plan.json" in command
+    assert "--remote-root /tmp/psc_run" in command
+    assert "--poll-seconds 60" in command
+    assert '--backup-root "G:\\My Drive\\strategy-data-backup"' in command
