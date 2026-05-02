@@ -32,6 +32,12 @@ def main() -> None:
                         help="Programs to run (default: all)")
     parser.add_argument("--n-sims", type=int, default=None,
                         help="Override MC simulation count")
+    parser.add_argument("--leaderboard-path", type=str, default="Outputs/ultimate_leaderboard_cfd.csv",
+                        help="Path to ultimate leaderboard CSV (selector picks gated variant if prefer_gated_leaderboard=true in config)")
+    parser.add_argument("--runs-base-path", type=str, default="Outputs/runs",
+                        help="Root containing per-run artifact directories (strategy_trades.csv etc)")
+    parser.add_argument("--output-root", type=str, default="Outputs",
+                        help="Where per-program output dirs are created")
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -63,12 +69,14 @@ def main() -> None:
         if args.n_sims is not None:
             ps_cfg["n_sims_mc"] = args.n_sims
 
-        output_dir = os.path.join("Outputs", f"portfolio_{prog_name}")
+        output_dir = os.path.join(args.output_root, f"portfolio_{prog_name}")
         os.makedirs(output_dir, exist_ok=True)
 
         t0 = time.time()
         try:
             result = run_portfolio_selection(
+                leaderboard_path=args.leaderboard_path,
+                runs_base_path=args.runs_base_path,
                 output_dir=output_dir,
                 config=config,
             )
@@ -81,7 +89,7 @@ def main() -> None:
         print(f"  Completed in {elapsed:.1f}s — status: {result.get('status')}")
 
     # Write combined summary
-    _write_combined_summary(results)
+    _write_combined_summary(results, output_root=args.output_root)
 
     # Print final summary
     print(f"\n{'=' * 60}")
@@ -102,10 +110,10 @@ def main() -> None:
     print(f"\n  Total time: {total_time:.1f}s")
 
 
-def _write_combined_summary(results: dict[str, dict]) -> None:
+def _write_combined_summary(results: dict[str, dict], output_root: str = "Outputs") -> None:
     """Write a single CSV comparing top portfolio across all programs."""
-    out_path = os.path.join("Outputs", "portfolio_combined_summary.csv")
-    os.makedirs("Outputs", exist_ok=True)
+    out_path = os.path.join(output_root, "portfolio_combined_summary.csv")
+    os.makedirs(output_root, exist_ok=True)
 
     rows: list[dict] = []
     for prog_name, result in results.items():

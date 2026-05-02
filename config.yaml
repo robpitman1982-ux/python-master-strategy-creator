@@ -34,6 +34,7 @@ pipeline:
   portfolio_selector:
     prop_firm_program: "high_stakes"  # bootcamp | high_stakes | hyper_growth | pro_growth
     prop_firm_target: 100000      # Account size target ($100K for High Stakes)
+    prefer_gated_leaderboard: true  # Sprint 84+85: gate is now functional, prefer real signal
     min_pass_rate: 0.40        # Minimum acceptable 3-step pass rate
     candidate_cap: 60          # Max candidates after hard filter
     oos_pf_threshold: 1.0      # Hard filter OOS PF minimum
