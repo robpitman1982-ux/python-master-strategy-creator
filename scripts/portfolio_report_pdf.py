@@ -131,23 +131,19 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
     headers += ["Months\nto fund", "p95 max\nDD %", "Verdict"]
 
     # ---- Compose body rows ----
-    # For ≤4 strategies the portfolio fits on one line; for more we wrap
-    # into 2 lines. Keeps each row compact so 12pt text is comfortable.
+    # One strategy per line with bullet so the count is unambiguous.
+    # Includes the strategy index ("1.", "2.") to defend against any PDF
+    # viewer that drops the bullet glyph.
     table_data: list[list[str]] = []
     verdict_per_row: list[str] = []
     bullet_count_per_row: list[int] = []
     for _, r in rows.iterrows():
         strategies_raw = str(r.get("strategy_names", "")).split("|")
         strategies_simple = [simplify_strategy(s.strip()) for s in strategies_raw if s.strip()]
-        if len(strategies_simple) <= 4:
-            portfolio_cell = "  ·  ".join(strategies_simple)
-            line_count = 1
-        else:
-            half = (len(strategies_simple) + 1) // 2
-            line1 = "  ·  ".join(strategies_simple[:half])
-            line2 = "  ·  ".join(strategies_simple[half:])
-            portfolio_cell = f"{line1}\n{line2}"
-            line_count = 2
+        portfolio_cell = "\n".join(
+            f"  {idx}. {name}" for idx, name in enumerate(strategies_simple, start=1)
+        )
+        line_count = max(1, len(strategies_simple))
         bullet_count_per_row.append(line_count)
 
         cells = [str(int(r.get("rank", 0))), portfolio_cell]
@@ -170,12 +166,20 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
         table_data.append(cells)
         verdict_per_row.append(verdict)
 
-    # ---- Figure sizing — single/double-line portfolio per row ----
-    # 12pt text ~0.22 in per line + padding. 1-line row ~0.55 in,
-    # 2-line row ~0.80 in. Title block ~1.5, footer ~0.7.
-    body_in = sum(0.55 if bc == 1 else 0.80 for bc in bullet_count_per_row)
-    fig_h = 2.8 + body_in
-    fig = plt.figure(figsize=(17, fig_h))
+    # ---- Figure + table sizing ----
+    # Compute everything in inches first, then convert to axes-fraction.
+    # Body fonts: portfolio 11pt, others 12pt → ~0.22 in per line incl
+    # leading. Per-row inches = 0.30 padding + n_strats × 0.24 line.
+    HEADER_IN = 0.50
+    PORTFOLIO_LINE_IN = 0.24
+    PADDING_IN = 0.30
+    TITLE_BLOCK_IN = 1.40
+    FOOTER_BLOCK_IN = 0.70
+
+    row_in = [PADDING_IN + bc * PORTFOLIO_LINE_IN for bc in bullet_count_per_row]
+    body_in = sum(row_in)
+    fig_h = TITLE_BLOCK_IN + HEADER_IN + body_in + FOOTER_BLOCK_IN
+    fig = plt.figure(figsize=(15, fig_h))
 
     # Title block. parse_math=False prevents underscores in the program
     # name (e.g. ftmo_swing_1step_130k) being rendered as math subscripts.
@@ -193,30 +197,35 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
     fig.text(0.5, 0.915, subtitle, ha="center", fontsize=12,
              color="#555", parse_math=False)
 
-    # Column width plan (portfolio gets the most room — wider table allows
-    # one-line portfolio strings even for 4-strategy mixes).
+    # Column width plan (portfolio gets ample room for strategy bullets)
     n_cols = len(headers)
     col_widths = []
     for j, h in enumerate(headers):
         if j == 0:                       # rank
-            col_widths.append(0.035)
+            col_widths.append(0.04)
         elif j == 1:                     # portfolio
-            col_widths.append(0.50)
+            col_widths.append(0.42)
         elif h == "Verdict":
-            col_widths.append(0.10)
+            col_widths.append(0.11)
         elif "Months" in h:
-            col_widths.append(0.07)
+            col_widths.append(0.08)
         elif "DD" in h:
-            col_widths.append(0.07)
+            col_widths.append(0.08)
         else:                            # pass-rate columns
-            col_widths.append(0.06)
+            col_widths.append(0.07)
     total_w = sum(col_widths)
     col_widths = [w / total_w for w in col_widths]
 
-    # Build axes for the table. Title takes ~12% top (more headroom so
-    # title descenders don't kiss the table header), footer ~7% bottom.
-    ax = fig.add_axes([0.02, 0.07, 0.96, 0.81])
+    # Build axes for the table. Position computed in figure-fractions
+    # from the inch budget so layout is deterministic regardless of
+    # n_strategies per row.
+    title_frac = TITLE_BLOCK_IN / fig_h
+    footer_frac = FOOTER_BLOCK_IN / fig_h
+    axes_y = footer_frac
+    axes_h = 1.0 - title_frac - footer_frac
+    ax = fig.add_axes([0.02, axes_y, 0.96, axes_h])
     ax.axis("off")
+    axes_h_inches = axes_h * fig_h
 
     table = ax.table(
         cellText=table_data,
@@ -229,21 +238,22 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
     table.auto_set_font_size(False)
     table.set_fontsize(12)  # body default; per-cell overrides below
 
-    # Header style — larger font, taller band
-    HEADER_H = 0.055
+    # Convert inch heights to axes-fractions (deterministic, no overflow)
+    header_h_frac = HEADER_IN / axes_h_inches
+    row_h_fracs = [r / axes_h_inches for r in row_in]
+
+    # Header style
     for j in range(n_cols):
         cell = table[0, j]
         cell.set_facecolor("#1f2937")
         cell.set_text_props(color="white", fontweight="bold", ha="center",
                             va="center", fontsize=12)
-        cell.set_height(HEADER_H)
+        cell.set_height(header_h_frac)
         cell.set_edgecolor("#1f2937")
 
-    # Body style — single-line rows ~5% axes; 2-line rows ~7%.
-    BASE_H = 0.060  # 1-line row
-    LINE_H = 0.030  # extra for second line
+    # Body style — height per row matches actual inch content of bullets
     for i, (vrow, bc) in enumerate(zip(verdict_per_row, bullet_count_per_row), start=1):
-        row_h = BASE_H + LINE_H * (bc - 1)
+        row_h = row_h_fracs[i - 1]
         for j in range(n_cols):
             cell = table[i, j]
             cell.set_height(row_h)
@@ -269,7 +279,7 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
         "Verdicts: RECOMMENDED (green) · VIABLE (blue) · MARGINAL (grey) · "
         "INFEASIBLE_AT_ACCOUNT_SIZE (red)."
     )
-    fig.text(0.5, 0.025, footer, ha="center", fontsize=10, color="#555")
+    fig.text(0.5, footer_frac * 0.35, footer, ha="center", fontsize=10, color="#555")
 
     if output_pdf is None:
         output_pdf = report_csv.parent / "portfolio_selector_report.pdf"
