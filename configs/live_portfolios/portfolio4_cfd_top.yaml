@@ -1,0 +1,185 @@
+# Portfolio #4 — CFD Top Portfolio (selector run 2026-05-03)
+# =====================================================================
+# Captures the RECOMMENDED portfolio that the selector picked across all
+# 4 The5ers programs AND all 3 FTMO programs in the 2026-05-03 run.
+# Sourced from the gated leaderboard at:
+#   /data/sweep_results/exports/ultimate_leaderboard_cfd_gated.csv
+# Drive backup of full reports:
+#   G:/My Drive/strategy-data-backup/portfolio_selector/
+#     2026-05-03T0700/  (initial run, approximated costs)
+#     2026-05-03T0815_ftmo_real_costs/  (FTMO with real swap data)
+#
+# This config is a DECLARATIVE description of what to trade. It does NOT
+# execute anything by itself — see docs/LIVE_PORTFOLIO_RUNNER_SPEC.md
+# for the runner that will consume this and dispatch live MT5 orders.
+# =====================================================================
+
+metadata:
+  portfolio_id: portfolio4_cfd_top
+  source_run_id: "2026-05-01_10market_cfd_non5m"
+  selector_run_timestamps:
+    - "2026-05-03T0700"
+    - "2026-05-03T0815_ftmo_real_costs"
+  generated_utc: "2026-05-04"
+  rank_in_report: 1
+  selected_for_programs:
+    - the5ers_high_stakes_100k    # RECOMMENDED, 100% pass, 5.8 months
+    - the5ers_bootcamp_250k       # VIABLE, 99.8% pass, 8.7 months
+    - the5ers_hyper_growth_5k     # VIABLE, 100% pass, 3.9 months
+    - the5ers_pro_growth_5k       # VIABLE, 100% pass, 3.9 months
+    - ftmo_swing_1step_30k        # RECOMMENDED, 100% pass, 3.9 months
+    - ftmo_swing_1step_130k       # RECOMMENDED, 100% pass, 3.9 months
+    - ftmo_swing_2step_130k       # RECOMMENDED, 100% pass, 6.6 months
+
+# Selector-projected metrics for the top portfolio (from FTMO 1-Step 130K
+# v2 with real FTMO swap data):
+projected:
+  pass_rate_pct: 100.0
+  p95_max_dd_pct: 6.54
+  est_months_to_fund: 3.9
+  median_trades_to_fund: 34
+  avg_oos_pf: 6.33
+  avg_correlation: 0.20
+  diversity_score: 1.0
+  robustness_score: 1.0
+
+# =====================================================================
+# Strategies — three winners, all daily timeframe.
+# Symbol mapping uses The5ers FivePercentOnline-Real MT5 names. FTMO uses
+# the alternative names below in `ftmo_symbol`.
+# =====================================================================
+
+strategies:
+
+  - id: S1_N225_daily_breakout_range_expansion
+    market: N225
+    timeframe: daily
+    the5ers_symbol: JP225           # FivePercentOnline-Real
+    ftmo_symbol: JP225.cash         # FTMO Global
+    direction: long
+    strategy_type: breakout_range_expansion
+    leader_strategy_name: "RefinedBreakout_HB2_ATR0.5_COMP0.0_MOM0"
+    leader_source: refined
+    backtest_metrics:
+      oos_pf: 10.37
+      pf: 10.51
+      trades: 438
+    # Filter chain (from gated leaderboard best_combo_filter_class_names).
+    # Constructor parameters match modules/strategy_types/breakout_strategy_type.py
+    # build_filter_objects_from_classes for the daily timeframe.
+    filters:
+      - class: RangeBreakoutFilter
+        params: {lookback: 5}
+      - class: BreakoutCloseStrengthFilter
+        params: {close_position_threshold: 0.60}
+      - class: BreakoutRetestFilter
+        params: {lookback: 5, atr_buffer_mult: 0.00}
+    entry:
+      hold_bars: 2
+      stop_atr_mult: 0.5
+    exit:
+      type: trailing_stop
+      trailing_stop_atr: 1.5
+      profit_target_atr: null
+      signal_exit_reference: null
+    sizing:
+      micros: 1                      # selector's optimised weight = 1 micro = 0.01 lot
+      default_lot_size: 0.01
+
+  - id: S2_CAC_daily_breakout_higher_low_structure
+    market: CAC
+    timeframe: daily
+    the5ers_symbol: FRA40
+    ftmo_symbol: FRA40.cash
+    direction: long
+    strategy_type: breakout_higher_low_structure
+    leader_strategy_name: "RefinedBreakout_HB1_ATR0.5_COMP0.6_MOM0"
+    leader_source: refined
+    backtest_metrics:
+      oos_pf: 4.33
+      pf: 2.83
+      trades: 356
+    filters:
+      - class: RisingBaseFilter
+        params: {lookback: 3}        # max(3, round(5 * 0.154)) for daily
+      - class: CompressionFilter
+        params: {lookback: 5, max_atr_mult: 0.90}
+      - class: PriorRangePositionFilter
+        params: {lookback: 5, min_position_in_range: 0.55}
+    entry:
+      hold_bars: 1
+      stop_atr_mult: 0.5
+      min_avg_range: 0.6             # Compression-tight bar requirement
+    exit:
+      type: trailing_stop
+      trailing_stop_atr: 1.5
+      profit_target_atr: null
+      signal_exit_reference: null
+    sizing:
+      micros: 1
+      default_lot_size: 0.01
+
+  - id: S3_YM_daily_short_trend
+    market: YM
+    timeframe: daily
+    the5ers_symbol: US30
+    ftmo_symbol: US30.cash
+    direction: short                  # short_trend family — sells trend continuations
+    strategy_type: short_trend
+    leader_strategy_name: "RefinedTrend_HB1_ATR0.75_VOL0.0_MOM0"
+    leader_source: refined
+    backtest_metrics:
+      oos_pf: 4.29
+      pf: 3.91
+      trades: 700
+    # Three structural-pattern filters; no constructor parameters needed.
+    filters:
+      - class: LowerHighFilter
+        params: {}
+      - class: DownCloseShortFilter
+        params: {}
+      - class: LowerLowFilter
+        params: {}
+    entry:
+      hold_bars: 1
+      stop_atr_mult: 0.75
+    exit:
+      type: trailing_stop
+      trailing_stop_atr: 1.5
+      profit_target_atr: null
+      signal_exit_reference: null
+    sizing:
+      micros: 1
+      default_lot_size: 0.01
+
+# =====================================================================
+# Risk envelope (informational — runner enforces these per program rules)
+# =====================================================================
+
+risk_envelope:
+  max_strategies_concurrent: 3
+  max_lot_per_strategy: 0.01      # all 3 at minimum lot for any account size
+  expected_p95_dd_pct: 6.54        # from MC; runner abort threshold should be > this
+  daily_dd_safety_margin_pct: 1.0  # stop trading for the day if equity drops >1% below open
+
+# =====================================================================
+# Operator notes
+# =====================================================================
+
+notes: |
+  - All 3 strategies are daily-frame so trade signals fire at most once per bar
+    (00:00 server time on FTMO/The5ers MT5 = CE(S)T midnight).
+  - Two are LONG (N225, CAC index breakouts) and one is SHORT (US30 short trend).
+    No conflicting positions — each strategy gets its own magic number.
+  - Trailing stop at 1.5 ATR + hard stop at 0.5-0.75 ATR = quick exit on adverse
+    moves. Hold-bars 1-2 means most trades close within 1-2 days regardless.
+  - Risk per strategy at 0.01 lot:
+      JP225: ~$5-10 risk per trade (50,000 × 0.01 lot × ~1pt ATR)
+      FRA40: ~$1 risk per trade (1,000 × 0.01 × ~1pt EUR converted)
+      US30:  ~$5 risk per trade (50,000 × 0.01 × ~10pt ATR)
+    Per-trade risk well under 0.5% of even a $5K account.
+
+  - When deploying on Contabo MT5 (FivePercentOnline-Real account 26213568),
+    use `the5ers_symbol` mapping (JP225, FRA40, US30).
+  - When/if deploying on FTMO Free Trial demo (server FTMO-Demo, account
+    1513282218), use `ftmo_symbol` mapping (JP225.cash, FRA40.cash, US30.cash).
