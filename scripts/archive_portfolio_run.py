@@ -32,6 +32,8 @@ from pathlib import Path
 
 import pandas as pd
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 HISTORY_COLUMNS = [
     "run_timestamp_utc",
     "program",
@@ -149,6 +151,24 @@ def archive_one_program(
         src = program_dir / sibling
         if src.exists():
             shutil.copy2(src, target_dir / sibling)
+
+    # Generate single-page PDF summary alongside the CSVs (in both source
+    # and Drive archive). Soft-fails if matplotlib is missing.
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from scripts.portfolio_report_pdf import render_pdf
+        # In the source program dir
+        try:
+            render_pdf(report)
+        except Exception as exc:
+            print(f"      PDF (source) skipped: {exc}")
+        # In the archive
+        try:
+            render_pdf(archived_path)
+        except Exception as exc:
+            print(f"      PDF (archive) skipped: {exc}")
+    except Exception as exc:
+        print(f"      PDF generator unavailable: {exc}")
 
     df = pd.read_csv(report)
     if df.empty:
