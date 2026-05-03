@@ -20,6 +20,7 @@ from modules.data_loader import load_tradestation_csv
 from modules.engine import EngineConfig, MasterStrategyEngine
 from modules.feature_builder import add_precomputed_features
 from modules.strategy_types import get_strategy_type
+from modules.vectorized_signals import compute_combined_signal_mask
 
 _DEFAULT_OOS_SPLIT_DATE = "2019-01-01"
 
@@ -312,6 +313,23 @@ def _rebuild_strategy_from_leaderboard_row(
         signal_exit_reference=signal_exit_reference,
     )
 
+    # Sprint 85B: rebuild must apply the same combined signal mask the
+    # original sweep/refinement used, otherwise refined leaders that depend
+    # on the combo's filter chain (and were built with hardcoded defaults
+    # rather than the parameters that fired during refinement) drift in
+    # entry-bar selection. compute_combined_signal_mask matches what
+    # `run_top_combo_refinement` (e.g. breakout_strategy_type.py:518) and
+    # the sweep entry path produced; passing it here forces engine.run to
+    # use exactly the same entry universe as the original.
+    try:
+        filter_objects = strategy_type_inst.build_filter_objects_from_classes(
+            combo_classes, timeframe=timeframe,
+        )
+        precomputed_signals = compute_combined_signal_mask(filter_objects, eval_data)
+    except Exception as exc:
+        print(f"      Sprint 85B: signal mask build failed ({exc!r}), running without precomputed_signals")
+        precomputed_signals = None
+
     # Sprint 85: load CFD-market-specific engine values (tick_value, dollars_per_point,
     # commission_per_contract, slippage_ticks). Without this, rebuild uses futures
     # defaults (50x dollars_per_point) on CFD data, causing massive parity divergence.
@@ -329,7 +347,10 @@ def _rebuild_strategy_from_leaderboard_row(
     )
 
     engine = MasterStrategyEngine(data=eval_data, config=cfg)
-    engine.run(strategy=strategy)
+    if precomputed_signals is not None:
+        engine.run(strategy=strategy, precomputed_signals=precomputed_signals)
+    else:
+        engine.run(strategy=strategy)
 
     trades_df = _normalize_trade_columns(engine.trades_dataframe())
     filters_str = str(combo_row.get("filters", "")) if combo_row else str(row.get("best_combo_filter_class_names", ""))

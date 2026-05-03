@@ -173,8 +173,72 @@ So `COMP=0.0` is not always a problem - it depends on how the original refinemen
 
 **Sprint sequence:**
 - Phase A: ✓ shipped
-- Phase B: future sprint, scope = filter-parameter round-trip from `_promoted_candidates.csv`
+- Phase B: ✓ shipped 2026-05-03 — see Phase B section below
 - Live EA strategies (NQ Daily MR, YM Daily Short Trend, GC Daily MR, NQ 15m MR) tested in 10market backfill - will determine whether Phase B blocks live-trading parity or only research-validation parity.
+
+## Phase B - Signal mask round-trip (closed 2026-05-03)
+
+**Phase B verdict: CANDIDATES (mechanism shipped, empirical verification pending next backfill).**
+
+### Root cause refined
+
+`_promoted_candidates.csv` does not store per-filter parameter values — only
+class names. The original sweep + refinement path computed signals via:
+
+```python
+filter_objects = strat_type.build_filter_objects_from_classes(combo_classes, timeframe=cfg.timeframe)
+signal_mask = compute_combined_signal_mask(filter_objects, data)
+engine.run(strategy=strategy, precomputed_signals=signal_mask)
+```
+
+The rebuild was instead calling `engine.run(strategy=strategy)` with no
+mask. Without the precomputed mask, the engine asks the strategy class's
+inline `generate_signal()` for each bar. The inline method uses the same
+hardcoded filter parameters as `build_filter_objects_from_classes`, so in
+principle the entry universe should match. But subtype variations and
+edge cases (e.g. CompressionFilter with `min_avg_range = 0.0` sentinel,
+universal filters added in Session 42) led to silent divergence.
+
+### Fix shipped
+
+`modules/portfolio_evaluator.py:_rebuild_strategy_from_leaderboard_row`
+now constructs the same combined signal mask as the sweep and passes it
+to `engine.run(precomputed_signals=...)`. Wrapped in try/except so an
+unexpected filter class falls back to the previous no-mask behaviour
+rather than aborting the whole rebuild.
+
+```python
+filter_objects = strategy_type_inst.build_filter_objects_from_classes(
+    combo_classes, timeframe=timeframe,
+)
+precomputed_signals = compute_combined_signal_mask(filter_objects, eval_data)
+engine.run(strategy=strategy, precomputed_signals=precomputed_signals)
+```
+
+### Tests (`tests/test_sprint85b_signal_mask.py`)
+
+6 cases: helper imports, graceful fallback when `build_filter_objects_from_classes`
+raises, base + subtype + short subtypes all expose
+`build_filter_objects_from_classes`, `compute_combined_signal_mask` returns
+a `bool` ndarray of correct length on synthetic OHLC data. All pass.
+
+### Empirical verification (deferred to next backfill)
+
+The fix is mechanically sound but parity-pass-rate impact must be measured
+against the same validation run that produced the Phase A baseline. Two
+ways this can land:
+1. The 10market backfill currently running on c240 finishes with the OLD
+   code (started before this commit) — re-run finalise on it for the Phase
+   A baseline. Then run a follow-up backfill with this fix and diff
+   parity rates.
+2. Easier: run a small targeted rebuild on `2026-04-30_es_nq_validation`
+   (the small validation run) post-fix and compare to the Phase A summary
+   (6 OK / 9 FAIL out of 15 on ES_30m).
+
+If parity-pass-rate jumps ≥80% across mixed timeframes, Phase B closes
+fully. If residual divergence remains (sub-class), open Phase C scoped to
+that residue (likely filter-instantiation-time differences across base vs
+subtype `build_candidate_specific_strategy` overrides).
 
 ### Commits / branches
 
