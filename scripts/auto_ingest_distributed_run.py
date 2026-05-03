@@ -345,6 +345,42 @@ def _mirror_control_storage_to_backup(
     return result.stdout
 
 
+def _find_actual_host_for_dataset(
+    *,
+    cluster_hosts: list[str],
+    remote_root: str,
+    market: str,
+    timeframe: str,
+) -> str | None:
+    """Sprint 90: scan every cluster host for a completed dataset.
+
+    Used as fallback when the planned host doesn't have status.json for
+    a (market, timeframe) — handles operator host migrations (e.g. plan
+    said c240 but operator manually re-ran on g9).
+
+    Returns the first host that has a DONE status.json AND a
+    family_leaderboard_results.csv on disk. None if no host is reachable
+    or has the dataset finished.
+    """
+    run_name = _job_run_name(market, timeframe)
+    dataset = _dataset_name(market, timeframe)
+    leaderboard_path = (
+        f"{remote_root}/Outputs/{run_name}/{dataset}/family_leaderboard_results.csv"
+    )
+    for host in cluster_hosts:
+        if not _host_reachable(host):
+            continue
+        status = _remote_status(host, remote_root, market, timeframe)
+        if not status:
+            continue
+        if status.get("current_stage") != "DONE":
+            continue
+        if not _remote_file_exists(host, leaderboard_path):
+            continue
+        return host
+    return None
+
+
 def run_once(args: argparse.Namespace, state: dict) -> bool:
     plan_hosts = _load_plan(Path(args.plan))
     already = set(state.get("ingested", []))
@@ -354,6 +390,10 @@ def run_once(args: argparse.Namespace, state: dict) -> bool:
         run_id=args.run_id,
     )
     did_ingest = False
+
+    # Sprint 90: cluster-host pool for cross-host orphan-dataset fallback.
+    # If empty, fallback is disabled and watcher behaves as before.
+    cluster_hosts: list[str] = list(getattr(args, "cluster_hosts", []) or [])
 
     for host, jobs in plan_hosts.items():
         if not _host_reachable(host):
@@ -367,15 +407,46 @@ def run_once(args: argparse.Namespace, state: dict) -> bool:
             if key in already:
                 continue
             status = _remote_status(host, args.remote_root, market, timeframe)
-            if not status:
-                continue
+
+            actual_host = host
             run_name = _job_run_name(market, timeframe)
             dataset = _dataset_name(market, timeframe)
             leaderboard_path = (
                 f"{args.remote_root}/Outputs/{run_name}/{dataset}/family_leaderboard_results.csv"
             )
-            if status.get("current_stage") != "DONE" or not _remote_file_exists(host, leaderboard_path):
+
+            # Sprint 90: if planned host has no status.json (or not DONE),
+            # scan ALL cluster hosts to find where it actually completed.
+            primary_done = (
+                status
+                and status.get("current_stage") == "DONE"
+                and _remote_file_exists(host, leaderboard_path)
+            )
+            if not primary_done and cluster_hosts:
+                fallback_host = _find_actual_host_for_dataset(
+                    cluster_hosts=[h for h in cluster_hosts if h != host],
+                    remote_root=args.remote_root,
+                    market=market,
+                    timeframe=timeframe,
+                )
+                if fallback_host:
+                    print(
+                        f"[{datetime.now(UTC).isoformat(timespec='seconds')}] orphan-dataset detected: "
+                        f"{market}:{timeframe} planned for {host}, found completed on {fallback_host}",
+                        flush=True,
+                    )
+                    actual_host = fallback_host
+                    primary_done = True
+                    # Re-key so manifest tracking matches reality
+                    key = _job_key(actual_host, market, timeframe)
+                    if key in already:
+                        continue
+
+            if not primary_done:
                 continue
+
+            # Reassign host to the actual location for downstream stage/ingest
+            host = actual_host  # noqa: PLW2901 (intentional reassignment)
 
             print(f"[{datetime.now(UTC).isoformat(timespec='seconds')}] ingesting {key}", flush=True)
             if host == args.control_host or _is_local_control(host):
@@ -442,6 +513,13 @@ def main() -> int:
     parser.add_argument("--state-path", default=".tmp_auto_ingest_state.json")
     parser.add_argument("--local-stage-root", default=".tmp_auto_ingest_stage")
     parser.add_argument("--local-mirror-root", default=".tmp_auto_ingest_mirror")
+    parser.add_argument(
+        "--cluster-hosts",
+        nargs="+",
+        default=["c240", "r630", "gen8", "g9"],
+        help="Sprint 90: hosts to scan for orphan datasets when the planned "
+             "host has no status.json. Set to empty list to disable fallback.",
+    )
     args = parser.parse_args()
 
     state_path = Path(args.state_path)

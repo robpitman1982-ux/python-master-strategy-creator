@@ -301,8 +301,19 @@ def build_single_config(
     market_spec: dict,
     data_dir: str,
     workers: int,
+    families: list[str] | str = "all",
 ) -> dict:
-    """Build a sweep config for a single market/timeframe combo."""
+    """Build a sweep config for a single market/timeframe combo.
+
+    Sprint 91: `families` parameter restricts the sweep to a subset of
+    strategy families. Pass "all" (default) for the full 15-family run,
+    or a list like ["mean_reversion", "trend"] for a memory-constrained
+    family-split batch.
+
+    Sprint name includes a family-tag suffix when families != "all" so
+    multiple family-batches on the same (market, timeframe) write to
+    distinct output dirs and don't collide.
+    """
     data_files = market_spec.get("data_files", {})
     if timeframe not in data_files:
         return {}
@@ -310,11 +321,23 @@ def build_single_config(
     engine = market_spec.get("engine", {})
     oos_date = market_spec.get("oos_split_date", "2020-01-01")
 
+    if isinstance(families, str) and families != "all":
+        families = [families]
+
+    if isinstance(families, list):
+        # Stable, filesystem-safe tag for the family batch
+        family_tag = "_".join(sorted(set(families)))[:64] or "fam"
+        sweep_name = f"{market.lower()}_{timeframe}_cfd_{family_tag}"
+        strategy_types_value: list[str] | str = list(families)
+    else:
+        sweep_name = f"{market.lower()}_{timeframe}_cfd"
+        strategy_types_value = "all"
+
     return {
         "instrument_universe": CFD_DUKASCOPY,
         "price_source": "dukascopy",
         "sweep": {
-            "name": f"{market.lower()}_{timeframe}_cfd",
+            "name": sweep_name,
             "output_dir": "Outputs",
         },
         "datasets": [{
@@ -322,7 +345,7 @@ def build_single_config(
             "market": market,
             "timeframe": timeframe,
         }],
-        "strategy_types": "all",
+        "strategy_types": strategy_types_value,
         "engine": {
             "initial_capital": 250000.0,
             "risk_per_trade": 0.01,
@@ -365,6 +388,7 @@ def run_batch(
     dry_run: bool = False,
     resume: bool = False,
     explicit_jobs: list[tuple[str, str]] | None = None,
+    families: list[str] | str = "all",
 ) -> int:
     """Run sweeps for all market/timeframe combinations."""
     # Load market specs
@@ -434,7 +458,7 @@ def run_batch(
         validation_failed = 0
         for market, tf in pending_jobs:
             spec = all_markets[market]
-            config = build_single_config(market, tf, spec, data_dir, workers)
+            config = build_single_config(market, tf, spec, data_dir, workers, families=families)
             try:
                 validate_sweep_config(config, require_existing_data=False)
                 print(f"  OK {market} {tf}")
@@ -570,6 +594,14 @@ def main() -> None:
                         help="Data directory")
     parser.add_argument("--workers", type=int, default=36,
                         help="Parallel workers per sweep")
+    parser.add_argument(
+        "--families", nargs="*", default=None,
+        help="Sprint 91: limit sweep to these strategy families (e.g. "
+             "mean_reversion trend breakout). Useful for memory-constrained "
+             "5m batches: pass 3 base families per host instead of all 15. "
+             "Default (omitted) runs all families. Output dir is suffixed "
+             "with the family tag so multiple batches don't collide.",
+    )
     parser.add_argument("--hosts", nargs="*", default=None,
                         help="Distributed plan host specs in HOST:WORKERS form, e.g. c240:80 gen8:48 r630:88 g9:80")
     parser.add_argument("--remote-root", type=str, default=".",
@@ -611,7 +643,8 @@ def main() -> None:
         markets = sorted(markets_set)
         timeframes = sorted(tf_set)
         exit_code = run_batch(markets, timeframes, args.data_dir, args.workers,
-                              args.dry_run, resume=True)
+                              args.dry_run, resume=True,
+                              families=(args.families if args.families else "all"))
         sys.exit(exit_code)
 
     explicit_jobs = None
@@ -687,7 +720,8 @@ def main() -> None:
         sys.exit(0)
 
     exit_code = run_batch(args.markets, args.timeframes, args.data_dir,
-                          args.workers, args.dry_run, explicit_jobs=explicit_jobs)
+                          args.workers, args.dry_run, explicit_jobs=explicit_jobs,
+                          families=(args.families if args.families else "all"))
     sys.exit(exit_code)
 
 
