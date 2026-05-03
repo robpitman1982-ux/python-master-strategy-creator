@@ -331,6 +331,142 @@ def The5ersProGrowthConfig(target: float = 5_000.0) -> PropFirmConfig:
     )
 
 
+def FTMOSwing1StepConfig(target: float = 130_000.0) -> PropFirmConfig:
+    """
+    Factory for FTMO Swing 1-Step (Australian default account).
+
+    Verified against FTMO public docs (research 2026-05-03):
+      - ftmo.com/en/blog/drawdowns/  (drawdown semantics)
+      - ftmo.com/au/trading-objectives/
+      - ftmo.com/au/faq/how-does-the-best-day-rule-50-work-in-ftmo-challenge-1-step/
+      - ftmo.com/en/faq/can-i-trade-news/
+    PDF source: FTMO Australia "How It Works" (pages 1-3, 5, 13, 16).
+
+    Rules (1-Step product):
+    - Single phase evaluation
+    - 10% profit target
+    - 3% max daily loss = 3% of *initial simulated capital* (NOT equity)
+    - 10% MAX OVERALL DRAWDOWN — TRAILING. The floor moves UP with end-of-day
+      balance and never decreases. Example: $100K → $104K EoD → next-day
+      floor = $94K. (Critical difference from 2-Step which is static.)
+    - Best Day Rule: best day's profit must be <= 50% of sum of all positive
+      days' profits. Not a hard breach — trader keeps trading until ratio
+      drops below 50%.
+    - Min trading days: NONE (theoretically 2 days with exact 50/50 split;
+      3+ in practice).
+    - Trading period: unlimited
+    - 90% reward split from start (vs 80%→90% scaling on 2-Step)
+    - Fee NOT refunded on first payout (vs 2-Step which IS refunded)
+    - Max capital allocation: $400K USD across all FTMO accounts
+    - News restrictions: NONE on Swing (1:30 leverage); applied only to
+      Professional traders on 1:100 Normal accounts.
+    - Mandatory stop-loss: NO.
+    - Daily DD reset: 00:00 CE(S)T (Europe/Prague server time).
+
+    NOTE: Australian Swing variant uses 1:30 leverage and waives news +
+    weekend restrictions. Synthetic config matches Swing rules; news mask
+    not enforced in our sim regardless.
+    """
+    fee_map_aud = {
+        15_000: 79.0,
+        30_000: 199.0,
+        65_000: 319.0,
+        130_000: 499.0,
+        260_000: 999.0,
+    }
+    return PropFirmConfig(
+        firm_name="FTMO",
+        program_name="Swing1Step",
+        excluded_markets=[],           # FTMO has no excluded markets (verified)
+        n_steps=1,
+        step_balances=[target],
+        target_balance=target,
+        profit_target_pct=0.10,        # 10% target
+        max_drawdown_pct=0.10,         # 10% TRAILING (not static)
+        drawdown_type="trailing",      # FIXED 2026-05-03 per FTMO blog
+        max_daily_drawdown_pct=0.03,   # 3% daily loss limit (1-Step)
+        max_risk_per_trade_pct=0.02,
+        mandatory_stop_loss=False,
+        max_violations=5,
+        min_profitable_days=None,      # No explicit min on 1-Step
+        max_calendar_days=None,
+        max_inactivity_days=30,
+        funded_profit_target_pct=0.0,
+        funded_max_drawdown_pct=0.10,
+        funded_daily_pause_pct=0.03,
+        profit_split_start_pct=0.90,   # 90% from start
+        profit_split_max_pct=0.90,
+        leverage=30.0,
+        daily_dd_is_pause=False,       # Terminates step (not pause-resume)
+        daily_dd_recalculates=False,   # Daily floor = pct of initial balance, fixed
+        entry_fee=fee_map_aud.get(int(target), 499.0),
+        funded_fee=0.0,
+        dollars_per_point=50.0,
+        contracts_per_trade=1,
+    )
+
+
+def FTMOSwing2StepConfig(target: float = 130_000.0) -> PropFirmConfig:
+    """
+    Factory for FTMO Swing 2-Step Standard (Australian default).
+
+    Verified against FTMO public docs (research 2026-05-03):
+      - ftmo.com/en/blog/drawdowns/  (2-Step DD = static)
+      - ftmo.com/au/trading-objectives/
+    Distinct from 1-Step: STATIC drawdown floor (vs trailing), looser daily
+    DD (5% vs 3%), 4-day minimum trading-days requirement per phase, NO Best
+    Day Rule (1-Step only).
+
+    Rules:
+    - Phase 1 Challenge: 10% profit target
+    - Phase 2 Verification: 5% profit target
+    - Both phases: 5% max daily loss, 10% MAX STATIC DRAWDOWN
+    - Min 4 trading days per phase ("trading day" = at least one position
+      opened between 00:00-23:59:59 CE(S)T)
+    - 80% reward split (scales to 90% via Scaling Plan)
+    - Fee REFUNDED on first reward withdrawal
+    - News restrictions: NONE on Swing (only on 1:100 Normal accounts).
+    """
+    fee_map_aud = {
+        15_000: 89.0,
+        30_000: 250.0,
+        65_000: 345.0,
+        130_000: 439.0,
+        260_000: 1080.0,
+    }
+    return PropFirmConfig(
+        firm_name="FTMO",
+        program_name="Swing2Step",
+        excluded_markets=[],                # FTMO has no excluded markets (verified)
+        n_steps=2,
+        step_balances=[target, target],
+        target_balance=target,
+        profit_target_pct=0.10,
+        step_profit_targets=[0.10, 0.05],   # Phase 1 = 10%, Phase 2 = 5%
+        max_drawdown_pct=0.10,
+        drawdown_type="static",             # 2-Step DD floor never moves
+        max_daily_drawdown_pct=0.05,        # 5% daily (looser than 1-Step)
+        max_risk_per_trade_pct=0.02,
+        mandatory_stop_loss=False,
+        max_violations=5,
+        min_profitable_days=4,              # 4 trading days per phase
+        max_calendar_days=None,
+        max_inactivity_days=30,
+        funded_profit_target_pct=0.0,
+        funded_max_drawdown_pct=0.10,
+        funded_daily_pause_pct=0.05,
+        profit_split_start_pct=0.80,        # 80% start, scales to 90% via Scaling
+        profit_split_max_pct=0.90,
+        leverage=30.0,
+        daily_dd_is_pause=False,
+        daily_dd_recalculates=False,
+        entry_fee=fee_map_aud.get(int(target), 439.0),
+        funded_fee=0.0,                     # Refunded on first payout
+        dollars_per_point=50.0,
+        contracts_per_trade=1,
+    )
+
+
 # =============================================================================
 # SIMULATION RESULTS
 # =============================================================================

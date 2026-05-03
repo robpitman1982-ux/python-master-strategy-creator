@@ -1,0 +1,330 @@
+# FTMO MT5 Per-Symbol Cost Overlay (DRAFT)
+# =====================================================================
+# Public data only. Per-symbol spread/swap/commission/contract specs
+# require an MT5 Free Trial connection (Ctrl+M -> right-click ->
+# Specification) to populate. All numeric per-symbol fields below are
+# null until the operator captures them from a live FTMO demo account.
+#
+# Sources researched 2026-05-03:
+#   - ftmo.com/en/symbols/                        (instrument coverage)
+#   - ftmo.com/en/blog/drawdowns/                 (DD semantics, AUTHORITATIVE)
+#   - ftmo.com/au/trading-objectives/             (rules per program)
+#   - ftmo.com/en/faq/can-i-trade-news/           (news restrictions)
+#   - ftmo.com/au/faq/how-does-the-best-day-rule-50-work-in-ftmo-challenge-1-step/
+#   - ftmo.com/en/faq/which-instruments-can-i-trade-and-what-strategies-am-i-allowed-to-use/
+#   - ftmo.com/en/blog/ftmo-enhances-crypto-trading-new-instruments-and-better-spreads/
+# =====================================================================
+
+# Firm-level metadata
+firm:
+  name: "FTMO"
+  account_server: null              # populate from demo (e.g. "FTMO-Demo2", "FTMO-Server")
+  account_id: null
+  mt5_hedge_mode: true              # FTMO EU/AU = hedging; FTMO US = netting/FIFO
+  base_currency: "USD"              # also: EUR, GBP, AUD, CAD, CHF, CZK
+  server_timezone: "Europe/Prague"  # GMT+2 / GMT+3 DST
+  daily_dd_reset: "00:00 CE(S)T"
+
+# Program-level rules (informational; consumed by prop_firm_simulator factories)
+programs:
+  ftmo_2step:
+    daily_loss_pct: 0.05
+    max_loss_pct: 0.10
+    max_loss_type: "static"          # from starting balance
+    profit_target_phase1: 0.10
+    profit_target_phase2: 0.05       # Verification
+    min_trading_days_phase1: 4
+    min_trading_days_phase2: 4
+    mandatory_stop_loss: false
+    best_day_rule_pct: null          # NOT applicable to 2-Step
+    leverage: 100
+    news_restrictions: true          # only on funded phase
+  ftmo_1step:
+    daily_loss_pct: 0.03
+    max_loss_pct: 0.10
+    max_loss_type: "trailing"        # end-of-day balance trailing, up only
+    profit_target: 0.10
+    min_trading_days: null           # none (theoretical 2 days at 50/50)
+    mandatory_stop_loss: false
+    best_day_rule_pct: 0.50          # Best Day <= 50% of Positive Days' Profit
+    leverage: 100
+    news_restrictions: true
+  ftmo_swing:
+    leverage: 30
+    news_restrictions: false
+    weekend_holding: true
+    overrides: "applied on top of 1-Step or 2-Step rules"
+
+# Markets NOT available on FTMO (verified: FTMO offers all common CFDs;
+# instrument coverage is broader than The5ers — RUS2K, NG, bonds available).
+excluded_markets: []
+
+# =====================================================================
+# Per-symbol specs
+# Key = futures market code (matches sweep config); value = MT5 spec.
+# All cost-model fields below are null until populated from MT5 demo.
+# =====================================================================
+
+ES:
+  cfd_symbol: "SP500.cash"            # confirm exact suffix on demo
+  description: "S&P 500 Index CFD"
+  contract_size: null
+  digits: null
+  futures_dollars_per_point: 50.0
+  cfd_dollars_per_point: null         # typically 1.0 for $-indices
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null                    # ~1.0 at 1:100, ~3.33 at 1:30 swing
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: null
+
+NQ:
+  cfd_symbol: "NAS100.cash"           # also seen as US100.cash on FTMO Global
+  description: "NASDAQ 100 Index CFD"
+  contract_size: null
+  digits: null
+  futures_dollars_per_point: 20.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: null
+
+YM:
+  cfd_symbol: "US30.cash"
+  description: "Dow Jones 30 Index CFD"
+  contract_size: null
+  digits: null
+  futures_dollars_per_point: 5.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: null
+
+GC:
+  cfd_symbol: "XAUUSD"
+  description: "Gold vs USD"
+  contract_size: 100                  # standard MT5 convention; verify
+  digits: null
+  futures_dollars_per_point: 100.0
+  cfd_dollars_per_point: 100.0
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: null
+
+CL:
+  cfd_symbol: "USOIL.cash"            # FTMO uses .cash suffix
+  description: "US Crude Oil (WTI) CFD"
+  contract_size: null                 # often 100 or 1000 — verify
+  digits: null
+  futures_dollars_per_point: 1000.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: null                     # likely Market on FTMO
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null              # check asymmetry
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null                    # check for 10x like The5ers
+  triple_multiplier: null
+  sessions_server_time: null
+
+EC:
+  cfd_symbol: "EURUSD"
+  description: "Euro vs USD"
+  contract_size: 100000
+  digits: null
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: "Sun-Fri 24h"
+
+BP:
+  cfd_symbol: "GBPUSD"
+  description: "Pound Sterling vs USD"
+  contract_size: 100000
+  digits: null
+  futures_dollars_per_point: 62500.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: "Sun-Fri 24h"
+
+JY:
+  cfd_symbol: "USDJPY"
+  description: "USD vs Japanese Yen"
+  contract_size: 100000
+  digits: null
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: "Sun-Fri 24h"
+
+AD:
+  cfd_symbol: "AUDUSD"
+  description: "Australian Dollar vs USD"
+  contract_size: 100000
+  digits: null
+  futures_dollars_per_point: 100000.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null
+  commission_pct: null
+  margin_pct: null
+  execution: "Market"
+  swap_type: "points"
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: "Sun-Fri 24h"
+
+BTC:
+  cfd_symbol: "BTCUSD"
+  description: "Bitcoin vs USD"
+  contract_size: null                 # typically 1
+  digits: null
+  futures_dollars_per_point: 5.0
+  cfd_dollars_per_point: null
+  min_lot: null
+  lot_step: null
+  max_lot: null
+  stops_level_pts: null
+  spread_type: "floating"
+  typical_spread_pts: null            # tightened 28 Jul 2025
+  commission_pct: null
+  margin_pct: null                    # crypto leverage typically 1:2
+  execution: "Market"
+  swap_type: null                     # confirm USD or points
+  swap_points_long: null
+  swap_points_short: null
+  swap_long_per_micro: null
+  swap_short_per_micro: null
+  triple_day: null
+  triple_multiplier: null
+  sessions_server_time: "24/7 ex maintenance"
+
+# =====================================================================
+# OPERATOR ACTION ITEMS (collect from MT5 demo before relying on overlay):
+#
+#   1. Open FTMO MT5 demo (Free Trial), Ctrl+M → Symbols
+#   2. For each symbol above, right-click → Specification
+#   3. Capture: Contract Size, Digits, Min/Step/Max Volume, Spread,
+#      Commission, Swap Long/Short, Swap 3-Days flag, Stops Level,
+#      Trade Sessions, Execution Mode
+#   4. Replace nulls in this YAML with captured values
+#
+# Until populated, the FTMO overlay returns symbol context with all-zero
+# costs — cost-aware MC degrades to gross-PnL only on FTMO programs.
+# =====================================================================

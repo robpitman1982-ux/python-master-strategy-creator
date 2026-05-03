@@ -37,6 +37,8 @@ from modules.prop_firm_simulator import (
     The5ersHighStakesConfig,
     The5ersHyperGrowthConfig,
     The5ersProGrowthConfig,
+    FTMOSwing1StepConfig,
+    FTMOSwing2StepConfig,
     PropFirmConfig,
     simulate_challenge,
     simulate_challenge_batch,
@@ -55,6 +57,8 @@ _PROGRAM_FACTORIES = {
     "high_stakes": The5ersHighStakesConfig,
     "hyper_growth": The5ersHyperGrowthConfig,
     "pro_growth": The5ersProGrowthConfig,
+    "ftmo_swing_1step": FTMOSwing1StepConfig,
+    "ftmo_swing_2step": FTMOSwing2StepConfig,
 }
 
 

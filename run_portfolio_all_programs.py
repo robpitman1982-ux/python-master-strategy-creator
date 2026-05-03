@@ -23,6 +23,10 @@ PROGRAMS = {
     "high_stakes_100k": {"prop_firm_program": "high_stakes", "prop_firm_target": 100_000},
     "hyper_growth_5k": {"prop_firm_program": "hyper_growth", "prop_firm_target": 5_000},
     "pro_growth_5k": {"prop_firm_program": "pro_growth", "prop_firm_target": 5_000},
+    # FTMO Australia (synthetic Swing config; verified against PDF + deep-dive scrape)
+    "ftmo_swing_1step_30k": {"prop_firm_program": "ftmo_swing_1step", "prop_firm_target": 30_000},
+    "ftmo_swing_1step_130k": {"prop_firm_program": "ftmo_swing_1step", "prop_firm_target": 130_000},
+    "ftmo_swing_2step_130k": {"prop_firm_program": "ftmo_swing_2step", "prop_firm_target": 130_000},
 }
 
 
