@@ -52,6 +52,15 @@ _THE5ERS_FIRM_META_CACHE: dict[str, Any] | None = None
 _THE5ERS_EXCLUDED_CACHE: list[str] | None = None
 _USE_THE5ERS_OVERLAY: bool = False  # Sprint 87: per-process toggle
 
+# Sprint 92: per-firm overlay selection. Active firm controls which YAML
+# the cost-aware MC reads. "the5ers" preserves Sprint 87 behaviour;
+# "ftmo" reads configs/ftmo_mt5_specs.yaml.
+# Default "none" so that legacy use_the5ers_overlay=False truly disables.
+_ACTIVE_FIRM: str = "none"  # "the5ers" | "ftmo" | "none"
+_FTMO_SPECS_CACHE: dict[str, dict[str, Any]] | None = None
+_FTMO_FIRM_META_CACHE: dict[str, Any] | None = None
+_FTMO_EXCLUDED_CACHE: list[str] | None = None
+
 _PROGRAM_FACTORIES = {
     "bootcamp": The5ersBootcampConfig,
     "high_stakes": The5ersHighStakesConfig,
@@ -229,8 +238,73 @@ def _set_the5ers_overlay_enabled(enabled: bool) -> None:
 
     Module-level so that ProcessPool workers can flip it via initializer.
     """
-    global _USE_THE5ERS_OVERLAY
+    global _USE_THE5ERS_OVERLAY, _ACTIVE_FIRM
     _USE_THE5ERS_OVERLAY = bool(enabled)
+    if enabled:
+        _ACTIVE_FIRM = "the5ers"
+
+
+def _load_ftmo_specs(
+    config_path: str | os.PathLike[str] = "configs/ftmo_mt5_specs.yaml",
+) -> dict[str, dict[str, Any]]:
+    """Load FTMO MT5 per-symbol cost overlay (Sprint 92). Same shape as
+    The5ers overlay; populated from operator's FTMO Free Trial demo via
+    scripts/ftmo_symbol_spec_export.mq5 + scripts/import_ftmo_specs.py.
+    """
+    global _FTMO_SPECS_CACHE, _FTMO_FIRM_META_CACHE, _FTMO_EXCLUDED_CACHE
+    if _FTMO_SPECS_CACHE is not None:
+        return _FTMO_SPECS_CACHE
+
+    path = Path(config_path)
+    if not path.exists():
+        _FTMO_SPECS_CACHE = {}
+        _FTMO_FIRM_META_CACHE = {}
+        _FTMO_EXCLUDED_CACHE = []
+        return _FTMO_SPECS_CACHE
+
+    with open(path, "r", encoding="utf-8") as f:
+        payload = yaml.safe_load(f) or {}
+
+    firm_meta = payload.pop("firm", {}) if isinstance(payload, dict) else {}
+    excluded = payload.pop("excluded_markets", []) if isinstance(payload, dict) else []
+    # Drop the "programs" block which is rules metadata, not per-symbol specs
+    payload.pop("programs", None)
+
+    result: dict[str, dict[str, Any]] = {}
+    for market, cfg in payload.items():
+        if not isinstance(cfg, dict):
+            continue
+        result[str(market)] = cfg
+
+    _FTMO_SPECS_CACHE = result
+    _FTMO_FIRM_META_CACHE = firm_meta if isinstance(firm_meta, dict) else {}
+    _FTMO_EXCLUDED_CACHE = [str(m) for m in (excluded or []) if str(m).strip()]
+    return _FTMO_SPECS_CACHE
+
+
+def _ftmo_excluded_markets() -> list[str]:
+    """Return excluded markets from FTMO overlay."""
+    if _FTMO_EXCLUDED_CACHE is None:
+        _load_ftmo_specs()
+    return list(_FTMO_EXCLUDED_CACHE or [])
+
+
+def _set_active_firm(firm: str) -> None:
+    """Sprint 92: set which firm's overlay the cost-aware MC reads.
+
+    "the5ers" → configs/the5ers_mt5_specs.yaml (Sprint 87 default)
+    "ftmo"    → configs/ftmo_mt5_specs.yaml (operator-populated from demo)
+    "none"    → fall back to configs/cfd_markets.yaml only
+
+    Module-level so ProcessPool workers honour it via initializer.
+    """
+    global _ACTIVE_FIRM, _USE_THE5ERS_OVERLAY
+    f = str(firm or "").strip().lower()
+    if f not in ("the5ers", "ftmo", "none"):
+        f = "none"
+    _ACTIVE_FIRM = f
+    # Keep legacy flag in sync for back-compat with existing code paths
+    _USE_THE5ERS_OVERLAY = (f == "the5ers")
 
 
 def _get_market_cost_context(market: str) -> dict[str, Any]:
@@ -247,10 +321,14 @@ def _get_market_cost_context(market: str) -> dict[str, Any]:
     inspect either path.
     """
     market_key = str(market)
-    if _USE_THE5ERS_OVERLAY:
+    overlay: dict = {}
+    overlay_source: str = ""
+    if _ACTIVE_FIRM == "ftmo":
+        overlay = _load_ftmo_specs().get(market_key, {})
+        overlay_source = "ftmo_overlay" if overlay else ""
+    elif _ACTIVE_FIRM == "the5ers" or _USE_THE5ERS_OVERLAY:
         overlay = _load_the5ers_specs().get(market_key, {})
-    else:
-        overlay = {}
+        overlay_source = "the5ers_overlay" if overlay else ""
 
     if overlay:
         cfd_dpp = overlay.get("cfd_dollars_per_point")
@@ -276,7 +354,7 @@ def _get_market_cost_context(market: str) -> dict[str, Any]:
         # so existing diagnostics that read it surface the conservative side.
         legacy_swap = max(swap_long_cost, swap_short_cost)
         return {
-            "source": "the5ers_overlay",
+            "source": overlay_source,
             "dollars_per_point": dollars_per_point,
             "cfd_dollars_per_point": dollars_per_point,
             "spread_pts": spread_pts,
@@ -2349,14 +2427,25 @@ def _mc_worker_init(
     raw_trade_lists: dict[str, list[float]] | None,
     trade_artifacts: dict[str, list[dict[str, Any]]] | None,
     use_the5ers_overlay: bool = False,
+    active_firm: str = "none",
 ) -> None:
-    """Initialize per-worker shared data for MC workers."""
+    """Initialize per-worker shared data for MC workers.
+
+    Sprint 92: `active_firm` controls overlay selection ("the5ers", "ftmo",
+    or "none"). The legacy `use_the5ers_overlay` flag is preserved for
+    back-compat — when True with active_firm unset, falls through to "the5ers".
+    """
     _mc_shared["return_matrix"] = pd.DataFrame(
         return_matrix_vals, columns=return_matrix_cols, index=return_matrix_idx,
     )
     _mc_shared["raw_trade_lists"] = raw_trade_lists
     _mc_shared["trade_artifacts"] = trade_artifacts
-    _set_the5ers_overlay_enabled(use_the5ers_overlay)
+    if active_firm and active_firm != "none":
+        _set_active_firm(active_firm)
+    elif use_the5ers_overlay:
+        _set_the5ers_overlay_enabled(True)
+    else:
+        _set_active_firm("none")
 
 
 def _mc_worker(args: tuple) -> dict | None:
@@ -2408,6 +2497,7 @@ def run_bootcamp_mc(
     prop_config: PropFirmConfig | None = None,
     mc_method: str = "block_bootstrap",
     use_the5ers_overlay: bool = False,
+    active_firm: str = "none",
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
 
@@ -2454,6 +2544,7 @@ def run_bootcamp_mc(
             raw_trade_lists,
             trade_artifacts,
             use_the5ers_overlay,
+            active_firm,
         )
         for i, args in enumerate(args_list):
             result = _mc_worker(args)
@@ -2471,6 +2562,7 @@ def run_bootcamp_mc(
                 raw_trade_lists,
                 trade_artifacts,
                 use_the5ers_overlay,
+                active_firm,
             ),
         ) as executor:
             futures = {executor.submit(_mc_worker, args): i for i, args in enumerate(args_list)}
@@ -2970,16 +3062,35 @@ def run_portfolio_selection(
         prefer_gated=prefer_gated,
     )
 
-    # Sprint 87: per-firm cost overlay. When enabled, cost-aware MC reads
-    # asymmetric long/short swaps, custom triple-day rules, and round-trip
-    # commission from configs/the5ers_mt5_specs.yaml. Default False to
-    # preserve existing behaviour for back-compat / A-B comparison.
-    use_the5ers_overlay = bool(ps_cfg.get("use_the5ers_overlay", False))
-    _set_the5ers_overlay_enabled(use_the5ers_overlay)
-    if use_the5ers_overlay:
+    # Sprint 87 + 92: per-firm cost overlay. Auto-detect firm from prop_config
+    # (FTMO programs → ftmo overlay; The5ers programs → the5ers overlay)
+    # unless config explicitly sets `firm_overlay: ftmo|the5ers|none`.
+    firm_overlay_cfg = str(ps_cfg.get("firm_overlay", "")).strip().lower()
+    if firm_overlay_cfg in ("ftmo", "the5ers", "none"):
+        active_firm = firm_overlay_cfg
+    else:
+        # Auto-detect from prop_config.firm_name
+        firm_name = str(prop_config.firm_name or "").strip().lower()
+        if firm_name == "ftmo":
+            active_firm = "ftmo"
+        elif firm_name == "the5ers" and bool(ps_cfg.get("use_the5ers_overlay", False)):
+            active_firm = "the5ers"
+        else:
+            active_firm = "none"
+
+    _set_active_firm(active_firm)
+    use_the5ers_overlay = (active_firm == "the5ers")  # back-compat for downstream calls
+
+    if active_firm == "the5ers":
         n_specs = len(_load_the5ers_specs())
         logger.info(
             "The5ers MT5 cost overlay ENABLED (configs/the5ers_mt5_specs.yaml: %d markets)",
+            n_specs,
+        )
+    elif active_firm == "ftmo":
+        n_specs = len(_load_ftmo_specs())
+        logger.info(
+            "FTMO MT5 cost overlay ENABLED (configs/ftmo_mt5_specs.yaml: %d markets)",
             n_specs,
         )
 
@@ -2991,18 +3102,27 @@ def run_portfolio_selection(
     else:
         excluded_markets = list(excluded_markets_cfg)
 
-    if use_the5ers_overlay:
-        # Merge overlay's excluded_markets with config-supplied list (union)
+    if active_firm == "the5ers":
         overlay_excl = _the5ers_excluded_markets()
-        if overlay_excl:
-            existing_upper = {str(m).strip().upper() for m in excluded_markets}
-            for m in overlay_excl:
-                if str(m).strip().upper() not in existing_upper:
-                    excluded_markets.append(m)
-            logger.info(
-                "The5ers overlay excluded markets merged: %s",
-                ", ".join(sorted(str(m) for m in overlay_excl)),
-            )
+        overlay_label = "The5ers"
+    elif active_firm == "ftmo":
+        overlay_excl = _ftmo_excluded_markets()
+        overlay_label = "FTMO"
+    else:
+        overlay_excl = []
+        overlay_label = ""
+
+    if overlay_excl:
+        # Merge overlay's excluded_markets with config-supplied list (union)
+        existing_upper = {str(m).strip().upper() for m in excluded_markets}
+        for m in overlay_excl:
+            if str(m).strip().upper() not in existing_upper:
+                excluded_markets.append(m)
+        logger.info(
+            "%s overlay excluded markets merged: %s",
+            overlay_label,
+            ", ".join(sorted(str(m) for m in overlay_excl)),
+        )
 
     if excluded_markets:
         logger.info("Excluded markets for selector: %s", ", ".join(sorted(str(m) for m in excluded_markets)))
@@ -3094,6 +3214,7 @@ def run_portfolio_selection(
         prop_config=prop_config,
         mc_method=mc_method,
         use_the5ers_overlay=use_the5ers_overlay,
+        active_firm=active_firm,
     )
     if not mc_results:
         logger.warning("No MC results. Aborting.")

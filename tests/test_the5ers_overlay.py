@@ -18,9 +18,11 @@ def _reset_caches_and_flag():
     ps._THE5ERS_SPECS_CACHE = None
     ps._THE5ERS_FIRM_META_CACHE = None
     ps._THE5ERS_EXCLUDED_CACHE = None
+    ps._set_active_firm("none")
     ps._set_the5ers_overlay_enabled(False)
+    ps._set_active_firm("none")
     yield
-    ps._set_the5ers_overlay_enabled(False)
+    ps._set_active_firm("none")
 
 
 def test_overlay_loader_loads_canonical_markets():
