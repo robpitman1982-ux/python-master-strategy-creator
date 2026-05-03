@@ -1,330 +1,672 @@
-# FTMO MT5 Per-Symbol Cost Overlay (DRAFT)
+# FTMO MT5 Per-Symbol Cost Overlay
 # =====================================================================
-# Public data only. Per-symbol spread/swap/commission/contract specs
-# require an MT5 Free Trial connection (Ctrl+M -> right-click ->
-# Specification) to populate. All numeric per-symbol fields below are
-# null until the operator captures them from a live FTMO demo account.
+# AUTO-GENERATED from FTMO Free Trial demo (FTMO-Demo server).
+# Source: scripts/ftmo_symbol_spec_export.mq5 -> ftmo_symbol_specs.csv
+# Conversion: scripts/import_ftmo_specs.py
+# CSV path: C:\Users\Rob\Documents\GIT Repos\python-master-strategy-creator\data\ftmo_symbol_specs.csv
 #
-# Sources researched 2026-05-03:
-#   - ftmo.com/en/symbols/                        (instrument coverage)
-#   - ftmo.com/en/blog/drawdowns/                 (DD semantics, AUTHORITATIVE)
-#   - ftmo.com/au/trading-objectives/             (rules per program)
-#   - ftmo.com/en/faq/can-i-trade-news/           (news restrictions)
-#   - ftmo.com/au/faq/how-does-the-best-day-rule-50-work-in-ftmo-challenge-1-step/
-#   - ftmo.com/en/faq/which-instruments-can-i-trade-and-what-strategies-am-i-allowed-to-use/
-#   - ftmo.com/en/blog/ftmo-enhances-crypto-trading-new-instruments-and-better-spreads/
+# Convention (matches the5ers_mt5_specs.yaml):
+#   - 1 'micro' = 0.01 lot (MT5 min_lot for most symbols)
+#   - swap_long_per_micro = USD per 0.01 lot per night
+#   - For non-USD profit currencies, swap converted to USD via
+#     static FX rates (see _DEFAULT_FX_RATES_TO_USD).
 # =====================================================================
 
-# Firm-level metadata
 firm:
   name: "FTMO"
-  account_server: null              # populate from demo (e.g. "FTMO-Demo2", "FTMO-Server")
-  account_id: null
-  mt5_hedge_mode: true              # FTMO EU/AU = hedging; FTMO US = netting/FIFO
-  base_currency: "USD"              # also: EUR, GBP, AUD, CAD, CHF, CZK
-  server_timezone: "Europe/Prague"  # GMT+2 / GMT+3 DST
+  account_server: "FTMO-Demo"
+  mt5_hedge_mode: true
+  base_currency: "USD"
+  server_timezone: "Europe/Prague"
   daily_dd_reset: "00:00 CE(S)T"
 
-# Program-level rules (informational; consumed by prop_firm_simulator factories)
-programs:
-  ftmo_2step:
-    daily_loss_pct: 0.05
-    max_loss_pct: 0.10
-    max_loss_type: "static"          # from starting balance
-    profit_target_phase1: 0.10
-    profit_target_phase2: 0.05       # Verification
-    min_trading_days_phase1: 4
-    min_trading_days_phase2: 4
-    mandatory_stop_loss: false
-    best_day_rule_pct: null          # NOT applicable to 2-Step
-    leverage: 100
-    news_restrictions: true          # only on funded phase
-  ftmo_1step:
-    daily_loss_pct: 0.03
-    max_loss_pct: 0.10
-    max_loss_type: "trailing"        # end-of-day balance trailing, up only
-    profit_target: 0.10
-    min_trading_days: null           # none (theoretical 2 days at 50/50)
-    mandatory_stop_loss: false
-    best_day_rule_pct: 0.50          # Best Day <= 50% of Positive Days' Profit
-    leverage: 100
-    news_restrictions: true
-  ftmo_swing:
-    leverage: 30
-    news_restrictions: false
-    weekend_holding: true
-    overrides: "applied on top of 1-Step or 2-Step rules"
-
-# Markets NOT available on FTMO (verified: FTMO offers all common CFDs;
-# instrument coverage is broader than The5ers — RUS2K, NG, bonds available).
+# FTMO has no excluded markets — all common CFDs available.
 excluded_markets: []
 
-# =====================================================================
-# Per-symbol specs
-# Key = futures market code (matches sweep config); value = MT5 spec.
-# All cost-model fields below are null until populated from MT5 demo.
-# =====================================================================
-
 ES:
-  cfd_symbol: "SP500.cash"            # confirm exact suffix on demo
-  description: "S&P 500 Index CFD"
-  contract_size: null
-  digits: null
+  cfd_symbol: "US500.cash"
+  description: "SP500 Index Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
   futures_dollars_per_point: 50.0
-  cfd_dollars_per_point: null         # typically 1.0 for $-indices
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null                    # ~1.0 at 1:100, ~3.33 at 1:30 swing
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.55
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: null
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -140.02
+  swap_points_short: -9.21
+  swap_long_per_micro: -0.014002  # USD-converted from USD
+  swap_short_per_micro: -0.000921
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
 NQ:
-  cfd_symbol: "NAS100.cash"           # also seen as US100.cash on FTMO Global
-  description: "NASDAQ 100 Index CFD"
-  contract_size: null
-  digits: null
+  cfd_symbol: "US100.cash"
+  description: "NASDAQ 100 Index Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
   futures_dollars_per_point: 20.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.78
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: null
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -505.88
+  swap_points_short: -61.56
+  swap_long_per_micro: -0.050588  # USD-converted from USD
+  swap_short_per_micro: -0.006156
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
 YM:
   cfd_symbol: "US30.cash"
-  description: "Dow Jones 30 Index CFD"
-  contract_size: null
-  digits: null
+  description: "Dow Jones Industrial Average Index Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
   futures_dollars_per_point: 5.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 2.53
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: null
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -1066.14
+  swap_points_short: 46.01
+  swap_long_per_micro: -0.106614  # USD-converted from USD
+  swap_short_per_micro: 0.004601
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+RTY:
+  cfd_symbol: "US2000.cash"
+  description: "Russell 2000 Index Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 50.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.96
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -55.69
+  swap_points_short: -1.54
+  swap_long_per_micro: -0.005569  # USD-converted from USD
+  swap_short_per_micro: -0.000154
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+DAX:
+  cfd_symbol: "GER40.cash"
+  description: "German 40 Index Spot CFD"
+  currency_profit: "EUR"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 25.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 3.65
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -382.41
+  swap_points_short: -47.26
+  swap_long_per_micro: -0.040918  # USD-converted from EUR
+  swap_short_per_micro: -0.005057
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+FTSE:
+  cfd_symbol: "UK100.cash"
+  description: "FTSE 100 Index Spot CFD"
+  currency_profit: "GBP"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 10.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.25
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -229.97
+  swap_points_short: 10.61
+  swap_long_per_micro: -0.029896  # USD-converted from GBP
+  swap_short_per_micro: 0.001379
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+N225:
+  cfd_symbol: "JP225.cash"
+  description: "Japan 225 Index Spot CFD"
+  currency_profit: "JPY"
+  contract_size: 10
+  digits: 2
+  futures_dollars_per_point: 5.0
+  cfd_dollars_per_point: 10.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 10.0
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -687.6
+  swap_points_short: -370.24
+  swap_long_per_micro: -0.004401  # USD-converted from JPY
+  swap_short_per_micro: -0.00237
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+STOXX:
+  cfd_symbol: "EU50.cash"
+  description: "Euro Stoxx 50 Index Spot CFD"
+  currency_profit: "EUR"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 10.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.66
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -93.06
+  swap_points_short: -11.5
+  swap_long_per_micro: -0.009957  # USD-converted from EUR
+  swap_short_per_micro: -0.001231
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+CAC:
+  cfd_symbol: "FRA40.cash"
+  description: "France 40 Index Spot CFD"
+  currency_profit: "EUR"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 10.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 3.61
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -129.29
+  swap_points_short: -15.98
+  swap_long_per_micro: -0.013834  # USD-converted from EUR
+  swap_short_per_micro: -0.00171
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+AUS:
+  cfd_symbol: "AUS200.cash"
+  description: "Australia 200 Index Spot CFD"
+  currency_profit: "AUD"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 25.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.17
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -213.07
+  swap_points_short: 13.28
+  swap_long_per_micro: -0.01385  # USD-converted from AUD
+  swap_short_per_micro: 0.000863
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
 GC:
   cfd_symbol: "XAUUSD"
-  description: "Gold vs USD"
-  contract_size: 100                  # standard MT5 convention; verify
-  digits: null
+  description: "Gold vs US Dollar Spot CFD"
+  currency_profit: "USD"
+  contract_size: 100
+  digits: 2
   futures_dollars_per_point: 100.0
   cfd_dollars_per_point: 100.0
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.52
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: null
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -72.36
+  swap_points_short: 4.3
+  swap_long_per_micro: -0.7236  # USD-converted from USD
+  swap_short_per_micro: 0.043
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+SI:
+  cfd_symbol: "XAGUSD"
+  description: "Silver vs US Dollar Spot CFD"
+  currency_profit: "USD"
+  contract_size: 5000
+  digits: 3
+  futures_dollars_per_point: 5000.0
+  cfd_dollars_per_point: 5000.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.076
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -16.0
+  swap_points_short: 0.31
+  swap_long_per_micro: -0.8  # USD-converted from USD
+  swap_short_per_micro: 0.0155
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
 
 CL:
-  cfd_symbol: "USOIL.cash"            # FTMO uses .cash suffix
-  description: "US Crude Oil (WTI) CFD"
-  contract_size: null                 # often 100 or 1000 — verify
-  digits: null
+  cfd_symbol: "USOIL.cash"
+  description: "West Texas Intermediate Crude Oil Spot CFD"
+  currency_profit: "USD"
+  contract_size: 100
+  digits: 3
   futures_dollars_per_point: 1000.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
-  execution: null                     # likely Market on FTMO
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null              # check asymmetry
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null                    # check for 10x like The5ers
-  triple_multiplier: null
-  sessions_server_time: null
-
-EC:
-  cfd_symbol: "EURUSD"
-  description: "Euro vs USD"
-  contract_size: 100000
-  digits: null
-  futures_dollars_per_point: 125000.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
+  cfd_dollars_per_point: 100.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.091
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: "Sun-Fri 24h"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: 31.75
+  swap_points_short: -149.34
+  swap_long_per_micro: 0.03175  # USD-converted from USD
+  swap_short_per_micro: -0.14934
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
-BP:
-  cfd_symbol: "GBPUSD"
-  description: "Pound Sterling vs USD"
-  contract_size: 100000
-  digits: null
-  futures_dollars_per_point: 62500.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
+BRENT:
+  cfd_symbol: "UKOIL.cash"
+  description: "Crude Oil Brent Spot CFD"
+  currency_profit: "USD"
+  contract_size: 100
+  digits: 3
+  futures_dollars_per_point: 1000.0
+  cfd_dollars_per_point: 100.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.083
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: "Sun-Fri 24h"
-
-JY:
-  cfd_symbol: "USDJPY"
-  description: "USD vs Japanese Yen"
-  contract_size: 100000
-  digits: null
-  futures_dollars_per_point: 125000.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
-  execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: "Sun-Fri 24h"
-
-AD:
-  cfd_symbol: "AUDUSD"
-  description: "Australian Dollar vs USD"
-  contract_size: 100000
-  digits: null
-  futures_dollars_per_point: 100000.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null
-  commission_pct: null
-  margin_pct: null
-  execution: "Market"
-  swap_type: "points"
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: "Sun-Fri 24h"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: 63.98
+  swap_points_short: -289.82
+  swap_long_per_micro: 0.06398  # USD-converted from USD
+  swap_short_per_micro: -0.28982
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
 BTC:
   cfd_symbol: "BTCUSD"
-  description: "Bitcoin vs USD"
-  contract_size: null                 # typically 1
-  digits: null
+  description: "Bitcoin vs US Dollar Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
   futures_dollars_per_point: 5.0
-  cfd_dollars_per_point: null
-  min_lot: null
-  lot_step: null
-  max_lot: null
-  stops_level_pts: null
-  spread_type: "floating"
-  typical_spread_pts: null            # tightened 28 Jul 2025
-  commission_pct: null
-  margin_pct: null                    # crypto leverage typically 1:2
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 5.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.0
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
   execution: "Market"
-  swap_type: null                     # confirm USD or points
-  swap_points_long: null
-  swap_points_short: null
-  swap_long_per_micro: null
-  swap_short_per_micro: null
-  triple_day: null
-  triple_multiplier: null
-  sessions_server_time: "24/7 ex maintenance"
+  swap_type: "points"  # MT5 SWAP_MODE = 5
+  swap_points_long: -30.0
+  swap_points_short: -30.0
+  swap_long_per_micro: -0.003  # USD-converted from USD
+  swap_short_per_micro: -0.003
+  triple_day: "friday"
+  triple_multiplier: 3.0
 
-# =====================================================================
-# OPERATOR ACTION ITEMS (collect from MT5 demo before relying on overlay):
-#
-#   1. Open FTMO MT5 demo (Free Trial), Ctrl+M → Symbols
-#   2. For each symbol above, right-click → Specification
-#   3. Capture: Contract Size, Digits, Min/Step/Max Volume, Spread,
-#      Commission, Swap Long/Short, Swap 3-Days flag, Stops Level,
-#      Trade Sessions, Execution Mode
-#   4. Replace nulls in this YAML with captured values
-#
-# Until populated, the FTMO overlay returns symbol context with all-zero
-# costs — cost-aware MC degrades to gross-PnL only on FTMO programs.
-# =====================================================================
+ETH:
+  cfd_symbol: "ETHUSD"
+  description: "Ethereum vs US Dollar Spot CFD"
+  currency_profit: "USD"
+  contract_size: 10
+  digits: 2
+  futures_dollars_per_point: 50.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 5.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.6
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 5
+  swap_points_long: -30.0
+  swap_points_short: -30.0
+  swap_long_per_micro: -0.03  # USD-converted from USD
+  swap_short_per_micro: -0.03
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+EC:
+  cfd_symbol: "EURUSD"
+  description: "Euro vs United States Dollar"
+  currency_profit: "USD"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00012
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -10.63
+  swap_points_short: 0.21
+  swap_long_per_micro: -0.1063  # USD-converted from USD
+  swap_short_per_micro: 0.0021
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+BP:
+  cfd_symbol: "GBPUSD"
+  description: "Great Britain Pound vs US Dollar"
+  currency_profit: "USD"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 62500.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00027
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -4.96
+  swap_points_short: -6.43
+  swap_long_per_micro: -0.0496  # USD-converted from USD
+  swap_short_per_micro: -0.0643
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+JY:
+  cfd_symbol: "USDJPY"
+  description: "US Dollar vs Japanese Yen"
+  currency_profit: "JPY"
+  contract_size: 100000
+  digits: 3
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.032
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: 1.07
+  swap_points_short: -21.64
+  swap_long_per_micro: 0.006848  # USD-converted from JPY
+  swap_short_per_micro: -0.138496
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+AD:
+  cfd_symbol: "AUDUSD"
+  description: "Australian Dollar vs US Dollar"
+  currency_profit: "USD"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 100000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00015
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -3.02
+  swap_points_short: -7.65
+  swap_long_per_micro: -0.0302  # USD-converted from USD
+  swap_short_per_micro: -0.0765
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+NZD:
+  cfd_symbol: "NZDUSD"
+  description: "New Zealand Dollar vs US Dollar"
+  currency_profit: "USD"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 100000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00014
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -4.68
+  swap_points_short: -0.12
+  swap_long_per_micro: -0.0468  # USD-converted from USD
+  swap_short_per_micro: -0.0012
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+CD:
+  cfd_symbol: "USDCAD"
+  description: "US Dollar vs Canadian Dollar"
+  currency_profit: "CAD"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 100000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00024
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: 0.17
+  swap_points_short: -12.01
+  swap_long_per_micro: 0.001258  # USD-converted from CAD
+  swap_short_per_micro: -0.088874
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+SF:
+  cfd_symbol: "USDCHF"
+  description: "US Dollar vs Swiss Franc"
+  currency_profit: "CHF"
+  contract_size: 100000
+  digits: 5
+  futures_dollars_per_point: 125000.0
+  cfd_dollars_per_point: null
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.00019
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: 0.58
+  swap_points_short: -13.91
+  swap_long_per_micro: 0.006554  # USD-converted from CHF
+  swap_short_per_micro: -0.157183
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+NG:
+  cfd_symbol: "NATGAS.cash"
+  description: "Natural Gas Instrument Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1000
+  digits: 3
+  futures_dollars_per_point: 10000.0
+  cfd_dollars_per_point: 1000.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 50.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.062
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -5.96
+  swap_points_short: 1.31
+  swap_long_per_micro: -0.0596  # USD-converted from USD
+  swap_short_per_micro: 0.0131
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+W:
+  cfd_symbol: "WHEAT.c"
+  description: "Wheat Spot CFD"
+  currency_profit: "USD"
+  contract_size: 1
+  digits: 2
+  futures_dollars_per_point: 50.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 1.0
+  lot_step: 1.0
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 1.26
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -20.97
+  swap_points_short: 3.25
+  swap_long_per_micro: -0.002097  # USD-converted from USD
+  swap_short_per_micro: 0.000325
+  triple_day: "friday"
+  triple_multiplier: 3.0
+
+HG:
+  cfd_symbol: "XCUUSD"
+  description: "Copper vs US Dollar Spot CFD"
+  currency_profit: "USD"
+  contract_size: 100
+  digits: 2
+  futures_dollars_per_point: 25000.0
+  cfd_dollars_per_point: 1.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 100.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.54
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -15.69
+  swap_points_short: 2.17
+  swap_long_per_micro: -0.1569  # USD-converted from USD
+  swap_short_per_micro: 0.0217
+  triple_day: "wednesday"
+  triple_multiplier: 3.0
+
+DXY:
+  cfd_symbol: "DXY.cash"
+  description: "Dollar Index Spot CFD"
+  currency_profit: "USD"
+  contract_size: 100
+  digits: 3
+  futures_dollars_per_point: 1000.0
+  cfd_dollars_per_point: 100.0
+  min_lot: 0.01
+  lot_step: 0.01
+  max_lot: 1000.0
+  stops_level_pts: 0
+  spread_type: floating
+  typical_spread_pts: 0.019
+  commission_pct: 0.0  # FTMO commissions: zero on indices/FX/metals; not in MT5 export
+  execution: "Market"
+  swap_type: "points"  # MT5 SWAP_MODE = 1
+  swap_points_long: -21.68
+  swap_points_short: 0.94
+  swap_long_per_micro: -0.02168  # USD-converted from USD
+  swap_short_per_micro: 0.00094
+  triple_day: "friday"
+  triple_multiplier: 3.0
