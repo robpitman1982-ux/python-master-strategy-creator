@@ -84,11 +84,27 @@ def simplify_strategy(raw: str) -> str:
     return f"{market} {timeframe} {type_label}"
 
 
-def detect_step_count(df: pd.DataFrame) -> int:
-    """Count the number of stepN_pass_rate columns present."""
+PROGRAM_STEP_COUNT = {
+    "bootcamp": 3,
+    "high_stakes": 2,
+    "hyper_growth": 1,
+    "pro_growth": 1,
+    "ftmo_swing_1step": 1,
+    "ftmo_swing_2step": 2,
+}
+
+
+def detect_step_count(program_key: str, df: pd.DataFrame) -> int:
+    """Resolve real n_steps from program name; fall back to df-based heuristic."""
+    name = program_key.lower()
+    for prefix, n in PROGRAM_STEP_COUNT.items():
+        if name.startswith(prefix):
+            return n
+    # Fallback: count steps that have any nonzero pass rate
     n = 0
     for k in (1, 2, 3):
-        if f"step{k}_pass_rate" in df.columns:
+        col = f"step{k}_pass_rate"
+        if col in df.columns and (df[col] > 0).any():
             n = k
     return n if n > 0 else 1
 
@@ -99,31 +115,44 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
         raise ValueError(f"empty report: {report_csv}")
 
     program_dir_name = report_csv.parent.name.replace("portfolio_", "", 1)
-    n_steps = detect_step_count(df)
+    n_steps = detect_step_count(program_dir_name, df)
 
-    # Build display rows (top 10)
+    # Top 10 candidates
     rows = df.head(10).copy()
-    headers = ["#", "Portfolio (market timeframe type)"]
-    for k in range(1, n_steps + 1):
-        headers.append(f"Step {k}\npass %")
-        headers.append(f"Step {k}\nmonths")
-    headers += ["Total\nmonths", "p95 max\nDD %", "Verdict"]
 
+    # ---- Compose header columns ----
+    headers = ["#", "Portfolio (market · timeframe · type)"]
+    if n_steps == 1:
+        headers.append("Pass\nrate %")
+    else:
+        for k in range(1, n_steps + 1):
+            headers.append(f"Step {k}\npass %")
+        headers.append("Final\npass %")
+    headers += ["Months\nto fund", "p95 max\nDD %", "Verdict"]
+
+    # ---- Compose body rows ----
     table_data: list[list[str]] = []
     verdict_per_row: list[str] = []
+    bullet_count_per_row: list[int] = []
     for _, r in rows.iterrows():
         strategies_raw = str(r.get("strategy_names", "")).split("|")
         strategies_simple = [simplify_strategy(s.strip()) for s in strategies_raw if s.strip()]
         portfolio_cell = "\n".join(f"• {s}" for s in strategies_simple)
+        bullet_count_per_row.append(max(1, len(strategies_simple)))
 
         cells = [str(int(r.get("rank", 0))), portfolio_cell]
-        for k in range(1, n_steps + 1):
-            pr = r.get(f"step{k}_pass_rate")
-            mo = r.get(f"step{k}_est_months")
+        if n_steps == 1:
+            pr = r.get("step1_pass_rate", r.get("final_pass_rate"))
             cells.append(f"{pr*100:.1f}%" if pd.notna(pr) else "-")
-            cells.append(f"{mo:.1f}" if pd.notna(mo) else "-")
-        total_mo = r.get("total_est_months", r.get("est_months_median", float("nan")))
-        cells.append(f"{total_mo:.1f}" if pd.notna(total_mo) else "-")
+        else:
+            for k in range(1, n_steps + 1):
+                pr = r.get(f"step{k}_pass_rate")
+                cells.append(f"{pr*100:.1f}%" if pd.notna(pr) else "-")
+            final = r.get("final_pass_rate")
+            cells.append(f"{final*100:.1f}%" if pd.notna(final) else "-")
+
+        months = r.get("est_months_median")
+        cells.append(f"{months:.1f}" if pd.notna(months) else "-")
         p95 = r.get("p95_worst_dd_pct")
         cells.append(f"{p95*100:.2f}%" if pd.notna(p95) else "-")
         verdict = str(r.get("verdict", "")).strip()
@@ -131,90 +160,105 @@ def render_pdf(report_csv: Path, output_pdf: Path | None = None) -> Path:
         table_data.append(cells)
         verdict_per_row.append(verdict)
 
-    # --- figure layout ---
-    fig_h = 1.6 + 0.55 * len(table_data)  # title + per-row height
-    fig = plt.figure(figsize=(16, fig_h))
-    ax = fig.add_axes([0.03, 0.05, 0.94, 0.78])
-    ax.axis("off")
+    # ---- Figure sizing — height grows with bullet count ----
+    # Each bullet line ~0.30 in tall, base row ~0.55 in, header ~0.55, title
+    # block ~1.4, footer ~0.6. Generous so nothing overlaps.
+    body_in = sum(max(0.65, 0.40 + 0.32 * bc) for bc in bullet_count_per_row)
+    fig_h = 2.6 + body_in
+    fig = plt.figure(figsize=(15.5, fig_h))
 
-    # Title
+    # Title block
     title = f"Portfolio Selector Report — {program_dir_name}"
-    fig.suptitle(title, fontsize=15, fontweight="bold", y=0.97)
-
-    # Subtitle: source file + n strategies + program rules summary
+    fig.suptitle(title, fontsize=16, fontweight="bold", y=0.985)
     n_total = len(df)
+    top_verdicts = ", ".join(
+        f"{cnt} {v}" for v, cnt in df["verdict"].value_counts().items()
+    ) if "verdict" in df.columns else ""
     subtitle = (
-        f"{n_total} candidates evaluated · top 10 shown · "
-        f"source: {report_csv.name}"
+        f"{n_total} candidates · top 10 shown · {n_steps}-step program · "
+        f"verdicts: {top_verdicts}"
     )
-    fig.text(0.5, 0.92, subtitle, ha="center", fontsize=10, color="#444")
+    fig.text(0.5, 0.96, subtitle, ha="center", fontsize=9.5, color="#555")
+
+    # Column width plan (portfolio gets the most room)
+    n_cols = len(headers)
+    col_widths = []
+    for j, h in enumerate(headers):
+        if j == 0:                       # rank
+            col_widths.append(0.035)
+        elif j == 1:                     # portfolio
+            col_widths.append(0.40)
+        elif h == "Verdict":
+            col_widths.append(0.12)
+        elif "Months" in h:
+            col_widths.append(0.07)
+        elif "DD" in h:
+            col_widths.append(0.08)
+        else:                            # pass-rate columns
+            col_widths.append(0.07)
+    total_w = sum(col_widths)
+    col_widths = [w / total_w for w in col_widths]
+
+    # Build axes for the table (leave headroom for title + footer)
+    # Title block ~7% top, footer ~5% bottom — the rest is the table.
+    ax = fig.add_axes([0.02, 0.05, 0.96, 0.88])
+    ax.axis("off")
 
     table = ax.table(
         cellText=table_data,
         colLabels=headers,
-        loc="center",
+        loc="upper center",
         cellLoc="left",
         colLoc="center",
+        colWidths=col_widths,
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(9)
-    table.scale(1.0, 2.0)
+    table.set_fontsize(9.5)
 
-    # Style header
-    for j in range(len(headers)):
+    # Header style — height proportional so it shrinks if figure is tall
+    HEADER_H = 0.045
+    for j in range(n_cols):
         cell = table[0, j]
         cell.set_facecolor("#1f2937")
-        cell.set_text_props(color="white", fontweight="bold")
-        cell.set_height(0.06)
+        cell.set_text_props(color="white", fontweight="bold", ha="center", va="center")
+        cell.set_height(HEADER_H)
+        cell.set_edgecolor("#1f2937")
 
-    # Style body cells
-    for i, vrow in enumerate(verdict_per_row, start=1):
-        for j in range(len(headers)):
+    # Body style — variable row height by bullet count.
+    # Tuned together with body_in above so 10 rows of 3-bullet portfolios
+    # fit comfortably with no overflow into the footer.
+    BASE_H = 0.030  # min row (single-bullet portfolio)
+    LINE_H = 0.022  # per extra bullet
+    for i, (vrow, bc) in enumerate(zip(verdict_per_row, bullet_count_per_row), start=1):
+        row_h = BASE_H + LINE_H * (bc - 1)
+        for j in range(n_cols):
             cell = table[i, j]
-            # alternating zebra
-            cell.set_facecolor("#f9fafb" if i % 2 == 0 else "#ffffff")
+            cell.set_height(row_h)
             cell.set_edgecolor("#d1d5db")
-            cell.set_height(0.05)
-            # left-align portfolio column
+            cell.set_facecolor("#f9fafb" if i % 2 == 0 else "#ffffff")
             if j == 1:
-                cell.set_text_props(ha="left", va="center")
+                cell.set_text_props(ha="left", va="center", fontsize=9)
             else:
-                cell.set_text_props(ha="center", va="center")
-        # verdict column highlight
-        verdict_cell = table[i, len(headers) - 1]
+                cell.set_text_props(ha="center", va="center", fontsize=9.5)
+        # Verdict highlight
+        vc = table[i, n_cols - 1]
         col = VERDICT_COLOUR.get(vrow, "#9ca3af")
-        verdict_cell.set_facecolor(col)
-        verdict_cell.set_text_props(color="white", fontweight="bold", ha="center", va="center")
+        vc.set_facecolor(col)
+        vc.set_text_props(color="white", fontweight="bold", ha="center", va="center", fontsize=9)
 
-    # Column width tuning — give the portfolio column 4x the room
-    col_widths = []
-    for j, h in enumerate(headers):
-        if j == 0:
-            col_widths.append(0.04)
-        elif j == 1:
-            col_widths.append(0.34)
-        elif h == "Verdict":
-            col_widths.append(0.10)
-        else:
-            col_widths.append(0.06)
-    total_w = sum(col_widths)
-    col_widths = [w / total_w for w in col_widths]
-    for j, w in enumerate(col_widths):
-        for i in range(len(table_data) + 1):
-            table[i, j].set_width(w)
-
-    # Footer: footnotes
+    # Footer
     footer = (
-        "Pass % = MC simulation pass rate at each step. Months = median time to clear "
-        "that step. p95 max DD = 95th percentile worst drawdown across MC sims. "
-        "Verdict tiers: RECOMMENDED (green) / VIABLE (blue) / MARGINAL (grey) / "
+        "Pass % = MC simulation pass rate at each step.   "
+        "Months to fund = median trades to first pass converted to months.   "
+        "p95 max DD = 95th-percentile worst drawdown across MC sims.\n"
+        "Verdicts: RECOMMENDED (green) · VIABLE (blue) · MARGINAL (grey) · "
         "INFEASIBLE_AT_ACCOUNT_SIZE (red)."
     )
-    fig.text(0.5, 0.02, footer, ha="center", fontsize=8, color="#555", wrap=True)
+    fig.text(0.5, 0.012, footer, ha="center", fontsize=7.5, color="#555")
 
     if output_pdf is None:
         output_pdf = report_csv.parent / "portfolio_selector_report.pdf"
-    fig.savefig(output_pdf, format="pdf", bbox_inches="tight")
+    fig.savefig(output_pdf, format="pdf", bbox_inches="tight", pad_inches=0.25)
     plt.close(fig)
     return output_pdf
 
