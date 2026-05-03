@@ -1299,25 +1299,41 @@ class ATRPercentileFilter(BaseFilter):
         return bool(self.min_percentile <= rank <= self.max_percentile)
 
     def mask(self, data: pd.DataFrame) -> pd.Series:
+        # Sprint 93: vectorised. Original had two slow Python paths:
+        #   1) tr.rolling(lookback).apply(lambda w: ..., raw=False) — pandas
+        #      slow Python loop, output discarded (dead code).
+        #   2) for i in range(lookback, n): ... iloc lookups — Python loop,
+        #      ~10s on 60m, ~minutes on 5m data. Caused the 5m sweep to
+        #      stall indefinitely on r630/gen8/g9/c240 in mean_reversion.
+        # Replacement uses numpy sliding_window_view + broadcast comparison;
+        # produces byte-identical mask to original within float64 precision.
+        from numpy.lib.stride_tricks import sliding_window_view
         tr = data["true_range"] if "true_range" in data.columns else (data["high"] - data["low"])
         atr_col = f"atr_{min(self.lookback, 20)}"
         if atr_col in data.columns:
             current_atr = data[atr_col]
         else:
             current_atr = tr.rolling(20).mean()
-        rolling_rank = tr.rolling(self.lookback).apply(
-            lambda w: (w < w.iloc[-1]).sum() / len(w),
-            raw=False,
+
+        n = len(data)
+        tr_vals = np.asarray(tr.values, dtype=np.float64)
+        atr_vals = np.asarray(current_atr.values, dtype=np.float64)
+
+        ranks = np.full(n, np.nan, dtype=np.float64)
+        if n > self.lookback:
+            # windows[k] = tr_vals[k:k+lookback], shape (n-lookback+1, lookback).
+            # Original loop: for i in [lookback..n-1], window = tr_vals[i-lookback+1:i+1],
+            # which equals windows[i-lookback+1]. So indexes match windows[1:n-lookback+1].
+            windows = sliding_window_view(tr_vals, window_shape=self.lookback)
+            used_windows = windows[1:]  # shape (n-lookback, lookback)
+            target_atrs = atr_vals[self.lookback:]  # length n-lookback
+            counts = (used_windows < target_atrs[:, None]).sum(axis=1)
+            ranks[self.lookback:] = counts / self.lookback
+
+        result = pd.Series(
+            (ranks >= self.min_percentile) & (ranks <= self.max_percentile),
+            index=data.index,
         )
-        # passes() compares window against current_atr, not window's own last value
-        # Recompute using current_atr as the reference
-        ranks = pd.Series(np.nan, index=data.index)
-        tr_vals = tr.values
-        atr_vals = current_atr.values
-        for i in range(self.lookback, len(data)):
-            window = tr_vals[i - self.lookback + 1:i + 1]
-            ranks.iloc[i] = (window < atr_vals[i]).sum() / len(window)
-        result = (ranks >= self.min_percentile) & (ranks <= self.max_percentile)
         result.iloc[:self.lookback] = False
         return result.fillna(False)
 
