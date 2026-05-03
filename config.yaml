@@ -51,6 +51,11 @@ pipeline:
     use_ecd: false                # Disable ECD gate (also rejecting everything)
     use_multi_layer_correlation: true
     use_regime_gate: true
+    # Sprint 87: per-firm cost overlay. When true, cost-aware MC reads
+    # asymmetric long/short swap, custom triple-day rules (e.g. CL Friday=10x,
+    # BTC daily), and round-trip commission from configs/the5ers_mt5_specs.yaml.
+    # Default false to allow A/B comparison before flipping for a real run.
+    use_the5ers_overlay: false
     dd_p95_limit_pct: 0.90        # was 0.70 — too conservative, forced all weights to minimum
     dd_p99_limit_pct: 0.95        # was 0.90
     max_strategies_per_market: 3  # was 2 — allow more per market in larger portfolios

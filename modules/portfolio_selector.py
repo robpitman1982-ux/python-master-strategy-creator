@@ -45,6 +45,10 @@ from modules.prop_firm_simulator import (
 
 logger = logging.getLogger(__name__)
 _CFD_MARKET_CONFIG_CACHE: dict[str, dict[str, Any]] | None = None
+_THE5ERS_SPECS_CACHE: dict[str, dict[str, Any]] | None = None
+_THE5ERS_FIRM_META_CACHE: dict[str, Any] | None = None
+_THE5ERS_EXCLUDED_CACHE: list[str] | None = None
+_USE_THE5ERS_OVERLAY: bool = False  # Sprint 87: per-process toggle
 
 _PROGRAM_FACTORIES = {
     "bootcamp": The5ersBootcampConfig,
@@ -170,8 +174,118 @@ def _load_cfd_market_configs(config_path: str | os.PathLike[str] = "configs/cfd_
     return result
 
 
-def _get_market_cost_context(market: str) -> dict[str, float]:
-    cfg = _load_cfd_market_configs().get(str(market), {})
+def _load_the5ers_specs(
+    config_path: str | os.PathLike[str] = "configs/the5ers_mt5_specs.yaml",
+) -> dict[str, dict[str, Any]]:
+    """Load The5ers MT5 per-symbol cost overlay. Caches on first call.
+
+    Returns a dict keyed by futures market code (e.g. "ES", "NQ", "CL", "BTC").
+    Top-level "firm" and "excluded_markets" entries are stripped from the
+    returned dict but populated into module caches for separate access via
+    `_the5ers_excluded_markets()`.
+    """
+    global _THE5ERS_SPECS_CACHE, _THE5ERS_FIRM_META_CACHE, _THE5ERS_EXCLUDED_CACHE
+    if _THE5ERS_SPECS_CACHE is not None:
+        return _THE5ERS_SPECS_CACHE
+
+    path = Path(config_path)
+    if not path.exists():
+        _THE5ERS_SPECS_CACHE = {}
+        _THE5ERS_FIRM_META_CACHE = {}
+        _THE5ERS_EXCLUDED_CACHE = []
+        return _THE5ERS_SPECS_CACHE
+
+    with open(path, "r", encoding="utf-8") as f:
+        payload = yaml.safe_load(f) or {}
+
+    firm_meta = payload.pop("firm", {}) if isinstance(payload, dict) else {}
+    excluded = payload.pop("excluded_markets", []) if isinstance(payload, dict) else []
+
+    result: dict[str, dict[str, Any]] = {}
+    for market, cfg in payload.items():
+        if not isinstance(cfg, dict):
+            continue
+        result[str(market)] = cfg
+
+    _THE5ERS_SPECS_CACHE = result
+    _THE5ERS_FIRM_META_CACHE = firm_meta if isinstance(firm_meta, dict) else {}
+    _THE5ERS_EXCLUDED_CACHE = [str(m) for m in (excluded or []) if str(m).strip()]
+    return _THE5ERS_SPECS_CACHE
+
+
+def _the5ers_excluded_markets() -> list[str]:
+    """Return excluded markets from The5ers overlay (load if needed)."""
+    if _THE5ERS_EXCLUDED_CACHE is None:
+        _load_the5ers_specs()
+    return list(_THE5ERS_EXCLUDED_CACHE or [])
+
+
+def _set_the5ers_overlay_enabled(enabled: bool) -> None:
+    """Toggle whether the cost-aware MC reads from The5ers overlay.
+
+    Module-level so that ProcessPool workers can flip it via initializer.
+    """
+    global _USE_THE5ERS_OVERLAY
+    _USE_THE5ERS_OVERLAY = bool(enabled)
+
+
+def _get_market_cost_context(market: str) -> dict[str, Any]:
+    """Resolve per-market cost data.
+
+    When `_USE_THE5ERS_OVERLAY` is True and the market is present in
+    `configs/the5ers_mt5_specs.yaml`, the overlay's asymmetric long/short
+    swap rates, spread, commission, and triple-day rules are used. Otherwise
+    falls back to `configs/cfd_markets.yaml` (symmetric swap, fixed Friday
+    triple). Returned dict always has both legacy keys (`spread_pts`,
+    `swap_per_micro_per_night`, `weekend_multiplier`) and new fields
+    (`swap_long_per_micro_per_night`, `swap_short_per_micro_per_night`,
+    `commission_pct`, `triple_day`, `cfd_dollars_per_point`) so callers can
+    inspect either path.
+    """
+    market_key = str(market)
+    if _USE_THE5ERS_OVERLAY:
+        overlay = _load_the5ers_specs().get(market_key, {})
+    else:
+        overlay = {}
+
+    if overlay:
+        cfd_dpp = overlay.get("cfd_dollars_per_point")
+        futures_dpp = float(overlay.get("futures_dollars_per_point", 0.0) or 0.0)
+        # FX uses cfd_dollars_per_point: null; fall back to futures_dpp/10 (one micro
+        # = 0.1 lot, which already maps to one CFD lot via selector micro math)
+        if cfd_dpp is None:
+            dollars_per_point = futures_dpp / 10.0 if futures_dpp else 0.0
+        else:
+            dollars_per_point = float(cfd_dpp or 0.0)
+        spread_pts = float(overlay.get("typical_spread_pts", 0.0) or 0.0)
+        swap_long = float(overlay.get("swap_long_per_micro", 0.0) or 0.0)
+        swap_short = float(overlay.get("swap_short_per_micro", 0.0) or 0.0)
+        # The5ers swaps are stored as negative numbers (cost). Cost-adjusted MC
+        # historically expects a positive cost magnitude — normalise to abs() so
+        # downstream multiplication consistently subtracts cost.
+        swap_long_cost = abs(swap_long)
+        swap_short_cost = abs(swap_short)
+        triple_mult = float(overlay.get("triple_multiplier", 3.0) or 3.0)
+        triple_day = str(overlay.get("triple_day", "friday") or "friday").lower()
+        commission_pct = float(overlay.get("commission_pct", 0.0) or 0.0)
+        # Pick the larger asymmetric cost as the legacy "swap_per_micro_per_night"
+        # so existing diagnostics that read it surface the conservative side.
+        legacy_swap = max(swap_long_cost, swap_short_cost)
+        return {
+            "source": "the5ers_overlay",
+            "dollars_per_point": dollars_per_point,
+            "cfd_dollars_per_point": dollars_per_point,
+            "spread_pts": spread_pts,
+            "spread_cost_per_micro": spread_pts * dollars_per_point,
+            "swap_per_micro_per_night": legacy_swap,
+            "swap_long_per_micro_per_night": swap_long_cost,
+            "swap_short_per_micro_per_night": swap_short_cost,
+            "weekend_multiplier": triple_mult,
+            "triple_day": triple_day,
+            "commission_pct": commission_pct,
+        }
+
+    cfg = _load_cfd_market_configs().get(market_key, {})
     engine = cfg.get("engine", {}) if isinstance(cfg, dict) else {}
     cost_profile = cfg.get("cost_profile", {}) if isinstance(cfg, dict) else {}
     dollars_per_point = float(engine.get("dollars_per_point", 0.0) or 0.0)
@@ -179,11 +293,17 @@ def _get_market_cost_context(market: str) -> dict[str, float]:
     swap_per_micro = float(cost_profile.get("swap_per_micro_per_night", 0.0) or 0.0)
     weekend_multiplier = float(cost_profile.get("weekend_multiplier", 3.0) or 3.0)
     return {
+        "source": "cfd_markets",
         "dollars_per_point": dollars_per_point,
+        "cfd_dollars_per_point": dollars_per_point,
         "spread_pts": spread_pts,
         "spread_cost_per_micro": spread_pts * dollars_per_point,
         "swap_per_micro_per_night": swap_per_micro,
+        "swap_long_per_micro_per_night": swap_per_micro,
+        "swap_short_per_micro_per_night": swap_per_micro,
         "weekend_multiplier": weekend_multiplier,
+        "triple_day": "friday",
+        "commission_pct": 0.0,
     }
 
 
@@ -200,6 +320,12 @@ def _timeframe_minutes(timeframe: str) -> int:
     return mapping.get(tf, 60)
 
 
+_WEEKDAY_NAME_TO_INDEX = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
 def _estimate_swap_charge_units(
     entry_time: Any,
     exit_time: Any,
@@ -207,7 +333,19 @@ def _estimate_swap_charge_units(
     bars_held: Any = None,
     timeframe: str = "60m",
     weekend_multiplier: float = 3.0,
+    triple_day: str = "friday",
 ) -> tuple[float, bool]:
+    """Count rollover swap charges between entry and exit.
+
+    triple_day:
+      - "friday" (default) — charge weekdays Mon-Fri, multiply Friday by
+        weekend_multiplier (covers Sat+Sun rollover).
+      - any other weekday name — same logic but on that weekday.
+      - "none" — charge every calendar day (Mon-Sun) at single rate; this
+        models BTC where there is no Friday triple.
+    """
+    triple_day_normalized = str(triple_day or "friday").strip().lower()
+
     entry_ts = pd.to_datetime(entry_time, errors="coerce")
     exit_ts = pd.to_datetime(exit_time, errors="coerce")
 
@@ -219,10 +357,22 @@ def _estimate_swap_charge_units(
 
         units = 0.0
         touched_weekend = False
+
+        if triple_day_normalized == "none":
+            # Daily charge including weekends; no triple multiplier
+            current = entry_date
+            while current < exit_date:
+                units += 1.0
+                if current.weekday() >= 5:
+                    touched_weekend = True
+                current += pd.Timedelta(days=1)
+            return units, touched_weekend
+
+        triple_idx = _WEEKDAY_NAME_TO_INDEX.get(triple_day_normalized, 4)
         current = entry_date
         while current < exit_date:
             weekday = current.weekday()
-            if weekday == 4:
+            if weekday == triple_idx:
                 units += weekend_multiplier
                 touched_weekend = True
             elif weekday < 5:
@@ -250,21 +400,61 @@ def _compute_trade_cost_adjustment(
     timeframe: str,
     weight: float,
 ) -> dict[str, float]:
+    """Estimate per-trade cost: spread + asymmetric swap + commission.
+
+    When the The5ers overlay is active the swap charge picks
+    `swap_long_per_micro_per_night` or `swap_short_per_micro_per_night`
+    based on `trade["direction"]`. Commission is applied as a round-trip
+    `commission_pct` of notional on entry+exit. Both new components are
+    additive and gated on overlay availability — when the overlay is off,
+    the function reduces to its previous behaviour (symmetric swap, no
+    commission).
+    """
     ctx = _get_market_cost_context(market)
     micro_count = max(0.0, float(weight) * 10.0)
     spread_cost = ctx["spread_cost_per_micro"] * micro_count
+
     swap_units, touched_weekend = _estimate_swap_charge_units(
         trade.get("entry_time"),
         trade.get("exit_time"),
         bars_held=trade.get("bars_held"),
         timeframe=timeframe,
         weekend_multiplier=ctx["weekend_multiplier"],
+        triple_day=ctx.get("triple_day", "friday"),
     )
-    swap_cost = ctx["swap_per_micro_per_night"] * micro_count * swap_units
-    total_cost = spread_cost + swap_cost
+
+    direction = str(trade.get("direction", "")).strip().lower()
+    if direction in ("short", "sell", "-1"):
+        swap_rate = ctx.get("swap_short_per_micro_per_night", ctx["swap_per_micro_per_night"])
+    elif direction in ("long", "buy", "1"):
+        swap_rate = ctx.get("swap_long_per_micro_per_night", ctx["swap_per_micro_per_night"])
+    else:
+        # Direction unknown — use the more conservative (max) cost
+        swap_rate = max(
+            float(ctx.get("swap_long_per_micro_per_night", ctx["swap_per_micro_per_night"]) or 0.0),
+            float(ctx.get("swap_short_per_micro_per_night", ctx["swap_per_micro_per_night"]) or 0.0),
+        )
+
+    swap_cost = float(swap_rate) * micro_count * swap_units
+
+    commission_pct = float(ctx.get("commission_pct", 0.0) or 0.0)
+    commission_cost = 0.0
+    if commission_pct > 0:
+        try:
+            entry_price = float(trade.get("entry_price", 0.0) or 0.0)
+        except Exception:
+            entry_price = 0.0
+        if entry_price > 0:
+            cfd_dpp = float(ctx.get("cfd_dollars_per_point", ctx["dollars_per_point"]) or 0.0)
+            notional_per_micro = entry_price * cfd_dpp * 0.1  # 1 micro = 0.1 lot
+            # commission_pct is in percent (e.g. 0.03 = 0.03%); apply round-trip
+            commission_cost = 2.0 * (commission_pct / 100.0) * notional_per_micro * micro_count
+
+    total_cost = spread_cost + swap_cost + commission_cost
     return {
         "spread_cost": spread_cost,
         "swap_cost": swap_cost,
+        "commission_cost": commission_cost,
         "total_cost": total_cost,
         "swap_units": swap_units,
         "weekend_hold": 1.0 if touched_weekend else 0.0,
@@ -1758,6 +1948,7 @@ def _mc_worker_init(
     return_matrix_idx: list,
     raw_trade_lists: dict[str, list[float]] | None,
     trade_artifacts: dict[str, list[dict[str, Any]]] | None,
+    use_the5ers_overlay: bool = False,
 ) -> None:
     """Initialize per-worker shared data for MC workers."""
     _mc_shared["return_matrix"] = pd.DataFrame(
@@ -1765,6 +1956,7 @@ def _mc_worker_init(
     )
     _mc_shared["raw_trade_lists"] = raw_trade_lists
     _mc_shared["trade_artifacts"] = trade_artifacts
+    _set_the5ers_overlay_enabled(use_the5ers_overlay)
 
 
 def _mc_worker(args: tuple) -> dict | None:
@@ -1815,6 +2007,7 @@ def run_bootcamp_mc(
     trade_artifacts: dict[str, list[dict[str, Any]]] | None = None,
     prop_config: PropFirmConfig | None = None,
     mc_method: str = "block_bootstrap",
+    use_the5ers_overlay: bool = False,
 ) -> list[dict]:
     """Run portfolio Monte Carlo for top combinations from sweep.
 
@@ -1860,6 +2053,7 @@ def run_bootcamp_mc(
             list(return_matrix.index),
             raw_trade_lists,
             trade_artifacts,
+            use_the5ers_overlay,
         )
         for i, args in enumerate(args_list):
             result = _mc_worker(args)
@@ -1876,6 +2070,7 @@ def run_bootcamp_mc(
                 list(return_matrix.index),
                 raw_trade_lists,
                 trade_artifacts,
+                use_the5ers_overlay,
             ),
         ) as executor:
             futures = {executor.submit(_mc_worker, args): i for i, args in enumerate(args_list)}
@@ -2375,6 +2570,19 @@ def run_portfolio_selection(
         prefer_gated=prefer_gated,
     )
 
+    # Sprint 87: per-firm cost overlay. When enabled, cost-aware MC reads
+    # asymmetric long/short swaps, custom triple-day rules, and round-trip
+    # commission from configs/the5ers_mt5_specs.yaml. Default False to
+    # preserve existing behaviour for back-compat / A-B comparison.
+    use_the5ers_overlay = bool(ps_cfg.get("use_the5ers_overlay", False))
+    _set_the5ers_overlay_enabled(use_the5ers_overlay)
+    if use_the5ers_overlay:
+        n_specs = len(_load_the5ers_specs())
+        logger.info(
+            "The5ers MT5 cost overlay ENABLED (configs/the5ers_mt5_specs.yaml: %d markets)",
+            n_specs,
+        )
+
     excluded_markets_cfg = ps_cfg.get("excluded_markets")
     if excluded_markets_cfg is None:
         excluded_markets = list(prop_config.excluded_markets)
@@ -2382,6 +2590,20 @@ def run_portfolio_selection(
         excluded_markets = [excluded_markets_cfg]
     else:
         excluded_markets = list(excluded_markets_cfg)
+
+    if use_the5ers_overlay:
+        # Merge overlay's excluded_markets with config-supplied list (union)
+        overlay_excl = _the5ers_excluded_markets()
+        if overlay_excl:
+            existing_upper = {str(m).strip().upper() for m in excluded_markets}
+            for m in overlay_excl:
+                if str(m).strip().upper() not in existing_upper:
+                    excluded_markets.append(m)
+            logger.info(
+                "The5ers overlay excluded markets merged: %s",
+                ", ".join(sorted(str(m) for m in overlay_excl)),
+            )
+
     if excluded_markets:
         logger.info("Excluded markets for selector: %s", ", ".join(sorted(str(m) for m in excluded_markets)))
 
@@ -2471,6 +2693,7 @@ def run_portfolio_selection(
         trade_artifacts=cost_aware_trade_artifacts,
         prop_config=prop_config,
         mc_method=mc_method,
+        use_the5ers_overlay=use_the5ers_overlay,
     )
     if not mc_results:
         logger.warning("No MC results. Aborting.")
