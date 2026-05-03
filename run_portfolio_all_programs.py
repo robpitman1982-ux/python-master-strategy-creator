@@ -20,6 +20,7 @@ from modules.portfolio_selector import run_portfolio_selection
 
 PROGRAMS = {
     "bootcamp_250k": {"prop_firm_program": "bootcamp", "prop_firm_target": 250_000},
+    "high_stakes_5k": {"prop_firm_program": "high_stakes", "prop_firm_target": 5_000},
     "high_stakes_100k": {"prop_firm_program": "high_stakes", "prop_firm_target": 100_000},
     "hyper_growth_5k": {"prop_firm_program": "hyper_growth", "prop_firm_target": 5_000},
     "pro_growth_5k": {"prop_firm_program": "pro_growth", "prop_firm_target": 5_000},
