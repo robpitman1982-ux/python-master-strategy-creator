@@ -1834,8 +1834,10 @@ def run_bootcamp_mc(
     if trade_artifacts and mc_method == "block_bootstrap":
         logger.info("Trade-artifact cost modeling available; switching MC method from block_bootstrap to shuffle_interleave")
         effective_mc_method = "shuffle_interleave"
-    if trade_artifacts:
-        n_workers = 1
+    # Sprint 84 follow-up: trade_artifacts can be passed via ProcessPoolExecutor
+    # initargs (each worker pickle-copies once via initializer). The previous
+    # n_workers=1 clamp here forced cost-aware MC to single-thread, making
+    # 50-combo x 2000-sim runs take many hours. Removed; parallelism is safe.
 
     from dataclasses import asdict
     config_dict = asdict(config)
