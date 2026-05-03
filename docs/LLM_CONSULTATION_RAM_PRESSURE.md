@@ -1,421 +1,212 @@
-# LLM Consultation — Engine RAM Pressure on 5m Sweeps
+# LLM Consultation — 5m Sweep RAM Crisis + Speed Win Hunt
 
-**Goal**: reduce per-worker RAM footprint so the strategy-discovery engine can run at
-near-maximum CPU parallelism across the cluster without triggering OOM cascades.
-
-**Owner**: Rob Pitman. Two-tier workflow — claude.ai for strategic dialogue, Claude Code
-for execution. This doc is for cross-LLM consultation (ChatGPT-5 / Gemini 2.5 Pro).
-Reply with concrete code-level changes, not generic advice.
+**Last refreshed:** 2026-05-04 (after Sprints 84-92 shipped + post-incident profiling)
+**Goal:** stop the 5m sweep cluster from collapsing under RAM pressure AND find the highest-leverage speed wins, given that the previous binding bottleneck (trade artifact emission) is now fixed.
+**Owner:** Rob Pitman. Cross-LLM consultation (ChatGPT-5 / Gemini 2.5 Pro). Reply with concrete code-level changes, not generic advice.
 
 ---
 
-## 1. The cluster
+## 1. What was already shipped (do NOT propose redoing these)
 
-| Host  | CPU threads | RAM       | Swap    | Role                              |
-|-------|-------------|-----------|---------|-----------------------------------|
-| c240  | 80          | 62 GB     | 8 GB    | Data hub + orchestrator + sweeper |
-| r630  | 88          | 62 GB     | 8 GB    | Sweeper                           |
-| g9    | 48          | **31 GB** | **4 GB**| Sweeper (smallest box)            |
-| gen8  | 48          | 78 GB     | 8 GB    | Sweeper                           |
+These all landed in 2026-05-03 sprint cycle. The engine + selector pipeline is materially different from the prior `EXTERNAL_LLM_BRIEFING.md` (last refreshed 2026-05-03 pre-sprint-84):
 
-All Ubuntu 24.04, Python 3.12.3, on Tailscale VPN. Connected via SSH mesh. Shared
-data hub at `c240:/data/market_data/cfds/ohlc_engine/` (SMB to other nodes).
+| Sprint | Shipped | Commit |
+|--------|---------|--------|
+| **84** | **Canonical per-trade artifact emission.** `strategy_trades.csv` + `strategy_returns.csv` now mandatory on every accepted strategy from every sweep run, regardless of `skip_portfolio_evaluation`. Post-ultimate gate fail-closed on missing/parity-failed artifacts. Empirical: gated pass rate 96.4% → 4.5% on validation, 22 real strategies surviving. | `7acd6ec` |
+| **85A** | CFD config plumbing fix. `_rebuild_strategy_from_leaderboard_row` no longer uses futures `EngineConfig` defaults on CFD data (was 100x slippage + inverted PnL). | `82c10a7` |
+| **85B** | Rebuild signal-mask round-trip — `compute_combined_signal_mask` output now passed to `engine.run`, eliminates entry-bar drift in refined-subtype rebuilds. | `43e04d7` |
+| **87** | The5ers MT5 cost overlay. `configs/the5ers_mt5_specs.yaml` populated with asymmetric long/short swap + commission, custom triple-day rules (CL Friday=10×, BTC daily-no-triple). Selector consumes via `use_the5ers_overlay` toggle. | `f76ff8b` |
+| **88** | Account-aware deployability check. Selector flags `INFEASIBLE_AT_ACCOUNT_SIZE` when any portfolio weight scales below MT5 `min_lot=0.01` for the configured account size. | `21b8dbe` |
+| **89** | **Cost-aware MC vectorised.** Triple-nested Python loop replaced by numpy batch operations. **Measured speedup: 6,513×** (158s → 24ms at 3 strats × 100 trades × 200 sims). | `1eb15ae` |
+| **92** | FTMO firm overlay + multi-firm support. `configs/ftmo_mt5_specs.yaml` populated. Selector auto-selects per-firm overlay from `prop_config.firm_name`. End-to-end: same top portfolio (N225 daily Breakout + CAC daily Breakout + YM daily Trend) wins ALL 7 program tracks (4× The5ers + 3× FTMO) with 99.8-100% pass rate, 6.14-6.54% p95 DD. | `06736a4` |
 
-## 2. The engine, in one paragraph
+**Tests:** 108/108 green across all sprint suites. Top portfolio empirically validated against real FTMO swap data.
 
-`master_strategy_engine.py` runs a funnel per **strategy family** on a **dataset
-(market × timeframe)**:
+**Implication for any LLM advice on this consultation:** "ship direct trade emission first" is wrong — already done. "Wire cost overlays into MC" is wrong — already done. "Fail-closed when artifacts missing" is wrong — already done. Recommendations must address what's still open.
 
-```
-SANITY CHECK -> FILTER COMBO SWEEP -> PROMOTION GATE -> REFINEMENT GRID
-   -> LEADERBOARD ACCEPT -> (per-family CSVs written) -> next family
-```
+## 2. What is still open
 
-12 families per dataset (3 base × 2 directions + 6 named subtypes). Currently runs
-with `ProcessPoolExecutor`; `max_workers_sweep=40` and `max_workers_refinement=40`.
-Sweep and refinement of consecutive families overlap — when family N's sweep
-finishes, family N+1's sweep can start before family N's refinement is done. So
-peak concurrency = sweep-pool + refinement-pool = up to ~80 worker processes.
+Three categories:
 
-`filter_combination_sweep_results.csv` and `top_combo_refinement_results_narrow.csv`
-are written per family. **There is no resume logic** — restart re-runs everything.
+### 2a. The 5m sweep RAM crisis (today's incident — root cause unknown)
 
-## 3. The bug we're consulting on
+When 5m sweeps run on the cluster, hosts go offline (network-layer unresponsive) once the engine progresses to the subtype phase (~6 families deep). Pattern observed today:
 
-On the **5m timeframe specifically**, RAM grows monotonically as the engine moves
-through families. By the time we reach the **subtype phase** (~6 families deep), the
-process-tree's total RSS exceeds physical RAM on g9 (31 GB) and even bites r630
-(62 GB). Observed pattern:
+1. Engine launches with ~80 worker processes via `ProcessPoolExecutor`.
+2. As later families need additional precomputed features (different lookbacks for SMA/ATR/momentum), per-worker RSS climbs from ~300 MB → 500 MB+.
+3. On `g9` (31 GB RAM, 4 GB swap): 80 × 400 MB = 32 GB → swap fills → host goes silently offline at TCP layer. No OOM-killer event in dmesg — workers die from Python IPC failures during swap-thrash. Recovers 10-15 min later with ~40 fewer workers; engine continues at degraded reliability.
+4. Same pattern hit `r630` (62 GB RAM) once it reached subtype phase. Killed pre-emptively.
+5. `gen8` (78 GB RAM) survived but cycled through one near-OOM event then recovered.
 
-1. Engine launches with ~80 workers.
-2. Each worker holds a copy of the **full 5m OHLC DataFrame** (~50–100 MB) plus
-   precomputed feature arrays (SMA/ATR/momentum at multiple lookbacks).
-3. As later families need additional precomputed features (different lookbacks,
-   different signal masks), per-worker RSS climbs from ~300 MB → ~500 MB+.
-4. On g9 (31 GB total): 80 × 400 MB = 32 GB → swap fills up → host **goes
-   silently offline at TCP layer** (kernel buried in swap thrash). 10–15 min later
-   it recovers because ~40 worker processes have died from Python IPC failures
-   (not from OOM-killer — kernel OOM didn't fire). Engine continues at degraded
-   capacity with the surviving ~125 worker PIDs.
-5. Same pattern just hit r630 once it reached the subtype phase (61/62 GB used,
-   swap 7.1/8 GB, load 119 → killed pre-emptively).
+**Per-worker RSS of ~300-500 MB on a ~100 MB dataset** strongly suggests CoW is being broken — possibly by pandas operations that touch every memory page during precompute, or by feature-frame mutation that defeats fork-share. **This has not been profiled with `pmap -X` yet.**
 
-**Failure mode is not a clean OOM kill** — it's swap-thrash death-spiral that takes
-the host's network stack down for 10–15 minutes. dmesg shows no OOM-killer
-activity. Workers die from Python IPC timeouts, leaving partial results in the
-per-family CSVs.
+### 2b. MR sweep dominates wall-clock (per-family timing data)
 
-## 4. What we've tried — and why it didn't help
+Found in `/tmp/psc_logs/psc_10market_c240_redo2.log`:
 
-- **`renice +19` + `ionice -c 3` on every worker PID.**
-  Reduced kernel CPU contention waste (g9 load 1m dropped 119 → 92), but did
-  nothing for RAM pressure. Workers kept allocating; swap kept filling.
-- **Lowered `max_workers_sweep` and `max_workers_refinement` to 40 each.**
-  But sweep + refinement overlap → effective peak still ~80 workers.
-- **Soft throttle as the only intervention** = the offline-cycle pattern above.
-- **Pre-emptive kill** = clean recovery but loses N hours of family-sweep work
-  because there's no resume.
+**Small dataset (~4,127 bars) — 383s total:**
+| Family | Sweep | Refinement | % of dataset |
+|--------|-------|------------|--------------|
+| mean_reversion | 209.9s | 5.2s | **57%** |
+| breakout | 89.7s | 1.9s | 24% |
+| trend | 4.5s | 3.0s | 3% |
+| 9 subtypes (concurrent) | small | varies | 14% |
 
-## 5. Constraints — please respect
+**Large dataset (~30k bars, e.g. 60m):**
+| Family | Wall time |
+|--------|-----------|
+| mean_reversion | **2h 22m** (8,540s) |
+| breakout | 47m (2,816s) |
+| trend | 1m 46s |
 
-- **No resume logic exists.** Adding it is in scope for a fix, but the engine
-  blindly runs every family on each launch. Any fix that requires a restart
-  loses prior family work.
-- **5m datasets are the binding case.** 60m / daily are fine — only 5m has the
-  data volume + feature-array bulk that triggers the issue.
-- **Cluster is heterogeneous** — `g9` has 31 GB total, half the next-smallest
-  host. Solutions must consider g9 as the worst-case.
-- **Cross-LLM independence**: don't suggest "try renice / lower workers" — already
-  done. Don't suggest "buy more RAM" — already on it (g9 hardware upgrade pending).
-- **Goal is near-max parallelism**, not stability at the cost of throughput. We
-  want the work done, not just safely incomplete.
+Per-combo cost on small MR: 209.9s / 31,008 combos = **6.77 ms/combo**.
+Per-combo cost on small trend: 4.45s / 9,373 combos = **0.48 ms/combo**.
 
-## 6. Engine code map (where to change things)
+Same filter mask logic per combo, but MR is 14× slower per combo because **MR generates more trades per signal mask**. Per-combo time is dominated by trade simulation, NOT filter mask evaluation.
 
-- `master_strategy_engine.py` — main orchestrator. `run_family_filter_combination_sweep`
-  call at line ~828; sweep CSV write at ~838.
-- `modules/feature_builder.py` — precomputes SMA/ATR/momentum/etc per dataset.
-  Currently called once per dataset and the resulting frame is sent to each
-  worker (i.e. each worker has a full copy).
-- `modules/strategy_types/{family}_strategy_type.py` — each family declares
-  `get_filter_classes()` and `get_required_lookbacks()`. The combination of those
-  drives precompute scope.
-- `modules/filters.py` — every filter has `passes(data, i)` and `mask(data)` (numpy
-  bool array). Filters are stateless w.r.t. data — they read from the precomputed
-  feature columns.
-- `modules/vectorized_trades.py` — recently-added vectorised trade simulator,
-  numpy-only, holds 2D arrays for all trades simultaneously.
-- `config.yaml` `pipeline.max_memory_gb` exists but only triggers a worker-cap
-  *at startup*, not adaptively per family.
-- `pipeline.use_vectorized_trades: true` is on globally.
+**MR is the leverage target.** Speed it up or reduce its combo count and total dataset wall-clock drops massively.
 
-Worker fork model: standard `ProcessPoolExecutor.submit()` — Linux fork() so
-copy-on-write *should* keep dataset memory shared until a worker writes to it.
-In practice we see ~300-500 MB RSS per worker, suggesting CoW is being broken
-(perhaps by pandas operations that touch every row, or by feature-frame mutation
-during precompute).
+### 2c. Latent items on the open issue list
 
-## 7. Our own brainstorm — please critique and improve
+These are documented in `MASTER_HANDOVER.md` Open Issues section but not blocking the current incident:
 
-These are the team's current candidate fixes, ranked by guess at impact-vs-effort.
-Tell us which are wrong, which are right, what we missed, and where to start.
+- Layer C (tail co-loss) gate **disabled** — calc broken.
+- ECD gate **disabled** — was rejecting everything.
+- Walk-forward module (`modules/walk_forward.py`, 273 lines) exists but **not consumed** anywhere.
+- BH-FDR multiple-testing correction implemented in `modules/statistics.py` but **dormant** (`bh_fdr_alpha: null`).
+- Challenge-vs-funded selector mode **unimplemented** (spec at `docs/CHALLENGE_VS_FUNDED_SPEC.md`).
+- No engine-level **resume logic** — kill loses every completed family on the dataset.
 
-### Quick wins (hours)
+## 3. Cluster topology (relevant for any RAM/speed proposal)
 
-1. **Float32 numeric columns.** OHLC + features stored as float64 by default.
-   Casting to float32 on load halves the numeric-array memory immediately.
-   Loss of precision is irrelevant for trading sweeps. *Worry: does pandas
-   silently up-cast back to float64 in any operation we use? Need audit.*
+| Host | Threads | RAM | Swap | Role |
+|------|---------|-----|------|------|
+| c240 | 80 | 62 GB | 8 GB | Data hub + orchestrator + sweeper |
+| r630 | 88 | 62 GB | 8 GB | Sweeper |
+| g9 | **48** | **31 GB** | 4 GB | Sweeper (smallest box; the canary) |
+| gen8 | 48 | 78 GB | 8 GB | Sweeper |
 
-2. **`maxtasksperchild` on the ProcessPoolExecutor.** `concurrent.futures` doesn't
-   expose this directly but `multiprocessing.Pool` does. Switching to a
-   `multiprocessing.Pool(maxtasksperchild=200)` recycles workers periodically,
-   forcing Python heap reset. Should eliminate within-family creep at minimal cost.
+g9's 31 GB makes it the worst-case box for any 5m proposal. All Ubuntu 24.04, Python 3.12.3, Tailscale mesh. Data hub at `c240:/data/market_data/cfds/ohlc_engine/`.
 
-3. **Sequential families (no overlap).** Tear down the family's PoolExecutor at
-   end of sweep + refinement, before starting next family's pool. Ensures peak
-   concurrency = workers-of-one-pool, not two pools. Throughput loss ~20-30%
-   but eliminates the headline peak.
+## 4. Engine code map (where changes go)
 
-### Real fixes (days)
+- `master_strategy_engine.py::_run_dataset` — top-level dataset orchestrator.
+- `modules/feature_builder.py::add_precomputed_features` — runs once per dataset, computes union of SMA/ATR/momentum lookbacks needed across all 12 families. Result frame shipped to each worker.
+- `modules/filters.py` — every filter has `passes(data, i)` and `mask(data) → np.ndarray[bool]`. Filters consume precomputed feature columns; masks are pre-vectorised numpy comparisons.
+- `modules/vectorized_trades.py` — replaces per-bar Python loop with 2D numpy arrays (Session 61, 14-23× speedup, zero-tolerance parity).
+- `modules/strategy_types/{family}_strategy_type.py` — declares `get_filter_classes()` and `get_required_lookbacks()` per family.
+- `modules/portfolio_selector.py` (2,705 lines) — gated by trade artifact presence (Sprint 84), cost-aware MC (Sprint 89), per-firm overlay (Sprints 87/92).
+- `modules/post_ultimate_gate.py` — fail-closed on missing/parity-failed trade artifacts (Sprint 84).
+- `modules/trade_emission.py` — Sprint 84 module that emits per-trade artifacts inline.
 
-4. **Shared-memory OHLC + feature frames** via `multiprocessing.shared_memory`
-   (Python 3.8+). Convert the dataset DataFrame's columns to numpy arrays
-   backed by `SharedMemory` once at engine start, pass workers handles instead
-   of pickled copies. Estimated savings on 5m: 80 workers × ~80 MB per copy =
-   6 GB on g9, more on the bigger boxes.
+Worker fork model: standard `ProcessPoolExecutor.submit()` (fork on Linux, copy-on-write should keep dataset memory shared). In practice we measure ~300-500 MB RSS per worker on a ~100 MB dataset → CoW likely broken somewhere.
 
-5. **Resume logic.** Check for existing `{family}_filter_combination_sweep_results.csv`
-   on startup; if present and well-formed (row count matches expected n_combos),
-   skip that family's sweep. Same for refinement. Reduces blast radius of any
-   restart from "lose everything" to "lose the in-flight family". Doesn't reduce
-   peak RAM but turns "kill + restart with smaller workers" into a viable strategy.
+## 5. What we've already tried — and what didn't work
 
-6. **Adaptive worker count per family.** Probe RSS of recent workers at family
-   boundaries; if RSS × max_workers > RAM × 0.7, lower max_workers for the next
-   family. Conservative when needed, aggressive when not.
+- `renice +19` + `ionice -c 3` on every worker PID. Reduced kernel CPU contention (g9 1m load 119 → 92), did **nothing** for RAM pressure. Workers kept allocating; swap kept filling.
+- Lowered `max_workers_sweep` and `max_workers_refinement` to 40 each. But sweep + refinement overlap per-family → effective peak still ~80 workers.
+- Pre-emptive kill of r630 sweep — clean recovery, but lost completed family work because there's no resume.
 
-### Architectural (weeks)
+## 6. Candidate ideas — please critique, rank, or replace
 
-7. **Refactor feature_builder to lazy / on-demand per family.** Currently
-   precomputes everything once and ships full frame to workers. If each family
-   only needed its own slice, total memory drops + simpler.
+### Tier S — speed wins, validated/refined by today's profiling
 
-8. **Replace pandas with polars** for the OHLC + feature frame. Polars is
-   columnar Arrow with zero-copy semantics and aggressive memory reuse.
-   ~2-5x memory reduction reported in similar workloads. Big refactor.
+1. **Signal-mask memoisation.** Many filter combos produce identical signal masks (filter A subsumes filter B in some combos). Hash the final boolean mask before running trade simulation; skip if seen. **Estimated 20-40% speedup on the MR sweep specifically** (where it matters most). Effort: hours. Risk: zero (pure caching). *Profiling-confirmed leverage point.*
 
-### Last resort
+2. **Numba `@njit` on `vectorized_trades.py` inner kernel.** Trade simulation is the actual per-combo bottleneck (per profiling). Wrapping the simulator with `@njit` typically gives 2-5× on top of numpy. *Targets the proven hot path.*
 
-9. **Move 5m work off g9 entirely.** g9's 31 GB just isn't enough for the 5m
-   feature footprint. Restrict 5m sweeps to c240/r630/gen8 (62+ GB hosts);
-   give g9 the 15m+ work. This is a config split — no engine change. Loses
-   one host's worth of 5m parallelism but stops the offline cycles cold.
+3. **Filter-mask cache (deferred from earlier).** Precompute each filter's `mask(data)` once per family, AND combos via `np.logical_and.reduce`. Was claimed as 10-50× win in earlier draft of this brief — **profiling shows it's actually 5-15%** because filter eval is not the per-combo bottleneck. Still worth doing as engineering hygiene; cheap, low risk. **Don't oversell it.**
 
-## 7b. Bonus — ideas that buy *both* speed and RAM
+4. **Combo pre-screen via signal sparsity.** Skip combos that produce <50 signals before running trade sim. Promotion gate already requires ≥50 trades; saving the trade sim work on combos that can't pass is ~free. Effort: hours.
 
-The list above is RAM-focused. These are ideas that should win on both axes
-simultaneously — and several of them dwarf the RAM-only fixes by giving
-order-of-magnitude speedups while also shrinking the working set.
+### Tier A — RAM stability for 5m sweeps
 
-### Tier S — likely the biggest leverage of any idea in this doc
+5. **`pmap -X $worker_pid | grep -i shared` profile FIRST.** Before any RAM fix, validate the CoW-broken hypothesis. 30 seconds. Tells us whether shared-memory work has the leverage we think it does, or whether the fix is "stop pandas mutating the frame".
 
-10. **Per-filter mask cache + boolean combo composition.** Right now the sweep
-    appears to evaluate each filter combo by re-running every filter's `mask()`
-    on the data. With ~10 filters per family and C(10,3..6) ≈ 800 combos, that's
-    ~800× redundant filter work. Instead: precompute each filter's `mask(data)`
-    **once** into a `dict[FilterClass, np.ndarray[bool]]` (10 arrays × ~10 MB
-    each at 1-byte bool, or ~1.25 MB each bit-packed). Every combo becomes a
-    single `np.logical_and.reduce([masks[f] for f in combo])`. Estimated
-    speedup on the sweep stage: **10-50x**, plus it eliminates the per-worker
-    filter-state memory footprint because workers just AND pre-built arrays.
-    Effort: 1-2 days. Risk: modest — needs each filter to be confirmed pure
-    (no parameter that varies per combo within sweep).
+6. **Float32 on OHLC + feature columns.** Cast at top of `feature_builder.py`. **Halves numeric memory immediately.** Trading-sweep precision irrelevant at 7 sig figs. Risk: pandas may silently up-cast in some operations — need audit. Effort: half day.
 
-11. **Bit-packed masks (`np.packbits` / `bitarray`).** A 5m dataset over 18 years
-    is ~1.9M bars. Bool array = 1.9 MB; bit-packed = 240 KB. With 10 filters
-    cached per family that's 12 MB → 2.4 MB. Bitwise AND on packed arrays is
-    nearly free (single SIMD instruction per 64 bars). Combine with idea 10
-    for the cleanest implementation.
+7. **`maxtasksperchild=200` on the worker pool.** Switch from `ProcessPoolExecutor` to `multiprocessing.Pool(maxtasksperchild=200)` to recycle workers periodically. Forces Python heap reset. Should eliminate within-family memory creep. Effort: 1-2 hours.
 
-12. **Trade-list memoisation by signal-mask hash.** Many filter combos produce
-    *identical* signal masks (subsumption: filter A makes filter B redundant in
-    that combo). Hash the final boolean mask before running the trade
-    simulation; if seen before, look up the cached PnL instead of re-simulating.
-    On ES+5m we'd expect 20-40% mask-collision rate, hence 20-40% sweep speedup
-    free. Effort: hours. Risk: zero — pure caching.
+8. **Sequential families (no overlap).** Tear down family N's pool fully before family N+1 starts. Eliminates the sweep+refinement-pool overlap that doubles peak worker count. Throughput cost ~20-30%; eliminates the offline-cycle pattern entirely.
 
-### Tier A — substantial, well-bounded wins
+9. **Shared-memory OHLC + feature frames** via `multiprocessing.shared_memory`. Convert feature frame to numpy arrays backed by `SharedMemory` once at engine start, pass workers handles instead of pickled copies. Estimated savings: 80 workers × ~80 MB per copy = 6 GB on g9. **Conditional on idea 5 confirming CoW is broken.** If CoW is partially working, shared-memory's value drops sharply.
 
-13. **Numba `@njit` on the sweep inner loop.** Once masks are pre-cached, the
-    per-combo loop becomes: AND masks → simulate trades → compute metrics. The
-    last two are still Python+numpy. Wrapping the inner kernel with `@njit`
-    typically gives 5-10x more on top of the numpy speedup. `vectorized_trades.py`
-    is already numpy-only, so the JIT path should be straightforward.
+10. **Move 5m off g9 entirely.** g9's 31 GB just isn't enough for the 5m feature footprint. Restrict 5m sweeps to c240/r630/gen8 (62+ GB hosts); give g9 the 15m+ work. Config split, no engine change. Loses one host's parallelism but stops the offline cycles cold.
 
-14. **Persistent feature cache as Parquet.** `feature_builder` currently runs at
-    every engine startup. Cache its output to
-    `Outputs/<dataset>/.feature_cache.parquet` keyed on `(dataset_path,
-    feature_set_version)`. Skips minutes of work on every restart, supports
-    fast iteration during dev, and reduces parent-process peak memory because
-    we never hold both raw OHLC and computed features simultaneously. Effort:
-    half a day.
+### Tier B — defensive / structural
 
-15. **Bayesian / Optuna refinement instead of brute-force grid.** Current
-    refinement is a 4×4×4×4 = 256-point grid per candidate. Optuna can find
-    the same optimum in 30-50 trials with proper TPE search. **5x speedup
-    on the refinement phase**, which is the heaviest stage memory-wise (it
-    touches the full feature matrix repeatedly). Effort: 1 day. Already on
-    the wishlist (`CLAUDE.md` known-issues list).
+11. **Resume logic.** Check for existing `{family}_filter_combination_sweep_results.csv` on startup; skip families with valid output. Doesn't reduce RAM. **Turns "kill + restart with smaller workers" from "lose everything" to "lose the in-flight family"**. Makes every other RAM fix viable as a hotfix.
 
-16. **Aggressive early-stopping in refinement.** Track the running PnL
-    distribution within a refinement grid. If the first 25% of points are all
-    below the leaderboard `min_oos_pf` threshold, abort the rest. Combined
-    with idea 15 if both ship.
+12. **Bayesian / Optuna refinement** instead of brute-force 4×4×4×4 grid. Refinement is small in our profiling (1-5s per family) so this is low priority — but on 5m datasets where refinement scales with bars, could matter. Already on wishlist (CLAUDE.md known-issues).
 
-### Tier B — useful, but smaller or more contextual
+## 7. Reframed consultation questions
 
-17. **NUMA pinning on multi-socket hosts** (`taskset` / `numactl`). r630 + c240
-    are dual-socket. Without pinning, half the worker memory accesses traverse
-    the QPI link (~2x latency vs same-socket). A simple `numactl --cpunodebind=N
-    --membind=N` per worker pool half eliminates this. Doesn't reduce total RAM
-    but materially improves access bandwidth → ~10-15% wall-clock improvement.
+Sprint 84-92's work changes which questions are worth asking.
 
-18. **`gc.disable()` during sweep, explicit `gc.collect()` at family boundaries.**
-    Python's GC pauses accumulate during long-running compute. Disabling it
-    during the inner loop and forcing collection at clean boundaries reduces
-    pause time and gives a more deterministic memory profile. Effort: 30 min.
+### Q1 — RAM crisis: profile-first vs implement-first
 
-19. **Streaming OHLC for sweep phase.** Sweep evaluates filter combos
-    bar-by-bar; refinement needs random-access to bar history. If we stream
-    OHLC in 100k-bar chunks for sweep only, peak memory drops without
-    affecting refinement. Effort: medium — needs filter masks to be
-    chunk-composable (most are; lookback-window filters need overlap).
+The CoW-breakage hypothesis is unconfirmed. Two paths:
+(a) Run `pmap -X` on a live worker, identify exactly what's not being shared, then fix the root cause (which might just be "stop mutating the precomputed frame").
+(b) Skip diagnosis, ship `maxtasksperchild` + float32 + shared-memory in parallel, accept that we don't know which fix is actually doing the work.
 
-20. **Reduce IS/OOS history depth.** 18 years of futures data is great for
-    statistical confidence but a 5m dataset over 10 years is still ~1M bars
-    and might give the same conclusions at half the memory. Worth A/B testing
-    on one dataset to see if the leaderboard rankings change.
+Which is the right call **for an operator who is compute-rich, time-poor, and has 4 days of cluster time burned on the current 5m batch**?
 
-21. **Polars (or DuckDB) for OHLC + features.** Mentioned in tier "Real fixes"
-    above. Polars is columnar Arrow-backed with zero-copy semantics, often
-    2-5x less memory than pandas for the same data. Big refactor (every
-    feature_builder + filter touches the frame).
+### Q2 — Profiling-corrected speedup priorities
 
-22. **Distributed *intra-dataset* sweep.** Currently `run_cluster_sweep.py`
-    distributes whole datasets to hosts. For 5m specifically — where one
-    dataset is the bottleneck — split a single dataset's **families** across
-    hosts. ES 5m on c240, NQ 5m on r630, etc., one family per host at a time.
-    Per-host RAM peak drops because each runs only one family.
+Given the timing data (MR sweep dominates, trade simulation is the per-combo bottleneck, filter mask eval is <15% of combo time), what's the right ship order across ideas 1-4 (signal-mask memoisation, Numba trade-sim JIT, filter-mask cache, combo pre-screen)? Specifically:
+- Is signal-mask memoisation actually likely to hit 20-40% on MR? Or is the mask-collision rate lower than that empirically?
+- Does Numba JIT compound multiplicatively with signal-mask memoisation, or do they hit the same compute and only the larger one matters?
 
-23. **Disable hyperthreading on g9.** g9 reports 48 threads but that's likely
-    24 cores × 2 HT. With swap-thrash already a problem, HT context switching
-    makes it worse. Boot with `nosmt` and run 24 workers — fewer but each
-    fully dedicated. Often *faster* under memory pressure than full HT.
+### Q3 — Resume logic priority
 
+Without resume, every RAM-fix experiment risks 2-6 hours of completed family work. With resume, we can iterate freely. Should resume ship FIRST as the unblocker, even though it doesn't reduce RAM by itself? Or does it slow the actual fix path more than it helps?
 
+### Q4 — Layer C / ECD / walk-forward
 
-A ranked list of which 2-3 of the above (or your own ideas not in our list)
-would give the biggest RAM reduction *while keeping ~80 worker parallelism*.
-For each pick:
+These three were disabled or never wired in. Now that the cost overlay is real (Sprints 87/92), is there an argument for revisiting them? Specifically:
+- Does asymmetric swap data make co-LPM2 / lower-tail-dependence calculations more meaningful at the selector stage?
+- Walk-forward — at family leaderboard or at post-ultimate gate? (Earlier brief said ChatGPT picked post-ultimate, Gemini picked family-stage. Now that post-ultimate has teeth via Sprint 84, does that change the answer?)
 
-- One-paragraph design sketch
-- Key API / library calls or code patterns
-- Risks / gotchas
-- A rough effort estimate (hours / days / weeks)
+### Q5 — 5m sweep value question
 
-If we got the diagnosis wrong (e.g. it's not actually CoW breakage), tell us
-how to verify the actual cause first.
+Session 42 dropped 5m timeframe entirely from futures sweeps after observing zero accepted strategies (5m noise too high to clear quality flags). CFD 5m sweeps may behave differently — but **we don't have evidence yet** because every 5m sweep we've started has been killed by RAM crisis before completing. Two options:
+(a) Fix the RAM crisis, complete one 5m sweep, see if any strategies pass quality gates.
+(b) Skip 5m entirely on CFDs as well, given the futures precedent and the operational pain.
+
+What would you need to see to recommend (b) over (a)? Specifically: how many 5m sweep CSVs would have to come back with zero accepted strategies before "skip 5m" is the right call?
+
+### Q6 — Anti-convergence flag
+
+The earlier consultation round (Q1-Q16 in `EXTERNAL_LLM_BRIEFING.md`) had ChatGPT-5 and Gemini converging on "fix trade artifact emission" as the binding bottleneck. That bet paid off — Sprint 84 shipped, gates have teeth, cost-aware MC works. But by your 8x calibrated prior, the convergence point was anti-alpha for genuinely novel insight.
+
+Where do you think this round's convergence will hide? What's the question we should be asking but aren't?
 
 ---
 
-Last updated: 2026-05-04 — Session 95
+## 8. Reference: what the engine looks like end-to-end (post-sprint-92)
+
+```
+DATA LOAD -> FEATURE PRECOMPUTE (once per dataset, all lookbacks union)
+  -> per family:
+       SANITY CHECK -> FILTER COMBO SWEEP -> PROMOTION GATE
+          -> REFINEMENT GRID -> FAMILY LEADERBOARD ACCEPT
+          -> *** TRADE EMISSION (Sprint 84, mandatory) ***
+  -> MASTER LEADERBOARD AGGREGATION
+  -> ULTIMATE LEADERBOARD (cross-run)
+  -> POST-ULTIMATE GATE (Sprint 84 fail-closed; concentration + fragility)
+  -> PORTFOLIO SELECTOR (multi-firm overlay; cost-aware MC; sizing opt)
+       -> per program: portfolio_selector_report.csv with verdict
+```
+
+12 families per dataset (3 base × 2 directions + 9 subtypes). Cluster orchestration via `run_cluster_sweep.py --distributed-plan`. Auto-ingest watcher mirrors completed datasets to canonical storage at `c240:/data/sweep_results/runs/<run_id>/`. Drive backup runs nightly + on-ingest mirror.
+
+Cost realism:
+- The5ers: `configs/the5ers_mt5_specs.yaml` (Sprint 87)
+- FTMO: `configs/ftmo_mt5_specs.yaml` (Sprint 92)
+- Selector auto-selects from `prop_config.firm_name`.
+
+End-to-end winner across all 7 prop firm programs: same 3-strategy daily portfolio (N225 + CAC + YM, 0.01 lot each), 99.8-100% pass rate, 6.14-6.54% p95 DD across all programs. Captured in `configs/live_portfolios/portfolio4_cfd_top.yaml`.
 
 ---
 
-## Round 3 — Synthesis after Gemini + ChatGPT consultations
-
-This section captures the operator's decisions after reading Gemini's divergent
-take and ChatGPT's implementation-ready prompt for the filter-mask cache. It is
-the canonical "what we're shipping next" section — supersedes any earlier
-single-LLM recommendation.
-
-### Headline calls
-
-1. **Direct trade emission from the engine is the strategic bet.** Not because
-   it's the biggest speedup (it isn't — it's not a speedup at all), but because
-   it unblocks every cost-aware downstream piece. Cost-aware MC stops silently
-   falling back to block-bootstrap. Post-ultimate gates start having teeth.
-   Real The5ers swap data flows through. This is the paradigm-shift change.
-2. **Filter-mask cache is the engineering tax cut.** Real speedup, but
-   Amdahl-bounded by whatever fraction of sweep time is actually filter
-   evaluation. **Profile before implementing** — 30 minutes of `cProfile` on
-   one family's sweep tells us if filter eval is 80% (5× speedup max) or 30%
-   (1.4× speedup max). We don't know yet. Don't oversell internally as
-   "10-50×" until profiling confirms.
-3. **Both ship in parallel.** Different files, different concerns, different
-   risks. Track 1 = engine emission (master_strategy_engine.py post-promotion
-   hook). Track 2 = `FilterMaskCache` per ChatGPT's API, plus mandatory purity
-   audit of `modules/filters.py` first.
-
-### Where Gemini won the divergence (anti-convergence rule paid off)
-
-- **Q11 direct emission > rebuild path**: Gemini's bolder call is right.
-  Vectorised engine has trade arrays in numpy at promotion-gate time; emit only
-  for the ~20 promoted candidates per family. Rebuild path becomes deletable.
-- **Q16 walk-forward at family leaderboard, not post-ultimate**: ChatGPT's
-  post-ultimate placement is convergent and wrong. WF is an OOS test — late OOS
-  is no test. Move it to Phase 1e (`_passes_final_leaderboard_gate`).
-  Pragmatic compromise: light WF (single split with t-stat) at family stage,
-  full rolling WF at post-ultimate.
-- **Q14 fix costs > daily quotas**: Gemini's logic is sound — fix swaps, daily
-  dominance dies organically. But **conditional on Q11**: cost-aware MC needs
-  `strategy_trades.csv` to function. Order: emission → real costs → re-run →
-  *then* decide on quotas. No quotas pre-emptively.
-
-### Where Gemini's bolder calls need refinement before implementing
-
-- **Q9 pure greedy frontier** has local-optima pathology with 289 candidates.
-  Right answer is **beam-search greedy** (top-K=5 partial portfolios at each
-  step) or greedy with backtracking. Pure greedy can miss globally better
-  5-strategy portfolios that share a diversifier.
-- **Q10 co-LPM2** is better than stress-window but has its own pathology —
-  it treats `-0.1%/-0.1%` pairings the same as `-5%/-5%`. Formal fix:
-  **lower-tail dependence coefficient** (λ from copula theory). Pragmatic
-  fallback: co-LPM2 with a left-tail floor so trivial losses don't dilute.
-- **Q12 drop the cap entirely** ignores combinatorics: C(289,8) = 10^15.
-  Right move is **drop the cap on the input pool but cluster-prefilter
-  before C(n,k)**. Layer A+B clustering → ~30 clusters → C(30,8) = 5M
-  tractable → MC the best representative per accepted cluster-tuple.
-- **Q13 analytical via covariance** needs **semi-covariance (LPM2-based)**,
-  not standard covariance, because pass rate is a left-tail function not a
-  variance function. Then MC the top-100 analytical winners.
-
-### What ChatGPT got right that Gemini missed
-
-- **Cache plain bool arrays first, not packed.** ChatGPT's reasoning is
-  correct: packed bits complicate the hot path because trade simulation
-  needs unpacked bools for indexing. Pack only if RAM is *still* the
-  bottleneck after caching ships. The brief above incorrectly stacked
-  these as "tier S together" — they should ship sequentially.
-- **Purity audit is the gating prerequisite.** Whole optimisation depends
-  on `filter.mask(df)` being pure. Audit must run first, list any impure
-  filters, fix or exclude them from caching before code lands.
-- **API retrofit shape is right**: `FilterMaskCache.combine(filter_objs)`
-  keeps every existing filter class untouched. Critical for low-risk
-  refactor of a parity-tested engine.
-
-### Cache key recommendation (synthesised)
-
-```python
-cache_key = (
-    dataset_id_hash,        # market+timeframe identifier
-    len(data),              # cheaper than hashing the array
-    filter_class_name,      # str
-    frozenset(filter_params.items()),  # hashable param signature
-)
-```
-
-Don't include a content-hash of the data array — too expensive on every
-lookup, and dataset_id + length is already unique per loaded dataset.
-
-### What neither model raised
-
-The measured per-worker RSS is **300-500 MB on a ~100 MB dataset**. That
-means **copy-on-write is being broken somewhere** — probably by pandas
-operations that touch every memory page. Before committing to shared-memory
-implementation work, run:
-
-```
-pmap -X $worker_pid | grep -i shared
-```
-
-on a live r630 worker. 30 seconds. Tells us whether CoW is partially
-working (in which case shared-memory is a real win) or completely broken
-(in which case we need to find what's mutating the dataset frame, fix
-that, and shared-memory becomes secondary).
-
-### Ship order
-
-**Day 1**: profile one family's sweep with `cProfile` → confirms whether
-filter eval is the bottleneck. CoW check via `pmap -X` → tells us shared
-memory's actual potential.
-
-**Days 2-3 (parallel tracks)**:
-- Track 1: direct trade emission from `master_strategy_engine.py` post-promotion
-  hook. Emit `strategy_trades.csv` alongside per-family CSVs. Remove
-  `generate_returns.py` from the critical path. Add fail-closed check in
-  `post_ultimate_gate.py` if trades are missing.
-- Track 2: `FilterMaskCache` retrofit per ChatGPT's API. Purity audit first.
-  Config flag for instant rollback. Parity tests against current behaviour.
-
-**Day 4**: re-run `2026-05-01_10market_cfd_non5m` with full trade artifacts
-and (if the5ers_mt5_specs.yaml is ready) real costs. This is when we
-discover whether daily dominance survives real swaps — answers Q14, Q1, and
-half of Q12 in one cluster batch.
-
-**After**: deferred decisions (greedy vs beam-search vs budgets, co-LPM2
-vs lower-tail dependence, candidate pool architecture, walk-forward
-placement) become tractable because they have real cost data to calibrate
-against. Don't make those calls in the dark.
-
+Last updated: 2026-05-04 — Session 95 (post-Sprint-92 reframe)
