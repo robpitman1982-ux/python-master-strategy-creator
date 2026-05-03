@@ -106,11 +106,12 @@ def main() -> None:
     # the Drive backup folder (or whatever --archive-backup-root points to).
     if args.archive_backup_root:
         try:
-            from datetime import UTC, datetime
             import subprocess
+            import sys
+            from datetime import UTC, datetime
             run_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H%M")
             archive_cmd = [
-                "python", "scripts/archive_portfolio_run.py",
+                sys.executable, "scripts/archive_portfolio_run.py",
                 "--source-dir", args.output_root,
                 "--backup-root", args.archive_backup_root,
                 "--run-timestamp", run_ts,
