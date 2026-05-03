@@ -42,6 +42,12 @@ def main() -> None:
                         help="Root containing per-run artifact directories (strategy_trades.csv etc)")
     parser.add_argument("--output-root", type=str, default="Outputs",
                         help="Where per-program output dirs are created")
+    parser.add_argument(
+        "--archive-backup-root", type=str,
+        default=r"G:\My Drive\strategy-data-backup\portfolio_selector",
+        help="Backup destination for portfolio reports + master history CSV. "
+             "Set to empty string to skip archival.",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -94,6 +100,24 @@ def main() -> None:
 
     # Write combined summary
     _write_combined_summary(results, output_root=args.output_root)
+
+    # Archive each portfolio_selector_report.csv + append to history CSV in
+    # the Drive backup folder (or whatever --archive-backup-root points to).
+    if args.archive_backup_root:
+        try:
+            from datetime import UTC, datetime
+            import subprocess
+            run_ts = datetime.now(UTC).strftime("%Y-%m-%dT%H%M")
+            archive_cmd = [
+                "python", "scripts/archive_portfolio_run.py",
+                "--source-dir", args.output_root,
+                "--backup-root", args.archive_backup_root,
+                "--run-timestamp", run_ts,
+            ]
+            print(f"\nArchiving portfolio reports to {args.archive_backup_root} ...")
+            subprocess.run(archive_cmd, check=False)
+        except Exception as exc:
+            print(f"WARNING: portfolio archival failed: {exc}")
 
     # Print final summary
     print(f"\n{'=' * 60}")
