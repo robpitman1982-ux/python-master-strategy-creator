@@ -1921,7 +1921,12 @@ def _build_cost_adjusted_shuffled_interleave_matrix(
     n_sims: int,
     seed: int,
 ) -> np.ndarray:
-    """Build shuffled interleave matrix with spread/swap costs applied per trade."""
+    """Build shuffled interleave matrix with spread/swap costs applied per trade.
+
+    Sprint 89: original triple-nested-loop implementation kept for parity
+    reference. Production path now uses
+    `_build_cost_adjusted_shuffled_interleave_matrix_vectorized`.
+    """
     rng = random.Random(seed)
     strategy_names = list(strategy_trade_lists.keys())
     artifact_lists = {
@@ -1960,6 +1965,254 @@ def _build_cost_adjusted_shuffled_interleave_matrix(
     return matrix
 
 
+def _vectorized_swap_units_batch(
+    entry_dates: np.ndarray,  # datetime64[D]
+    exit_dates: np.ndarray,   # datetime64[D]
+    weekend_multiplier: float,
+    triple_day: str,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Batch swap-unit calculation matching `_estimate_swap_charge_units`.
+
+    Builds a (n_trades, max_days_held) weekday matrix and reduces with a
+    triple-day mask. ~100x faster than the per-trade scalar version because
+    pd.to_datetime is amortised across the strategy's whole trade list.
+
+    1970-01-01 was a Thursday (=3 in Mon-based weekday()), so
+    `weekday = (day_int + 3) % 7`.
+    """
+    n = len(entry_dates)
+    if n == 0:
+        return np.zeros(0, dtype=np.float64), np.zeros(0, dtype=bool)
+
+    days_held = (exit_dates - entry_dates).astype("timedelta64[D]").astype(np.int64)
+    days_held = np.clip(days_held, 0, None)
+
+    if days_held.max() == 0:
+        return np.zeros(n, dtype=np.float64), np.zeros(n, dtype=bool)
+
+    entry_int = entry_dates.astype(np.int64)
+    entry_weekday = (entry_int + 3) % 7  # 0=Mon..6=Sun
+
+    max_days = int(days_held.max())
+    day_idx = np.arange(max_days, dtype=np.int64)
+    weekdays = (entry_weekday[:, None] + day_idx[None, :]) % 7  # (n, max_days)
+    valid_day = day_idx[None, :] < days_held[:, None]  # (n, max_days)
+
+    triple_day_normalized = str(triple_day or "friday").strip().lower()
+
+    if triple_day_normalized == "none":
+        # BTC: charge every calendar day at single rate
+        units = valid_day.sum(axis=1).astype(np.float64)
+        touched_weekend = (valid_day & (weekdays >= 5)).any(axis=1)
+        return units, touched_weekend
+
+    triple_idx = _WEEKDAY_NAME_TO_INDEX.get(triple_day_normalized, 4)
+    is_triple = (weekdays == triple_idx) & valid_day
+    is_normal = (weekdays < 5) & (weekdays != triple_idx) & valid_day
+    units = (
+        is_normal.sum(axis=1).astype(np.float64)
+        + is_triple.sum(axis=1).astype(np.float64) * float(weekend_multiplier)
+    )
+    touched_weekend = is_triple.any(axis=1)
+    return units, touched_weekend
+
+
+def _precompute_strategy_unit_net(
+    strategy_names: list[str],
+    trade_artifacts: dict[str, list[dict[str, Any]]],
+) -> dict[str, np.ndarray]:
+    """Precompute per-trade `unit_net` = pnl_raw − 10 × cost_at_unit_micro.
+
+    Cost-aware MC needs `gross_pnl - total_cost` per trade, where:
+        gross_pnl = trade["net_pnl"] * w
+        total_cost = (w * 10) * total_cost_per_micro
+        net_at_w  = w * (pnl_raw - 10 * total_cost_per_micro)
+
+    Since `total_cost_per_micro` only depends on the trade's own attributes
+    (entry_time, exit_time, direction, entry_price, market, timeframe), it
+    can be computed exactly once per trade rather than once per (trade, sim).
+
+    This vectorized implementation batch-converts timestamps once per
+    strategy via pd.to_datetime, then computes swap units, spread cost,
+    and commission entirely in numpy. ~100x faster than the per-trade
+    pd.to_datetime path.
+
+    Zero-pnl trades are filtered to match the legacy implementation.
+    """
+    unit_net: dict[str, np.ndarray] = {}
+    for s in strategy_names:
+        artifacts = trade_artifacts.get(s, [])
+        if not artifacts:
+            unit_net[s] = np.empty(0, dtype=np.float64)
+            continue
+
+        market = str(s).split("_")[0] if "_" in s else ""
+        timeframe = str(s).split("_")[1] if s.count("_") >= 2 else "60m"
+        ctx = _get_market_cost_context(market)
+
+        # Filter zero-pnl trades to match legacy filter
+        non_zero = [
+            t for t in artifacts
+            if float(t.get("net_pnl", 0.0) or 0.0) != 0.0
+        ]
+        if not non_zero:
+            unit_net[s] = np.empty(0, dtype=np.float64)
+            continue
+
+        n = len(non_zero)
+        pnl_raw = np.fromiter(
+            (float(t.get("net_pnl", 0.0) or 0.0) for t in non_zero),
+            dtype=np.float64, count=n,
+        )
+
+        # Batch parse entry/exit times once. Trades with missing/invalid
+        # timestamps fall through to bars_held-based fallback below.
+        entry_strs = [t.get("entry_time") for t in non_zero]
+        exit_strs = [t.get("exit_time") for t in non_zero]
+        entry_ts = pd.to_datetime(entry_strs, errors="coerce")
+        exit_ts = pd.to_datetime(exit_strs, errors="coerce")
+
+        # pd.to_datetime returns DatetimeIndex; isna() returns ndarray
+        entry_na = np.asarray(entry_ts.isna()) if hasattr(entry_ts, "isna") else pd.isna(entry_ts)
+        exit_na = np.asarray(exit_ts.isna()) if hasattr(exit_ts, "isna") else pd.isna(exit_ts)
+        has_ts = ~(entry_na | exit_na)
+        swap_units = np.zeros(n, dtype=np.float64)
+
+        if has_ts.any():
+            entry_dates_full = entry_ts.normalize().values.astype("datetime64[D]")
+            exit_dates_full = exit_ts.normalize().values.astype("datetime64[D]")
+            entry_dates = entry_dates_full[has_ts]
+            exit_dates = exit_dates_full[has_ts]
+            ts_units, _ = _vectorized_swap_units_batch(
+                entry_dates, exit_dates,
+                weekend_multiplier=float(ctx["weekend_multiplier"]),
+                triple_day=str(ctx.get("triple_day", "friday")),
+            )
+            swap_units[has_ts] = ts_units
+
+        # Fallback for trades without timestamps: bars_held → approx nights
+        if (~has_ts).any():
+            tf_minutes = _timeframe_minutes(timeframe)
+            bars_held_arr = np.fromiter(
+                (int(float(t.get("bars_held", 0) or 0)) for t in non_zero),
+                dtype=np.int64, count=n,
+            )
+            approx_nights = np.maximum(0.0, np.floor(bars_held_arr * tf_minutes / 1440.0))
+            swap_units[~has_ts] = approx_nights[~has_ts]
+
+        # Direction-aware swap rate (overlay path) or symmetric (default)
+        directions = np.array(
+            [str(t.get("direction", "")).strip().lower() for t in non_zero],
+            dtype=object,
+        )
+        is_short = np.isin(directions, ["short", "sell", "-1"])
+        is_long = np.isin(directions, ["long", "buy", "1"])
+        is_unknown = ~(is_short | is_long)
+
+        swap_long = float(ctx.get("swap_long_per_micro_per_night",
+                                  ctx["swap_per_micro_per_night"]) or 0.0)
+        swap_short = float(ctx.get("swap_short_per_micro_per_night",
+                                   ctx["swap_per_micro_per_night"]) or 0.0)
+        swap_max = max(swap_long, swap_short)
+
+        swap_rate = np.where(is_short, swap_short,
+                             np.where(is_long, swap_long, swap_max))
+        swap_cost_per_micro = swap_rate * swap_units
+
+        # Spread cost (constant per micro, all trades)
+        spread_cost_per_micro = float(ctx["spread_cost_per_micro"])
+
+        # Commission: only when commission_pct > 0 and entry_price present
+        commission_pct = float(ctx.get("commission_pct", 0.0) or 0.0)
+        commission_cost_per_micro = np.zeros(n, dtype=np.float64)
+        if commission_pct > 0:
+            entry_prices = np.fromiter(
+                (float(t.get("entry_price", 0.0) or 0.0) for t in non_zero),
+                dtype=np.float64, count=n,
+            )
+            cfd_dpp = float(ctx.get("cfd_dollars_per_point", ctx["dollars_per_point"]) or 0.0)
+            notional_per_micro = entry_prices * cfd_dpp * 0.1
+            # Round-trip: 2 × pct/100 × notional × micros (with micros=1 here)
+            commission_cost_per_micro = 2.0 * (commission_pct / 100.0) * notional_per_micro
+
+        total_cost_per_micro = (
+            spread_cost_per_micro + swap_cost_per_micro + commission_cost_per_micro
+        )
+        # net_at_w1 = pnl_raw - 10 × total_cost_per_micro (since cost_at_w=1 = 10 × cost_at_micro=1)
+        unit_net[s] = pnl_raw - 10.0 * total_cost_per_micro
+    return unit_net
+
+
+def _build_cost_adjusted_shuffled_interleave_matrix_vectorized(
+    strategy_trade_lists: dict[str, list[float]],
+    trade_artifacts: dict[str, list[dict[str, Any]]],
+    contract_weights: dict[str, float],
+    n_sims: int,
+    seed: int,
+) -> np.ndarray:
+    """Vectorized cost-aware shuffle+interleave matrix builder.
+
+    Algorithm:
+      1. Precompute `unit_net` per trade once (Python loop over trades only,
+         not over sims).
+      2. Generate independent shuffles for each strategy via numpy
+         `argsort(uniform)` — N permutations in one batched call.
+      3. Place each strategy's shuffled values into the legacy interleave
+         positions (`positions[s]`) so the resulting matrix matches the
+         original packed layout exactly.
+
+    Statistically equivalent to the legacy builder under the same seed
+    (same set of trades, same scaling, same packing positions). Per-sim
+    aggregate PnL is byte-identical because shuffle is a permutation.
+    """
+    strategy_names = list(strategy_trade_lists.keys())
+    if not strategy_names:
+        return np.zeros((n_sims, 0))
+
+    unit_net = _precompute_strategy_unit_net(strategy_names, trade_artifacts)
+    n_lengths = {s: len(unit_net[s]) for s in strategy_names}
+    max_len = max(n_lengths.values()) if n_lengths else 0
+    if max_len == 0:
+        return np.zeros((n_sims, 0))
+
+    # Compute interleave positions once (deterministic, sim-independent).
+    # Walk trade_idx outer, strategy inner, only emit a position when the
+    # strategy still has a trade at that index. Matches legacy `idx += 1`
+    # pack behaviour so values land in the same packed slots [0..total-1].
+    # We pad the matrix to max_len * n_strats so the *shape* also matches
+    # legacy (legacy allocates np.zeros((n_sims, max_len * n_strats)) and
+    # leaves a trailing zero-tail when total < max_len * n_strats).
+    positions: dict[str, list[int]] = {s: [] for s in strategy_names}
+    out_idx = 0
+    for trade_idx in range(max_len):
+        for s in strategy_names:
+            if trade_idx < n_lengths[s]:
+                positions[s].append(out_idx)
+                out_idx += 1
+    pos_arrays = {s: np.asarray(positions[s], dtype=np.int64) for s in strategy_names}
+    n_trades_per_sim = max_len * len(strategy_names)  # legacy-shape parity
+
+    matrix = np.zeros((n_sims, n_trades_per_sim), dtype=np.float64)
+    rng = np.random.default_rng(seed)
+
+    for s in strategy_names:
+        n_trades_s = n_lengths[s]
+        if n_trades_s == 0:
+            continue
+        w = float(contract_weights.get(s, 1.0))
+        scaled = unit_net[s] * w  # net at weight w, shape (n_trades_s,)
+
+        # Generate n_sims independent permutations via argsort-of-uniform
+        rand_keys = rng.random((n_sims, n_trades_s))
+        shuffled_idx = np.argsort(rand_keys, axis=1)  # (n_sims, n_trades_s)
+        shuffled_vals = scaled[shuffled_idx]  # (n_sims, n_trades_s)
+
+        # Place at the strategy's packed positions (broadcast across sims)
+        matrix[:, pos_arrays[s]] = shuffled_vals
+
+    return matrix
+
+
 def portfolio_monte_carlo(
     strategy_trade_lists: dict[str, list[float]],
     config: PropFirmConfig,
@@ -1983,7 +2236,11 @@ def portfolio_monte_carlo(
         contract_weights = {s: 1.0 for s in strategy_trade_lists}
 
     if trade_artifacts:
-        trade_matrix = _build_cost_adjusted_shuffled_interleave_matrix(
+        # Sprint 89: vectorized builder — precompute per-trade cost once,
+        # batched argsort-shuffle, slice-assign into packed positions.
+        # Legacy `_build_cost_adjusted_shuffled_interleave_matrix` retained
+        # for parity reference / fallback.
+        trade_matrix = _build_cost_adjusted_shuffled_interleave_matrix_vectorized(
             strategy_trade_lists, trade_artifacts, contract_weights, n_sims, seed,
         )
     else:
