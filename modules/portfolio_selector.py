@@ -507,6 +507,145 @@ def _compute_trade_behavior_diagnostics(
     }
 
 
+def _account_balance(prop_config: "PropFirmConfig") -> float:
+    """Resolve the operator's deployment balance for a prop config.
+
+    Multi-step programs (Bootcamp, High Stakes) start at step_balances[0];
+    single-step programs (Hyper Growth, Pro Growth) start at target_balance.
+    Returns the dollar amount used to scale optimizer weights to deployable
+    CFD lots.
+    """
+    if prop_config is None:
+        return 250_000.0
+    balances = getattr(prop_config, "step_balances", None) or []
+    if balances:
+        try:
+            return float(balances[0])
+        except Exception:
+            pass
+    return float(getattr(prop_config, "target_balance", 250_000.0))
+
+
+def _compute_min_viable_weight(
+    market: str,
+    account_balance: float,
+    ref_capital: float = 250_000.0,
+) -> float:
+    """Smallest optimizer weight (at ref_capital basis) deployable on
+    `account_balance` for a given market, given The5ers MT5 min_lot.
+
+    Derivation:
+        - Optimizer weight W means W*10 micros at ref_capital.
+        - 1 micro = (futures_dpp / cfd_dpp) / 10 CFD lots.
+        - Position scales linearly: lots(deploy) = lots(ref) * (account/ref).
+        - Feasibility: lots(deploy) >= min_lot.
+
+    => W >= min_lot * ref_capital / [account_balance * (futures_dpp / cfd_dpp)]
+
+    Returns 0.0 when:
+        - The5ers overlay is disabled (no constraint enforced).
+        - Market is unknown to the overlay.
+        - cfd_dollars_per_point is null (FX) — leverage scaling is symmetric
+          and we don't lot-gate FX in this sprint.
+    """
+    if not _USE_THE5ERS_OVERLAY:
+        return 0.0
+
+    spec = _load_the5ers_specs().get(str(market), {})
+    if not spec:
+        return 0.0
+
+    min_lot = float(spec.get("min_lot", 0.01) or 0.01)
+    futures_dpp = float(spec.get("futures_dollars_per_point", 0.0) or 0.0)
+    cfd_dpp = spec.get("cfd_dollars_per_point")
+
+    # FX uses null cfd_dollars_per_point — skip
+    if cfd_dpp is None:
+        return 0.0
+    cfd_dpp = float(cfd_dpp or 0.0)
+    if cfd_dpp <= 0 or futures_dpp <= 0 or account_balance <= 0:
+        return 0.0
+
+    leverage_ratio = futures_dpp / cfd_dpp
+    return min_lot * ref_capital / (account_balance * leverage_ratio)
+
+
+def _check_portfolio_deployability(
+    weights: dict[str, float],
+    candidates_by_label: dict[str, dict],
+    prop_config: "PropFirmConfig",
+    ref_capital: float = 250_000.0,
+) -> dict[str, Any]:
+    """Check whether each strategy's weight scales to a deployable CFD lot
+    on the prop firm's actual account balance.
+
+    Returns a dict with:
+        - account_balance: float
+        - min_lot_check_passed: bool
+        - smallest_strategy_lots: float (deployed CFD lots, smallest in portfolio)
+        - infeasible_strategies: list[str] (strategy labels below min_lot)
+        - warnings: list[str] (human-readable)
+
+    When the overlay is off, returns `min_lot_check_passed=True` and
+    empty infeasible_strategies (no constraint enforced).
+    """
+    account = _account_balance(prop_config)
+    result: dict[str, Any] = {
+        "account_balance": account,
+        "min_lot_check_passed": True,
+        "smallest_strategy_lots": float("inf"),
+        "infeasible_strategies": [],
+        "warnings": [],
+    }
+
+    if not _USE_THE5ERS_OVERLAY or not weights:
+        result["smallest_strategy_lots"] = 0.0
+        return result
+
+    smallest_lots = float("inf")
+    infeasible: list[str] = []
+    warnings: list[str] = []
+
+    for name, weight in weights.items():
+        cand = candidates_by_label.get(name, {})
+        market = str(cand.get("market", ""))
+        spec = _load_the5ers_specs().get(market, {})
+        if not spec:
+            continue
+
+        min_lot = float(spec.get("min_lot", 0.01) or 0.01)
+        futures_dpp = float(spec.get("futures_dollars_per_point", 0.0) or 0.0)
+        cfd_dpp = spec.get("cfd_dollars_per_point")
+        if cfd_dpp is None or futures_dpp <= 0:
+            continue
+        cfd_dpp = float(cfd_dpp or 0.0)
+        if cfd_dpp <= 0:
+            continue
+
+        leverage_ratio = futures_dpp / cfd_dpp
+        # CFD lots at ref_capital = weight * leverage_ratio (since 1 micro = leverage_ratio/10 lots, 10 micros per W=1)
+        lots_at_ref = float(weight) * leverage_ratio
+        lots_at_account = lots_at_ref * (account / ref_capital)
+
+        smallest_lots = min(smallest_lots, lots_at_account)
+
+        if lots_at_account < min_lot:
+            infeasible.append(name)
+            warnings.append(
+                f"{name}: {lots_at_account:.4f} CFD lots < min_lot {min_lot} "
+                f"(weight={weight:.3f} on {market} at ${account:,.0f})"
+            )
+
+    if smallest_lots == float("inf"):
+        smallest_lots = 0.0
+
+    result["smallest_strategy_lots"] = smallest_lots
+    result["infeasible_strategies"] = infeasible
+    result["warnings"] = warnings
+    result["min_lot_check_passed"] = len(infeasible) == 0
+    return result
+
+
 def _supports_cost_modeling(trade_artifacts: dict[str, list[dict[str, Any]]] | None) -> bool:
     if not trade_artifacts:
         return False
@@ -2801,14 +2940,25 @@ def _write_report(
         markets = set(n.split("_")[0] for n in strat_names if "_" in n)
         n_markets = len(markets)
 
-        if final_rate > 0.6 and p95_dd < dd_limit * 0.9 and n_markets >= 3:
+        weights = p.get("micro_multiplier", p.get("contract_weights", {}))
+
+        # Sprint 88: account-aware deployability check (no-op when overlay off)
+        deployability = _check_portfolio_deployability(
+            weights or {}, cand_by_label, cfg,
+        )
+        min_lot_passed = bool(deployability["min_lot_check_passed"])
+        smallest_lots = float(deployability["smallest_strategy_lots"])
+        infeasible_strats = deployability["infeasible_strategies"]
+        deploy_warnings = deployability["warnings"]
+
+        if final_rate > 0.6 and p95_dd < dd_limit * 0.9 and n_markets >= 3 and min_lot_passed:
             verdict = "RECOMMENDED"
-        elif final_rate > 0.3 and n_markets >= 2:
+        elif final_rate > 0.3 and n_markets >= 2 and min_lot_passed:
             verdict = "VIABLE"
+        elif not min_lot_passed:
+            verdict = "INFEASIBLE_AT_ACCOUNT_SIZE"
         else:
             verdict = "MARGINAL"
-
-        weights = p.get("micro_multiplier", p.get("contract_weights", {}))
 
         # Display weights as micro contract counts (weight * 10 = micros)
         micro_display = "|".join(
@@ -2864,6 +3014,11 @@ def _write_report(
             "max_overnight_hold_share": round(max(overnight_shares) if overnight_shares else 0.0, 4),
             "max_weekend_hold_share": round(max(weekend_shares) if weekend_shares else 0.0, 4),
             "max_swap_per_micro_per_night": round(max(swap_rates) if swap_rates else 0.0, 4),
+            "account_balance": round(deployability["account_balance"], 0),
+            "min_lot_check_passed": min_lot_passed,
+            "smallest_strategy_lots": round(smallest_lots, 4),
+            "infeasible_strategies": "|".join(infeasible_strats),
+            "deployment_warnings": "; ".join(deploy_warnings)[:500],
             "robustness_score": round(p.get("robustness_score", 0.0), 4),
             "worst_rolling_20_p95": round(p.get("worst_rolling_20_p95", 0.0), 2),
             "max_losing_streak_p95": int(p.get("max_losing_streak_p95", 0)),

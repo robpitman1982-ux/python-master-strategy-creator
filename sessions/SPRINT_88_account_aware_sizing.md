@@ -2,7 +2,7 @@
 
 **Sprint number:** 88
 **Date opened:** 2026-05-03
-**Date closed:** ___
+**Date closed:** 2026-05-03
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/account-aware-sizing` (TBD)
@@ -115,6 +115,58 @@ After this sprint:
 
 Total estimated: 1-2 days code + verification.
 
-## 8. Result (filled in at sprint close)
+## 8. Result (closed 2026-05-03)
 
-TBD
+**Verdict: CANDIDATES (Phase A: min_lot deployability check shipped).**
+
+### What shipped
+- `_account_balance(prop_config)` — resolves Step 1 balance for multi-step
+  programs (Bootcamp, High Stakes), target balance for single-step (Hyper
+  Growth, Pro Growth).
+- `_compute_min_viable_weight(market, account_balance)` — formula:
+  `min_W = min_lot * ref_capital / [account_balance * (futures_dpp / cfd_dpp)]`.
+  Returns 0 (no constraint) when overlay off or market is FX (cfd_dpp null).
+- `_check_portfolio_deployability(weights, candidates, prop_config)` —
+  iterates each strategy, computes deployed CFD lots at the operator's
+  account balance, flags any below `min_lot`. Surfaces:
+    - `min_lot_check_passed` (bool)
+    - `smallest_strategy_lots` (smallest deployed CFD lot in portfolio)
+    - `infeasible_strategies` (list of labels below min_lot)
+    - `deployment_warnings` (human-readable, ; -joined)
+- `_write_report` adds 5 new columns and a new verdict tier:
+    - `account_balance`, `min_lot_check_passed`, `smallest_strategy_lots`,
+      `infeasible_strategies`, `deployment_warnings`
+    - Verdict `INFEASIBLE_AT_ACCOUNT_SIZE` overrides RECOMMENDED/VIABLE
+      whenever any strategy weight scales below min_lot at the actual
+      account balance.
+
+### What's deferred (Phase B follow-up)
+- **Leverage cap enforcement** in `optimise_sizing`: requires per-symbol
+  reference price assumptions to compute notional. Skipped this round
+  because DD constraints empirically bind first (operator's existing
+  `dd_p95_limit_pct=0.90` already keeps leverage in check).
+- **Pre-sweep rejection**: Phase A checks deployability *after* sizing
+  optimisation. A future phase could short-circuit `sweep_combinations`
+  before MC by using the *minimum representable weight* (0.1) as a proxy
+  to filter combos that can never be deployable. Deferred — current
+  approach correctly demotes infeasible portfolios in the report, which
+  is sufficient for the operator's workflow.
+
+### Tests (`tests/test_account_aware_sizing.py`)
+17 cases covering: account balance resolution per program, overlay-off
+sentinel behaviour, ES/YM/BTC at $5K thresholds, FX bypass, unknown-market
+bypass, threshold-edge passing, mixed-portfolio partial rejection. All pass.
+
+### Operational impact
+With `use_the5ers_overlay: true`, $5K Pro/Hyper Growth runs will now flag
+portfolios containing low-weight YM or BTC allocations as
+INFEASIBLE_AT_ACCOUNT_SIZE — those weights map to <0.01 CFD lots at $5K.
+The portfolio report still includes them so the operator can inspect, but
+they're demoted from RECOMMENDED. Bootcamp $250K (Step 1 = $100K) and High
+Stakes $100K are largely unaffected because account balance is high enough
+that almost any optimizer weight is deployable.
+
+### Follow-ups
+- Sprint 88 Phase B: leverage cap enforcement (low priority).
+- A/B run `portfolio_all_programs` with `use_the5ers_overlay: true` to
+  observe the deployability filter in action across all 4 programs.
