@@ -5,7 +5,7 @@
 
 **Sprint number:** 94
 **Date opened:** 2026-05-04
-**Date closed:** ___
+**Date closed:** 2026-05-04 (verdict: SUSPICIOUS — parity OK, speedup null on small dataset)
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/filter-mask-cache`
@@ -119,11 +119,35 @@ Verdict gate (smoke test on r630):
 - [ ] `verify_resume_parity.py` PASS.
 - [ ] Per-family cache stats show hits >> misses in expected ratio.
 
-## 6. Filter purity audit (filled during Stage 1)
+## 6. Filter purity audit (Stage 1 — completed 2026-05-04)
 
-| Filter class | `mask(df)` pure? | Notes |
-|--------------|------------------|-------|
-| _to be filled during audit_ | | |
+**Inventory:** 60 filter classes in `modules/filters.py`. No filter
+subclasses exist in `modules/strategy_types/` (those modules only
+contain a `build_filter_objects_from_classes` factory).
+
+**Audit method:**
+1. `grep -nE "self\.[a-z_]+\s*="` inside every `mask()` body → 0 hits.
+   Filters never mutate `self` from inside `mask`.
+2. `grep -nE "data\[.*\]\s*=|df\[.*\]\s*=|data\.[a-z_]+\s*="` inside
+   every `mask()` body → 0 hits. Filters never mutate the dataframe.
+3. `grep -nE "import random|np\.random|time\.time|datetime\.now|os\.environ"`
+   in `modules/filters.py` → 0 hits. No stochastic state, no current
+   time, no env var reads.
+4. `grep -nE "^[A-Z_]+ =|^_[a-z_]+ =" modules/filters.py` → 0 hits.
+   No module-level mutable globals.
+5. Spot-checked 3 representative `mask()` implementations
+   (TrendDirectionFilter:58, MomentumFilter:175, ATRPercentileFilter:1280)
+   — all read-only on `data`, return fresh `pd.Series`, no side effects.
+
+**Verdict: ALL 60 FILTERS ARE PURE.** Cache is safe to apply across
+the entire filter inventory without exclusions. Cache key on
+`(class_name, params_hash, dataset_fingerprint, df_length)` is
+sufficient.
+
+**Implication for cache key:** since filter parameters are stored as
+instance attributes set in `__init__`, the params hash strategy of
+`frozenset(vars(filter_obj).items())` over JSON-scalar values works.
+No filter has hidden state that escapes `vars()`.
 
 ## 7. Implementation map
 
@@ -267,3 +291,41 @@ remain useful for follow-up profiling.
 The real win is unlocking **Sprint 95 (signal-mask memoisation for
 MR)** which uses the same cache infrastructure and stacks on top.
 Sprint 94 ships the foundation; Sprint 95 ships the leverage point.
+
+## 10. Verdict (sprint close — 2026-05-04)
+
+**SUSPICIOUS** per pre-registered definition.
+
+**Smoke test on r630** (ES daily, resume_smoke_test config, identical
+config except for `PSC_FILTER_MASK_CACHE` env var):
+
+| Run | Wall clock |
+|-----|------------|
+| Cache OFF (control) | 76.1s |
+| Cache ON | 76.8s |
+| Delta | -0.7s (within noise — 1% slower) |
+
+**Parity:** PASS. `verify_resume_parity.py` reports zero behavioural
+drift on `net_pnl`/`leader_pf`/`oos_pf` row-by-row. The 1 tie-break
+warning on `short_breakout` is the same engine non-determinism
+documented in Sprint 93 — independent of the cache flag.
+
+**Test counts:** 416/416 (was 402; +14 new cache tests).
+
+**Why no speedup on this profile:** the Sprint 94 brief's profiling
+data already told us. Per-combo time is dominated by trade simulation
+(~5-7 ms) not filter mask evaluation (~0.5-1 ms total). Caching
+eliminates ~5-10% of per-combo work, hidden in the noise of a 76s
+run. ProcessPoolExecutor workers each have their own cache copy
+post-fork, so per-worker reuse is good but per-process aggregate
+savings are small.
+
+**Decision:** ship the cache as default-off infrastructure. The
+module, integration point, config flag, env override, and diagnostic
+counters all stay. Sprint 95 plugs into this same substrate to attack
+the actual bottleneck (trade-sim memoisation by combined-signal-mask
+hash). Reverting Sprint 94 work would leave Sprint 95 to rebuild the
+foundation; that's wasted effort given the parity guarantees here.
+
+**No regressions** on the existing 402-test suite. New 14 tests for
+the cache itself all pass.

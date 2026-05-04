@@ -21,6 +21,14 @@ engine:
   dollars_per_point: 50.0
   use_vectorized_trades: true
 
+  # Sprint 94: per-filter mask cache. When enabled, the per-filter `mask()`
+  # call is memoised process-locally during a sweep so the same filter+params
+  # combination only computes once instead of once per combo.
+  # Default OFF until the verdict gate locks in. Override via env var
+  # PSC_FILTER_MASK_CACHE=1 (or 0) for ad-hoc testing.
+  filter_mask_cache:
+    enabled: false
+
 # --- Pipeline controls ---
 # Local (many cores): max_workers_sweep: 10, max_workers_refinement: 10
 # Cloud 2-core droplet: set both to 2
