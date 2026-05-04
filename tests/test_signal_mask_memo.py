@@ -29,9 +29,11 @@ class _StubCfg:
 @pytest.fixture(autouse=True)
 def _isolate_memo():
     signal_mask_memo.clear_cache()
+    signal_mask_memo.reset_enabled_cache()  # Sprint 99-bis
     os.environ.pop("PSC_SIGNAL_MASK_MEMO", None)
     yield
     signal_mask_memo.clear_cache()
+    signal_mask_memo.reset_enabled_cache()  # Sprint 99-bis
     os.environ.pop("PSC_SIGNAL_MASK_MEMO", None)
 
 

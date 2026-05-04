@@ -52,8 +52,11 @@ def _cfg_fingerprint(cfg: Any) -> tuple:
     )
 
 
-def is_enabled() -> bool:
-    """Env var wins; otherwise read config (default false)."""
+_ENABLED_CACHE: bool | None = None
+
+
+def _resolve_enabled() -> bool:
+    """Compute the flag once. Env var wins; otherwise read config."""
     env = os.environ.get("PSC_SIGNAL_MASK_MEMO", "").strip().lower()
     if env in ("1", "true", "yes", "on"):
         return True
@@ -68,6 +71,21 @@ def is_enabled() -> bool:
         )
     except Exception:
         return False
+
+
+def is_enabled() -> bool:
+    """Cached flag read (Sprint 99-bis: previously re-parsed yaml every call,
+    accounting for ~73% of per-combo cost. Now resolved once per process."""
+    global _ENABLED_CACHE
+    if _ENABLED_CACHE is None:
+        _ENABLED_CACHE = _resolve_enabled()
+    return _ENABLED_CACHE
+
+
+def reset_enabled_cache() -> None:
+    """Force is_enabled() to re-evaluate on next call (test helper)."""
+    global _ENABLED_CACHE
+    _ENABLED_CACHE = None
 
 
 def get_or_compute_summary(

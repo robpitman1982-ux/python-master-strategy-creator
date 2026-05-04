@@ -120,27 +120,56 @@ class _AsyncResultFuture:
         return False
 
 
+_RECYCLING_ENABLED_CACHE: bool | None = None
+_MAXTASKSPERCHILD_CACHE: int | None = None
+
+
 def _is_recycling_enabled() -> bool:
-    """Read the recycling-pool flag. Env var `PSC_RECYCLING_POOL` overrides
-    config (1/true/yes/on -> enabled; 0/false/no/off -> disabled)."""
+    """Read the recycling-pool flag (cached). Env var `PSC_RECYCLING_POOL`
+    overrides config (1/true/yes/on -> enabled; 0/false/no/off -> disabled).
+
+    Sprint 99-bis: resolved once per process to avoid yaml-reload overhead.
+    """
+    global _RECYCLING_ENABLED_CACHE
+    if _RECYCLING_ENABLED_CACHE is not None:
+        return _RECYCLING_ENABLED_CACHE
     env = os.environ.get("PSC_RECYCLING_POOL", "").strip().lower()
     if env in ("1", "true", "yes", "on"):
+        _RECYCLING_ENABLED_CACHE = True
         return True
     if env in ("0", "false", "no", "off"):
+        _RECYCLING_ENABLED_CACHE = False
         return False
     try:
         cfg = load_config()
-        return bool(get_nested(cfg, "pipeline", "recycling_pool", default=False))
+        _RECYCLING_ENABLED_CACHE = bool(
+            get_nested(cfg, "pipeline", "recycling_pool", default=False)
+        )
     except Exception:
-        return False
+        _RECYCLING_ENABLED_CACHE = False
+    return _RECYCLING_ENABLED_CACHE
 
 
 def _maxtasksperchild() -> int:
+    """Cached read of the maxtasksperchild config value."""
+    global _MAXTASKSPERCHILD_CACHE
+    if _MAXTASKSPERCHILD_CACHE is not None:
+        return _MAXTASKSPERCHILD_CACHE
     try:
         cfg = load_config()
-        return int(get_nested(cfg, "pipeline", "maxtasksperchild", default=200))
+        _MAXTASKSPERCHILD_CACHE = int(
+            get_nested(cfg, "pipeline", "maxtasksperchild", default=200)
+        )
     except Exception:
-        return 200
+        _MAXTASKSPERCHILD_CACHE = 200
+    return _MAXTASKSPERCHILD_CACHE
+
+
+def reset_pool_flag_cache() -> None:
+    """Force re-evaluation on next call (test helper)."""
+    global _RECYCLING_ENABLED_CACHE, _MAXTASKSPERCHILD_CACHE
+    _RECYCLING_ENABLED_CACHE = None
+    _MAXTASKSPERCHILD_CACHE = None
 
 
 def create_shared_sweep_pool(

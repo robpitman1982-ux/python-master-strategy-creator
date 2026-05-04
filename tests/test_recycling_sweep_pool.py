@@ -48,20 +48,32 @@ def _check_init(_):
 
 def test_recycling_flag_env_truthy(monkeypatch):
     monkeypatch.setenv("PSC_RECYCLING_POOL", "1")
-    from modules.strategy_types.sweep_worker_pool import _is_recycling_enabled
+    from modules.strategy_types.sweep_worker_pool import (
+        _is_recycling_enabled,
+        reset_pool_flag_cache,
+    )
+    reset_pool_flag_cache()  # Sprint 99-bis: flag is cached after first call
     assert _is_recycling_enabled() is True
 
 
 def test_recycling_flag_env_falsy(monkeypatch):
     monkeypatch.setenv("PSC_RECYCLING_POOL", "0")
-    from modules.strategy_types.sweep_worker_pool import _is_recycling_enabled
+    from modules.strategy_types.sweep_worker_pool import (
+        _is_recycling_enabled,
+        reset_pool_flag_cache,
+    )
+    reset_pool_flag_cache()
     assert _is_recycling_enabled() is False
 
 
 def test_recycling_flag_default_off(monkeypatch):
     monkeypatch.delenv("PSC_RECYCLING_POOL", raising=False)
-    from modules.strategy_types.sweep_worker_pool import _is_recycling_enabled
-    # Default config has recycling_pool: false (just checked it).
+    from modules.strategy_types.sweep_worker_pool import (
+        _is_recycling_enabled,
+        reset_pool_flag_cache,
+    )
+    reset_pool_flag_cache()
+    # Default config has recycling_pool: false.
     assert _is_recycling_enabled() is False
 
 

@@ -1,0 +1,53 @@
+# Sprint 98 verification CONTROL — same as ES_5m_sprint98.yaml but flags OFF.
+# Goal: A/B vs the treatment run to measure peak RSS reduction.
+# Both runs use 40 workers (sane for both r630 88T and c240 80T).
+
+instrument_universe: "cfd_dukascopy"
+price_source: "dukascopy"
+
+sweep:
+  name: "es_5m_sprint98_control"
+  output_dir: "Outputs/es_5m_sprint98_control"
+
+datasets:
+  - path: "/data/market_data/cfds/ohlc_engine/ES_5m_dukascopy.csv"
+    market: "ES"
+    timeframe: "5m"
+
+strategy_types: "all"
+output_dir: "Outputs/es_5m_sprint98_control"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
+  use_vectorized_trades: true
+
+pipeline:
+  max_workers_sweep: 40
+  max_workers_refinement: 40
+  max_candidates_to_refine: 5
+  oos_split_date: "2020-01-01"
+  skip_portfolio_evaluation: true
+  skip_portfolio_selector: true
+
+  # Sprint 98 flags OFF (control)
+  recycling_pool: false
+  sequential_families: false
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 60

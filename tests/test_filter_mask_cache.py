@@ -22,10 +22,12 @@ from modules.vectorized_signals import compute_combined_signal_mask
 def _isolate_cache():
     """Each test gets a clean process-level cache + counters."""
     filter_mask_cache.clear_cache()
+    filter_mask_cache.reset_enabled_cache()  # Sprint 99-bis
     # Force cache OFF unless test explicitly toggles it
     os.environ.pop("PSC_FILTER_MASK_CACHE", None)
     yield
     filter_mask_cache.clear_cache()
+    filter_mask_cache.reset_enabled_cache()  # Sprint 99-bis
     os.environ.pop("PSC_FILTER_MASK_CACHE", None)
 
 
