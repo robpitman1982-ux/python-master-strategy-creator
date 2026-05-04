@@ -5,7 +5,7 @@
 
 **Sprint number:** 96
 **Date opened:** 2026-05-04
-**Date closed:** ___
+**Date closed:** 2026-05-04 (verdict: SUSPICIOUS — A/B on high_stakes_5k showed parity, exactly as pre-reg "Honest expected outcome" predicted)
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/hrp-clustering`
@@ -250,3 +250,58 @@ This sprint is **architectural infrastructure** — pays off later when
 the candidate pool grows. Gemini's framing was correct: replace blunt
 thresholds with structural mechanism so the selector doesn't need
 hand-tuned gate calibration as the pool evolves.
+
+## 9. Verdict (sprint close — 2026-05-04, A/B run completed)
+
+**SUSPICIOUS** per pre-registered threshold — exactly the "Honest
+expected outcome" predicted in section 8.
+
+**A/B run on c240** (program=`high_stakes_5k`,
+leaderboard=`/data/sweep_results/exports/ultimate_leaderboard_cfd_gated.csv`,
+runs=`/data/sweep_results/runs`):
+
+| Metric | A: HRP=OFF | B: HRP=ON | Δ |
+|--------|-----------|-----------|---|
+| Top portfolio strategy_names | N225_daily_RefinedBreakout, CAC_daily_RefinedBreakout, YM_daily_RefinedTrend | **identical** | — |
+| n_strategies | 3 | 3 | 0 |
+| n_distinct_markets | 3 | 3 | 0 |
+| n_distinct_timeframes | 1 (daily) | 1 | 0 |
+| avg active_correlation | 0.2018 | 0.2018 | 0.0% |
+| final_pass_rate | 100% | 100% | — |
+| p95_worst_dd_pct | 6.14% | 6.14% | — |
+| Selector wall-clock | 668.3s | 674.4s | +0.9% (noise) |
+
+**HRP fired correctly:** `HRP clustering: 15 clusters across 25
+strategies (cut=0.5)` — the underlying candidate pool has substantial
+structural diversity (15 clusters of mostly 1-3 strategies each). But
+the top-ranked 3-strategy combo already spans 3 distinct clusters,
+which is the maximum possible diversity score (1.0). HRP can't push a
+combo to be MORE diverse than 100% distinct, so the additive scoring
+bonus (+0.10 × 1.0) applied uniformly to the top combo and
+near-top contenders — no rank reordering occurred.
+
+**Verdict gate criteria:**
+- active_corr drop ≥10%: FAIL (+0.0%)
+- n_markets +1: FAIL (+0)
+- n_timeframes +1: FAIL (+0)
+- ANY of above (CANDIDATES): FAIL → **SUSPICIOUS**
+
+**Why ship default-off rather than revert:**
+1. Pre-reg explicitly predicted this outcome on the 7-program runs.
+   "The win shows up if/when a less-constrained search produces a
+   fundamentally different pool — e.g. when the operator adds a new
+   market or timeframe."
+2. HRP infrastructure correctly identifies clusters and applies the
+   diversity bonus. Functional correctness verified.
+3. Zero behavioural risk (default-off; flag must be explicitly enabled).
+4. The infrastructure pays off when the candidate pool grows — adding
+   intraday markets or new instrument classes will make HRP relevant
+   without requiring hand-tuned correlation threshold recalibration.
+
+**Reporting follow-up:** the `cluster_diversity` value is computed
+in-memory in `_sweep_chunk` but doesn't appear in
+`portfolio_selector_report.csv`. Surfacing it would let operators see
+the structural-diversity score directly. Filed as low-priority polish.
+
+**No regressions** — selector parity zero-tolerance behavioural match
+between A and B (top portfolio identical down to strategy_names).

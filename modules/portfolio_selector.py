@@ -3078,6 +3078,20 @@ def portfolio_robustness_test(
 # MAIN ORCHESTRATOR
 # ============================================================================
 
+def _resolve_hrp_flag(ps_cfg: dict) -> bool:
+    """Sprint 96: env var PSC_HRP_OVERRIDE wins over config flag.
+
+    Mirrors the override pattern used by Sprints 94/95/98 (PSC_FILTER_MASK_CACHE,
+    PSC_SIGNAL_MASK_MEMO, PSC_RECYCLING_POOL).
+    """
+    env = os.environ.get("PSC_HRP_OVERRIDE", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    return bool(ps_cfg.get("use_hrp_clustering", False))
+
+
 def run_portfolio_selection(
     leaderboard_path: str = "Outputs/ultimate_leaderboard_cfd.csv",
     runs_base_path: str = "Outputs/runs",
@@ -3248,8 +3262,9 @@ def run_portfolio_selection(
         max_ecd=float(ps_cfg.get("max_ecd", 0.03)),
         candidate_cap=int(ps_cfg.get("sweep_top_n", 50)),
         max_combinations=int(ps_cfg.get("max_combinations", 10_000_000_000)),
-        # Sprint 96: HRP clustering (default OFF; enables structural diversity bonus)
-        use_hrp_clustering=bool(ps_cfg.get("use_hrp_clustering", False)),
+        # Sprint 96: HRP clustering (default OFF; enables structural diversity bonus).
+        # Env var PSC_HRP_OVERRIDE=1/0 wins over config (mirrors other Sprint 9X flags).
+        use_hrp_clustering=_resolve_hrp_flag(ps_cfg),
         hrp_cut_threshold=float(ps_cfg.get("hrp_cut_threshold", 0.5)),
         max_per_cluster=int(ps_cfg.get("max_strategies_per_cluster", 2)),
     )
