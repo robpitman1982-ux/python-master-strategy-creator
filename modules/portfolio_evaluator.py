@@ -245,20 +245,31 @@ def _rebuild_strategy_from_leaderboard_row(
     if combo_name in ["", "NONE"]:
         return pd.DataFrame(), "", EngineConfig(symbol=market_symbol)
 
-    combo_row = _load_combo_reference_row(outputs_dir, strategy_type_name, combo_name)
-    if combo_row:
-        combo_classes = _parse_filter_classes_from_combo_row(combo_row)
+    # Session 97 Bug #3 fix: when leader is refined, prefer the refined row's
+    # actual filter combo (`best_refined_filter_class_names`). The refined
+    # winner can come from any of the N promoted candidates' refinement runs,
+    # not necessarily the same combo as `best_combo_*` (which is the best
+    # raw-sweep combo). Without this, rebuild loads the wrong filters and
+    # parity fails when best_combo != winning refined combo.
+    refined_filters = str(row.get("best_refined_filter_class_names", "")).strip()
+    combo_row = None
+    if leader_source == "refined" and refined_filters and refined_filters not in {"", "nan", "NONE"}:
+        combo_classes = _parse_filter_classes_from_combo_row({"filters": refined_filters})
     else:
-        # Fallback: parse filter classes directly from leaderboard row columns
-        # best_combo_filter_class_names or best_combo_filters contain the filter list
-        fallback_filters = str(row.get("best_combo_filter_class_names", "")).strip()
-        if not fallback_filters:
-            fallback_filters = str(row.get("best_combo_filters", "")).strip()
-        if fallback_filters:
-            print(f"      Combo not in promoted_candidates, using leaderboard filters: {fallback_filters}")
-            combo_classes = _parse_filter_classes_from_combo_row({"filters": fallback_filters})
+        combo_row = _load_combo_reference_row(outputs_dir, strategy_type_name, combo_name)
+        if combo_row:
+            combo_classes = _parse_filter_classes_from_combo_row(combo_row)
         else:
-            combo_classes = []
+            # Fallback: parse filter classes directly from leaderboard row columns
+            # best_combo_filter_class_names or best_combo_filters contain the filter list
+            fallback_filters = str(row.get("best_combo_filter_class_names", "")).strip()
+            if not fallback_filters:
+                fallback_filters = str(row.get("best_combo_filters", "")).strip()
+            if fallback_filters:
+                print(f"      Combo not in promoted_candidates, using leaderboard filters: {fallback_filters}")
+                combo_classes = _parse_filter_classes_from_combo_row({"filters": fallback_filters})
+            else:
+                combo_classes = []
 
     if not combo_classes:
         print(f"      No filter classes resolved for {combo_name}")

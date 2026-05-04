@@ -280,6 +280,60 @@ def test_rebuild_parity_short_mr_signal_exit_fast_sma(synthetic_data, tmp_path):
     )
 
 
+def test_rebuild_uses_best_refined_filters_when_leader_is_refined(synthetic_data, tmp_path):
+    """Bug #3 (Session 97): when the refined winner came from a different
+    promoted candidate than `best_combo_*`, rebuild must use
+    `best_refined_filter_class_names` (the actual winning combo) — not
+    `best_combo_filter_class_names` (which is the best raw-sweep combo).
+
+    Setup: native run uses filter combo X. Build a leaderboard row with
+    `best_combo_filter_class_names = Y` (different combo) but
+    `best_refined_filter_class_names = X`, leader_source='refined'. Rebuild
+    must produce the X result (matching native), not the Y result.
+    """
+    filter_x = ["DistanceBelowSMAFilter", "DownCloseFilter", "TwoBarDownFilter"]
+    filter_y = ["DistanceBelowSMAFilter", "ReversalUpBarFilter", "InsideBarFilter"]
+
+    # Native run with combo X
+    native_pnl_x = _run_strategy_native(
+        "mean_reversion", filter_x, synthetic_data,
+        timeframe="5m", market_symbol="NQ",
+        hold_bars=24, stop_distance_atr=1.0,
+    )
+
+    # Build a leaderboard row that says best_combo=Y but best_refined=X (leader=refined).
+    row = pd.Series({
+        "strategy_type": "mean_reversion",
+        "leader_source": "refined",
+        "leader_strategy_name": "TestRefined",
+        "best_combo_strategy_name": "ComboY",
+        "best_combo_filter_class_names": ",".join(filter_y),
+        "best_refined_filter_class_names": ",".join(filter_x),
+        "leader_hold_bars": 24,
+        "leader_stop_distance_atr": 1.0,
+        "leader_min_avg_range": 0.0,
+        "leader_momentum_lookback": 0,
+        "leader_exit_type": "time_stop",
+        "leader_trailing_stop_atr": float("nan"),
+        "leader_profit_target_atr": float("nan"),
+        "leader_signal_exit_reference": float("nan"),
+        "leader_net_pnl": 0.0,
+    })
+
+    trades_df, _, _ = _rebuild_strategy_from_leaderboard_row(
+        row=row, data=synthetic_data, outputs_dir=tmp_path,
+        market_symbol="NQ", timeframe="5m",
+    )
+    trades_df = _normalize_trade_columns(trades_df)
+    rebuilt_pnl = float(pd.to_numeric(trades_df["net_pnl"], errors="coerce").fillna(0.0).sum()) if not trades_df.empty else 0.0
+
+    assert rebuilt_pnl == pytest.approx(native_pnl_x, rel=1e-6, abs=0.01), (
+        f"Rebuild used wrong filter combo. Expected combo X result "
+        f"(native=${native_pnl_x:,.2f}) but got ${rebuilt_pnl:,.2f}. "
+        f"Likely fell back to best_combo (Y) instead of best_refined (X)."
+    )
+
+
 def test_rebuild_parity_long_mr_signal_exit_fast_sma(synthetic_data, tmp_path):
     """Sanity: long MR with signal_exit/fast_sma also rebuilds with parity."""
     filter_class_names = ["DistanceBelowSMAFilter", "DownCloseFilter", "TwoBarDownFilter"]

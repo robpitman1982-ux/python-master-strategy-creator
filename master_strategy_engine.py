@@ -520,6 +520,14 @@ def build_family_summary_row(
         "best_refined_trailing_stop_atr": _extract_best_refined_param(best_refined, "trailing_stop_atr", None),
         "best_refined_profit_target_atr": _extract_best_refined_param(best_refined, "profit_target_atr", None),
         "best_refined_signal_exit_reference": _extract_best_refined_param(best_refined, "signal_exit_reference", None),
+
+        # Session 97 Bug #3 fix: record the filter combo that produced the
+        # winning refined row. Refinement runs across N candidates × grid; the
+        # winner's combo can differ from `best_combo_*` (which is the best
+        # raw-sweep combo, pre-refinement). Without this, rebuild loads the
+        # wrong filter chain and parity fails.
+        "best_refined_filters": str(best_refined.get("combo_filters", "")),
+        "best_refined_filter_class_names": str(best_refined.get("combo_filter_class_names", "")),
     }
 
 
@@ -761,6 +769,8 @@ def build_family_leaderboard(
         "best_refined_trailing_stop_atr",
         "best_refined_profit_target_atr",
         "best_refined_signal_exit_reference",
+        "best_refined_filters",
+        "best_refined_filter_class_names",
     ]
 
     return leaderboard[[c for c in keep_cols if c in leaderboard.columns]].copy()
