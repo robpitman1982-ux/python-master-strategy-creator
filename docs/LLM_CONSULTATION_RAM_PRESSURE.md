@@ -209,4 +209,164 @@ End-to-end winner across all 7 prop firm programs: same 3-strategy daily portfol
 
 ---
 
-Last updated: 2026-05-04 — Session 95 (post-Sprint-92 reframe)
+Last updated: 2026-05-04 — Session 95 (Sprints 93/94/95 shipped; consultation round 4 below)
+
+---
+
+## ROUND 4 — Sprint 93-95 results + new consultation question
+
+**For ChatGPT-5 / Gemini 2.5 Pro:** This section is the live update. The
+Round 1-3 sections above are historical context. The actionable question
+is **Q7-R4** at the end of this section — please answer that one.
+
+### What shipped since Round 3 (commits on main)
+
+| Sprint | Goal | Verdict | Wall-clock impact (ES daily smoke, 75-78s) |
+|--------|------|---------|---------------------------------------------|
+| **93** Engine resume logic | Per-family on-disk CSV detection + config fingerprint guard so kill+restart only loses the in-flight family | **CANDIDATES** | 75.5s → 34.0s when 6 of 15 families resume from disk = **55% saved** |
+| **94** Filter mask cache | Cache per-filter `mask(data)` once per family; combos ANDed via `np.logical_and.reduce` | **SUSPICIOUS** | 76.1s → 76.8s = **+0.9% (within noise)** |
+| **95** Signal-mask memoisation | Cache `engine.results()` keyed on `hash(combined_signal_mask)` so combos with identical signal masks share the trade-sim result | **SUSPICIOUS** | 78.1s → 77.1s = **-1.3% (within noise)** |
+
+All three sprints: 430/430 tests pass, zero behavioural drift on the
+parity check (`net_pnl`/`leader_pf`/`oos_pf` identical row-by-row vs
+control). Default-off in config. Env var override (`PSC_*`) for ad-hoc
+testing.
+
+### What we know empirically
+
+- **Sprint 93 was the structural unblocker.** No more "kill loses 6 hours
+  of completed family work". Verdict-gate smoke test passed all 5 stages.
+  This was the highest-impact deliverable of the three.
+- **Sprints 94 and 95 are functionally correct but show no measurable
+  speedup on the small dataset (ES daily, 4163 bars).** Both produced
+  parity-clean but indistinguishable-from-noise wall-clock results.
+- **Engine has pre-existing tie-break non-determinism** in refinement
+  sort: when two refined candidates tie on `net_pnl`/`profit_factor`/
+  `average_trade`, the parallel-worker scheduling determines which
+  becomes the leader. Documented in Sprint 93. Affects ~1 of 15 families
+  per run on small datasets. NOT introduced by 94 or 95 — was there
+  already.
+- **Per-worker collision rate is opaque** for Sprint 95. Workers fork
+  from parent, each gets ~775 of 31,008 MR combos, and their cache
+  state doesn't aggregate back to parent. Adding aggregation would
+  require a Manager dict or stats file side channel — scoped out of 95.
+
+### Three theories for why 94 and 95 went SUSPICIOUS
+
+1. **Small-dataset smoke gate is inadequate.** ES daily is 4163 bars,
+   ~6.8 ms per combo, ~75s total dataset wall-clock. Filter-mask eval
+   and trade-sim are fast in absolute terms; even a 30% hit rate saves
+   sub-millisecond per combo. On a 5m dataset (470k bars, ~275 ms per
+   combo per Round 3 profiling), the same hit rate would save tens of
+   seconds. Pre-reg threshold (10% wall-clock) was set against the
+   small-dataset baseline and may be undermeasuring leverage.
+2. **Trade simulation isn't actually the per-combo bottleneck on small
+   datasets.** Profiling (Round 3 section 2b) showed MR per-combo cost
+   is dominated by trade-sim on the BIG dataset (60m: 2h 22m for one
+   family at 6.77 ms/combo × 31,008 combos). On the SMALL dataset,
+   metric computation + result-dict building may be a larger share of
+   per-combo time, which neither cache addresses.
+3. **The ProcessPoolExecutor fork model defeats both caches.** Each
+   worker has its own CoW copy of the cache. Within a worker (~775
+   combos for MR), distinct filter combos that produce identical masks
+   are sparse — most "mask collisions" happen across different
+   workers, where caches don't share. Sprint 94's per-filter cache
+   has the same issue but is less affected because all 10 unique
+   filters get cached after ~10 combos in any worker.
+
+### What's still open
+
+- **Layer C (tail co-loss)** still disabled — Gemini Round 2 recommended
+  replacement with co-LPM2 or lower-tail dependence coefficient. Not
+  attempted yet.
+- **ECD gate** still disabled.
+- **Walk-forward** still not consumed by the selector. Gemini Round 2
+  argued for moving it from post-ultimate to family-leaderboard stage.
+- **HRP clustering in selector** (Gemini Q9 Round 2) — argued as the
+  architectural replacement for the loosened correlation gates. Sprint
+  96 is queued.
+- **Numba JIT on `vectorized_trades.py`** — Sprint 97 in queue. Targets
+  the actual per-combo bottleneck per profiling.
+- **5m sweep RAM crisis** is still unresolved. Sprint 93 makes it safer
+  to experiment (kill+restart cheap) but no fix has shipped.
+
+### The pattern we want validated
+
+After Sprint 95, **two consecutive engine-side optimisations have come
+back SUSPICIOUS** (parity-clean, no measurable speedup on the smoke
+gate). The engineering instinct is to ship them default-off and move
+on. But there's a deeper question: are we hitting a **measurement
+limit** (smoke too small), a **architecture limit** (fork model
+defeats caching), or a **target-selection limit** (we're optimising
+the wrong layer of the engine)?
+
+### Q7-R4 — Where do we point next?
+
+You're advising an operator who:
+
+- Has 264 cluster threads available, mostly idle.
+- Has a parity-tested vectorised engine that's already 14-23x faster
+  than the original loop (Session 61, zero-tolerance parity tests).
+- Has a working selector that produces RECOMMENDED portfolios for all
+  7 prop-firm programs (cost-aware MC vectorised in Sprint 89).
+- Is operating under the assumption that "5m sweeps take too long /
+  RAM-crash" is the next big problem to solve, but hasn't yet
+  re-tested on 5m post-Sprint-93.
+- Just shipped 2 SUSPICIOUS sprints back-to-back at the engine layer.
+
+**Concrete question:** what's the right next move?
+
+Pick exactly one of:
+
+(a) **Re-test Sprints 94 + 95 on a 5m or 60m smoke** before declaring
+    them dead. The hypothesis is that the small-dataset smoke gate
+    undermeasures leverage. Sprint 93 makes this cheap (kill any
+    failed run, resume from where it stopped). Cost: ~1-3 hours of
+    cluster time per dataset.
+
+(b) **Revert Sprints 94 and 95 entirely**, keep Sprint 93, declare
+    engine-side optimisation a dead end for now, and pivot to the
+    selector layer (Sprint 96 HRP, then post-ultimate gate
+    improvements like walk-forward and Layer C replacement). The
+    engine optimisation work returns later, post-Numba-JIT (Sprint
+    97), with profiling data to drive the design.
+
+(c) **Skip both 94 and 95 verification**, leave them shipped as
+    default-off, and go straight to **Sprint 97 (Numba JIT on
+    vectorised_trades inner kernel)** because profiling already
+    identified trade-sim as the per-combo bottleneck. The engine win
+    expected from Numba (2-5×) is much larger than what the caches
+    could provide and is not Amdahl-bounded the same way.
+
+(d) **Pause all engine work and focus entirely on the selector** —
+    Sprint 96 (HRP clustering replacing loosened gates) plus the
+    Layer C / ECD / walk-forward items. The selector currently passes
+    96.4% of strategies through (per Round 1 audit) — fixing that is
+    a bigger pass-rate-quality lever than any engine speedup.
+
+(e) **Something we haven't considered.** If our framing is wrong,
+    please reframe.
+
+**For your answer:**
+1. Pick one of (a)/(b)/(c)/(d)/(e) and defend it in 3-5 sentences.
+2. Tell us which of the three theories above (small-dataset / target
+   selection / fork model) you think best explains the SUSPICIOUS
+   pattern, OR propose a fourth theory.
+3. **Anti-convergence flag:** if your answer aligns closely with the
+   "obvious safe" answer (which we'd guess is some form of (b)), tell
+   us where you held back and what your bolder take would be.
+
+### Constraints (please respect)
+
+- Do NOT recommend re-doing Sprint 84 work (canonical trade emission).
+  That shipped 36 hours ago. The post-ultimate gate is fail-closed on
+  missing trade artifacts.
+- Do NOT recommend rewriting the vectorised engine. Zero-tolerance
+  parity tests are guarding it for a reason.
+- Do NOT recommend "buy more RAM" or "rewrite in Rust". g9 hardware
+  upgrade is already in flight.
+- Specific code-level recommendations beat abstract critique.
+
+---
+
+Last updated: 2026-05-04 — Session 95 (post-Sprint-95, Round 4 questions)
