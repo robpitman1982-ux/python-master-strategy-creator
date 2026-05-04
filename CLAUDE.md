@@ -329,4 +329,4 @@ Key sections:
 **Live execution**: Contabo VPS (89.117.72.49), MT5, The5ers account. Not part of compute cluster.
 
 ## Last updated
-2026-04-19 — Session 69: Cleanup — cloud code deleted, configs fixed, local cluster is sole compute
+2026-05-05 — Session 97: 3 rebuild parity bugs found+fixed (direction default, vectorized dispatch, best_refined_filter tracking); 10-market overnight 5m sweep across r630/gen8/g9; SHM feature design saved for next sprint

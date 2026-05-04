@@ -3,6 +3,34 @@
 > Each session adds an entry at the TOP of this file.
 > Format: date, what was done, what's next.
 
+## 2026-05-04 → 2026-05-05 — Session 97: Three rebuild parity bugs + 10-market overnight 5m sweep
+
+**What was done**:
+
+Surfaced and fixed 3 independent rebuild parity bugs that had been quietly producing wrong PnL on every accepted short-side strategy. Hunt triggered by NQ 5m family-split distributed-run validation showing PARITY_FAILED on gen8's 3 short strategies.
+
+- **Bug #1 — Direction default in rebuild EngineConfig** (commit `f4424ce`):
+  `_rebuild_strategy_from_leaderboard_row()` constructed `EngineConfig` without `direction=`, defaulting "long". ShortMR/ShortTrend/ShortBreakout traded the wrong way on rebuild → opposite-sign PnL. Fix: pull `direction = strategy_type.get_engine_direction()` and set on EngineConfig.
+
+- **Bug #2 — Rebuild always called Python-loop engine.run()** (commit `235f993`):
+  Rebuild ignored `cfg.use_vectorized_trades` and always took the Python loop. The Python-loop signal_exit logic at `engine.py:223` is hardcoded long-only (`close >= fast_sma`); short signal_exit silently fell back to time_stop. Fix: dispatch to `engine.run_vectorized()` when configured, matching the sweep worker pattern.
+
+- **Bug #3 — Leaderboard didn't track winning refined combo** (commit `aa961ff`):
+  Refinement runs N candidates × grid; the winner can come from any candidate's combo. Leaderboard recorded `best_combo_*` (best raw-sweep combo) but never recorded which candidate's refinement produced the leader. When they differed, rebuild loaded the wrong filters (35% PnL divergence on r630 long trend). Fix: write `best_refined_filters` + `best_refined_filter_class_names` to family_leaderboard; rebuild prefers those when leader_source == "refined".
+
+- **Backfill script** (commit `1f1c50d`): `scripts/backfill_best_refined_filters.py` repopulates the missing column on pre-fix leaderboards by reading refinement_narrow CSVs. Lets old runs be repaired without re-running the sweep.
+
+**Validation harness — full NQ 5m**: 15 strategy types across 3 hosts in parallel, all bit-exact OK (gen8 3/3, r630 3/3, g9 9/9 = 15/15) after fixes.
+
+**10-market overnight 5m sweep launched**: r630 (ES, CL, GC, YM), gen8 (SI, EC, JY), g9 (BP, AD, BTC) with Sprint 98 RAM flags ON. By session close: 5 markets complete with 68 accepted strategies, 0 PARITY_FAILED.
+
+- **Tests**: 87/87 (7 new parity regression tests + 80 existing).
+- **Files added**: `tests/test_rebuild_direction_parity.py`, `scripts/backfill_best_refined_filters.py`, `scripts/generate_5ers_5m_configs.py`, `scripts/run_5ers_overnight_queue.sh`, `configs/local_sweeps/{ES,CL,GC,YM,SI,EC,JY,BP,AD,BTC}_5m_5ers.yaml`, `docs/SHARED_MEMORY_FEATURES_DESIGN.md`, `sessions/SESSION_97_rebuild_parity_bugs_and_5ers_overnight.md`.
+
+**What's next**: Confirm overnight queue final state. Implement shared-memory feature DataFrame per the saved design — projected r630 worker RSS 793MB → 250MB, headroom for 70-80 workers vs current 40, ~30-40% faster wall-time on big 5m markets.
+
+---
+
 ## 2026-04-04 — Session 61: Vectorized Trade Simulation Loop
 
 **What was done**:
