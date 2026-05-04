@@ -285,3 +285,46 @@ sweep when one is queued — that's the actual benchmark.
 
 **No regressions** on the 430-test suite. New 10 wrapper tests all
 green on Linux.
+
+## 10. Verdict UPGRADED — 2026-05-04 session 96 5m heavy A/B
+
+The deferred RAM verification ran in session 96 with parallel
+treatment + control on r630 (Sprint 98 flags ON) and c240 (Sprint 98
+flags OFF). Both ran the same `ES_5m_sprint98.yaml` config,
+40 workers each, RSS sampled every 30s.
+
+**At the family transition (3 minutes into trend family, 04:02 UTC):**
+
+| Metric | r630 treatment (flags ON) | c240 control (flags OFF) | Δ |
+|--------|---------------------------|--------------------------|---|
+| Peak total RSS | 35.8 GB | **51.6 GB** | -30.6% on treatment |
+| Peak swap | 108 MB (clean) | **3.2 GB** (swap-thrash starting) | massive |
+| Worker count at transition | 80 → drops to 0 (sequential teardown) | 80 (sustained) | — |
+
+The control hit the same swap-thrash signature that caused the
+original 5m RAM crisis on r630/g9/gen8. The treatment did not. **The
+pre-reg verdict gate (≥30% peak RSS reduction) is met.**
+
+The RSS sampler raw data is archived at
+`Outputs/sprint98_rss_evidence/r630_treatment_rss.csv` for future
+reference (75 samples over ~36 min of treatment run).
+
+**Verdict promoted: SUSPICIOUS → CANDIDATES.**
+
+The two flags work as designed:
+- `recycling_pool` (`maxtasksperchild=200`) prevents per-worker
+  private-dirty heap accumulation
+- `sequential_families` caps peak workers to single-pool size by
+  tearing down one family's pool before next family starts
+
+**Operator action:** flip `pipeline.recycling_pool` and
+`pipeline.sequential_families` to `true` in any 5m sweep config
+(e.g. `configs/local_sweeps/ES_5m.yaml`) to enable the protection.
+The default-off behaviour is preserved for backward compat on
+non-5m configs.
+
+**Note on the worker-count interplay:** the original 5m RAM crisis
+was driven by `max_workers_sweep: 82` over-subscription + heap
+accumulation. Sprint 98's flags solve the heap accumulation. Reducing
+worker count from 82 → 40 also addresses the over-subscription. The
+combination is what makes 5m sweeps stably complete on the cluster.

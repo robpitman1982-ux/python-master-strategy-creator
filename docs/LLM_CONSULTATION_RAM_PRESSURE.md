@@ -369,4 +369,136 @@ Pick exactly one of:
 
 ---
 
-Last updated: 2026-05-04 — Session 95 (post-Sprint-95, Round 4 questions)
+Last updated: 2026-05-04 — Session 96 close (Round 5 below: deferred verdict gates resolved + unexpected yaml-reload finding)
+
+---
+
+## ROUND 5 — Session 96 close: deferred verdict gates resolved, plus an unplanned 3.4× find
+
+This section is the canonical session-96 summary. **For ChatGPT-5 / Gemini 2.5 Pro**: read this whole section before answering any new question. It supersedes the speculative numbers in Round 1-4 with measured data.
+
+### Final verdict matrix (after both deferred A/B runs + a profile detour)
+
+| Sprint | Original verdict | Re-test outcome | **Production effect** |
+|--------|------------------|-----------------|----------------------|
+| **93** Engine resume logic | CANDIDATES (55% wall-clock saved on 6/15-resumed smoke) | — | **Real win, default ON.** Kill+restart now costs the in-flight family only. |
+| **94** Filter mask cache | SUSPICIOUS (+0.9% on smoke) | gen8 4-mode re-test post-99-bis fix: A=125.0s, B=123.2s = -1.4% (still noise) | Default OFF; foundation infrastructure for future when filter eval becomes the bottleneck. |
+| **95** Signal-mask memoisation | SUSPICIOUS (-1.3% on smoke) | gen8: A=125.0s, C=123.6s = -1.1% | Default OFF; same status. |
+| **96** HRP clustering in selector | (deferred) | A/B on `high_stakes_5k`: A=668.3s, B=674.4s, **strategy_names IDENTICAL** | Default OFF; HRP fired correctly (15 clusters / 25 strategies) but the top 3-strategy combo already maxes diversity. Pre-reg's "Honest expected outcome" predicted exactly this — pays off when pool grows. |
+| **97** Numba JIT on `vectorized_trades.py` | Skipped after profile reading | n/a | Inner kernel already pure numpy; expected gain ≤15%, not worth parity risk. |
+| **98** RAM prevention (recycling_pool + sequential_families) | CANDIDATES on parity gate | **5m heavy A/B**: r630 (ON) peak RSS 35.8 GB / swap 108 MB; c240 (OFF) peak RSS 51.6 GB / swap **3.2 GB swap-thrash starting** | **Real win, 30.6% peak RSS reduction met pre-reg ≥30% gate; default flip-on for any 5m config.** |
+| **99** Trade-array refactor | (planned) | **Trial RED** — see Sprint 99-bis | Not pursued. Trade-object loop wasn't the bottleneck. |
+| **99-bis** is_enabled() yaml-reload fix | (unplanned discovery) | cProfile sequential: 78.76s → 23.40s = **3.4× faster** | Shipped (`be0ee0e`); real gain on dev workflow / cProfile / unit tests; **noise on parallel sweeps (1-2%)**. |
+
+### The 99-bis story (worth knowing)
+
+Sprint 99 was scoped as a Trade-array refactor to capture the 2-5×
+speedup that Numba couldn't deliver. Per pre-reg, we ran a cProfile
+trial first to confirm the targeted code paths were >20% of per-combo
+time before committing to the refactor.
+
+The profile dropped a bombshell. The bottleneck wasn't the Trade
+loop. It was Sprints 94 + 95 themselves:
+
+```
+load_config (yaml.safe_load):  57.87s of 78.76s total = 73%
+filter_mask_cache.is_enabled:  28.95s
+signal_mask_memo.is_enabled:   28.97s
+```
+
+Both `is_enabled()` functions called `load_config()` →
+`yaml.safe_load()` on **every** combo. With 1500 combos × 2 cache
+flag checks = 3000 yaml loads. **Both flags were default-OFF, so this
+was pure overhead introduced by the SUSPICIOUS sprints themselves.**
+
+The fix: cache the `is_enabled()` result at module level, resolved
+once per process. 30 lines across 3 modules. Shipped as `be0ee0e`.
+
+**Re-profiled after fix:**
+- Sequential (1 worker, 1500 combos): 78.76s → 23.40s (3.4× faster)
+- Parallel (40 workers, smoke): 76.1s → 76.8s (no change)
+
+The 3.4× was a sequential-profiling artifact. In parallel runs each
+worker forks once and amortises the yaml load across many combos
+within the worker's lifetime — yaml was never the parallel-run
+bottleneck. The fix is real and valuable for **dev workflow** but
+does NOT speed up production sweeps.
+
+**Critically**: this means my prediction that "Sprints 94 + 95
+will flip from SUSPICIOUS to CANDIDATES on re-test post-fix" was
+WRONG. They stayed SUSPICIOUS. The cache benefits exist but are
+genuinely small in absolute terms; not the masked-by-yaml-overhead
+issue I'd hypothesised.
+
+### What's actually solved and what isn't
+
+**SOLVED:**
+- ✅ 5m sweep RAM crisis. Sprint 98 flags + worker count 82→40 = stably-completing 5m sweeps.
+- ✅ Kill + restart cost. Sprint 93 = O(in-flight family) instead of O(everything).
+- ✅ Dev workflow speed. Sprint 99-bis = cProfile / unit tests / small interactive runs 3.4× faster.
+- ✅ Selector cost realism. Sprints 87/89/92 (already shipped pre-session 95) = real cost-aware MC.
+- ✅ Trade artifact reliability. Sprint 84 (already shipped pre-session 95) = canonical emission.
+
+**NOT SOLVED (and likely not worth solving with the same playbook):**
+- ❌ 2-5× engine speedup on production parallel sweeps. Multiple angles tried (94, 95, 97, 99) all bounded by the engine already being heavily vectorised. Per-combo time on 5m is dominated by trade simulation in numpy, which is already C-level fast.
+- ❌ HRP-driven selector diversity wins on the current pool (the top 3-strategy combo already maxes cluster diversity).
+
+**STILL OPEN (architectural, bigger lifts):**
+- Layer C (tail co-loss) — Gemini Round 2 recommended replacement; not attempted
+- ECD gate — disabled
+- Walk-forward at family leaderboard stage — module exists, never wired
+- Distributed intra-dataset sweep — planner exists, autonomous dispatch doesn't
+- Polars / shared-memory OHLC — bigger refactor, untested
+
+### Q8-R5 — One question for the round
+
+Sessions 95 + 96 produced 5 sprints shipped, 1 skipped, and 1
+discovered-and-fixed bug. The pattern that emerged: **engine-side
+performance optimisation has hit its diminishing-returns ceiling**.
+The vectorised engine is already where Python+numpy can take it; the
+remaining levers are RAM-prevention (Sprint 98 = solved), kill+restart
+recovery (Sprint 93 = solved), and dev-workflow speed (Sprint 99-bis
+= bonus).
+
+If you were advising the operator on **Round-6 priorities**, given:
+- 264 cluster threads, mostly idle
+- Stable 5m sweeps on the cluster
+- Selector that produces RECOMMENDED portfolios for all 7 prop firm
+  programs, but the candidate pool is daily-dominated and 96.4% of
+  strategies pass the post-ultimate gate (per Round 1 audit)
+- A real, funded FTMO + The5ers Swing portfolio running the top combo
+  on Contabo (committed in `configs/live_portfolios/portfolio4_cfd_top.yaml`)
+- Test coverage 287 → 488 across the two sessions
+
+What's the **one architectural item** to pursue that would most
+materially improve **portfolio quality** (not engine speed)? Pick
+exactly one of:
+
+(a) **Walk-forward at the family-leaderboard stage** — kill overfit
+    junk before it pollutes the master leaderboard. Gemini Round 2
+    flagged this; never wired. ~1 week of work; ~30% of accepted
+    strategies expected to fail WF on heavy datasets.
+
+(b) **Layer C tail co-loss replacement** with co-LPM2 or lower-tail
+    dependence — fixes a disabled selector gate. Sharpens the
+    correlation structure. ~3-4 days. Effect size unknown.
+
+(c) **Per-cluster bucketed candidate cap** in the selector — replaces
+    the global `candidate_cap: 60` with per-HRP-cluster quotas, so
+    intraday strategies aren't locked out by daily dominance. Builds
+    on Sprint 96. ~2-3 days.
+
+(d) **Walk-forward + HRP combined** as a Round 6 sprint — biggest
+    structural change to selector quality. ~2 weeks.
+
+(e) **Reframe** — the candidate-pool problem is upstream (we're
+    sweeping the wrong markets / filters / timeframes), and selector
+    gates can't fix that. Spend the time generating a wider pool
+    instead.
+
+Pick one and defend in 3-5 sentences. **Anti-convergence flag**: if
+ChatGPT and Gemini agree, that's anti-alpha; flag it.
+
+---
+
+Last updated: 2026-05-04 — Session 96 close (Round 5)

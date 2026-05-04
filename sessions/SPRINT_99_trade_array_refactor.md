@@ -5,7 +5,7 @@
 
 **Sprint number:** 99
 **Date opened:** 2026-05-04
-**Date closed:** ___
+**Date closed:** 2026-05-04 (trial verdict: RED on original scope; pivoted to Sprint 99-bis is_enabled fix that shipped a 3.4x sequential profile speedup, 1-2% on parallel sweeps)
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/trade-array-refactor`
@@ -201,3 +201,58 @@ translates to:
 - 5m datasets where MR is even larger fraction: proportional savings
 
 The trial phase will tell us which end of that range to expect.
+
+## 9. Trial verdict (2026-05-04, gen8 cProfile)
+
+**RED on original scope.** Profile of 1500 MR combos on ES daily
+revealed a completely different bottleneck:
+
+```
+load_config (yaml.safe_load):       57.87s of 78.76s total = 73%
+filter_mask_cache.is_enabled:       28.95s
+signal_mask_memo.is_enabled:        28.97s
+compute_combined_signal_mask:       42.13s (cumulative incl is_enabled)
+```
+
+The Sprint 94 + 95 `is_enabled()` functions were calling
+`load_config()` -> `yaml.safe_load()` on **every** combo evaluation.
+With 1500 combos × 2 cache flag checks = 3000 yaml loads. Both flags
+default-OFF, so this was pure overhead.
+
+**The Trade-object loop + results() loop targeted by this sprint were
+not the per-combo bottleneck**; the yaml-reload was. Per the
+pre-registered RED exit, this sprint halts.
+
+## 10. Sprint 99-bis spin-off (shipped immediately)
+
+A 30-line fix in three modules:
+- `modules/filter_mask_cache.py::is_enabled` -> resolve once, cache result
+- `modules/signal_mask_memo.py::is_enabled` -> same
+- `modules/strategy_types/sweep_worker_pool.py::_is_recycling_enabled` -> same
+
+Plus `reset_*_cache()` test helpers wired into pytest fixtures.
+
+Committed as `be0ee0e`, merged to main same session.
+
+**Verified speedup (cProfile on gen8, 1500 MR combos, 1 worker):**
+- Before fix: 78.76s total, 52.51 ms/combo
+- After fix:  **23.40s total, 15.60 ms/combo (3.4x faster)**
+
+**However**: re-tested on the parallel smoke (40 workers, ES daily):
+- Before fix (Sprint 94 original smoke): 76.1s OFF -> 76.8s ON
+- After fix (gen8 4-mode re-test): 125.0s OFF -> 122.6s ON (1.9% delta)
+
+The 3.4× was a sequential-profiling artifact. In parallel runs each
+worker forks once and amortises the yaml load across many combos —
+yaml was never the parallel-run bottleneck. The fix is real and
+valuable for **dev workflow** (cProfile sessions, unit tests,
+small-dataset interactive runs) but **does not change the production
+parallel sweep speed**.
+
+**Net of Sprint 99 + 99-bis:**
+- Original Sprint 99 scope (Trade-array refactor): NOT pursued — RED
+  trial; Trade-object construction is not the per-combo bottleneck
+  in either sequential OR parallel runs.
+- Sprint 99-bis is_enabled() fix: **shipped as `be0ee0e`**, real win
+  on dev workflow, noise on production sweeps.
+- Sprints 94 + 95 verdicts UNCHANGED at SUSPICIOUS even after the fix.
