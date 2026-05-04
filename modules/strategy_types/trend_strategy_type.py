@@ -75,11 +75,24 @@ class _InlineTrendStrategy:
 # the full DataFrame with every task (critical for large datasets like 5m).
 _trend_shared_data: pd.DataFrame | None = None
 _trend_shared_cfg: EngineConfig | None = None
+# Sprint 100: handles for shared-memory backing. MUST stay referenced for the
+# worker's lifetime.
+_trend_shm_handles: list = []
 
 
-def _trend_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
-    global _trend_shared_data, _trend_shared_cfg
-    _trend_shared_data = data
+def _trend_worker_init(data, cfg: EngineConfig) -> None:
+    """Initialise trend worker globals.
+
+    Sprint 100: ``data`` may be a DataFrame or a :class:`ShmMeta`.
+    """
+    global _trend_shared_data, _trend_shared_cfg, _trend_shm_handles
+    from modules.shared_memory_features import ShmMeta, attach_from_shm
+    if isinstance(data, ShmMeta):
+        df, handles = attach_from_shm(data)
+        _trend_shm_handles = handles
+        _trend_shared_data = df
+    else:
+        _trend_shared_data = data
     _trend_shared_cfg = cfg
 
 

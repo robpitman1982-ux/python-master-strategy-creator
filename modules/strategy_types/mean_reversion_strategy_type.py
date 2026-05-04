@@ -80,11 +80,26 @@ class _InlineMeanReversionStrategy:
 # the full DataFrame with every task (critical for large datasets like 5m).
 _mr_shared_data: pd.DataFrame | None = None
 _mr_shared_cfg: EngineConfig | None = None
+# Sprint 100: handles for shared-memory backing. MUST stay referenced for the
+# worker's lifetime — when SharedMemory objects are GC'd the underlying
+# buffer is released and subsequent reads segfault.
+_mr_shm_handles: list = []
 
 
-def _mr_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
-    global _mr_shared_data, _mr_shared_cfg
-    _mr_shared_data = data
+def _mr_worker_init(data, cfg: EngineConfig) -> None:
+    """Initialise MR worker globals.
+
+    Sprint 100: ``data`` may be a DataFrame (legacy copy-on-fork) or a
+    :class:`modules.shared_memory_features.ShmMeta` (zero-copy SHM).
+    """
+    global _mr_shared_data, _mr_shared_cfg, _mr_shm_handles
+    from modules.shared_memory_features import ShmMeta, attach_from_shm
+    if isinstance(data, ShmMeta):
+        df, handles = attach_from_shm(data)
+        _mr_shm_handles = handles
+        _mr_shared_data = df
+    else:
+        _mr_shared_data = data
     _mr_shared_cfg = cfg
 
 

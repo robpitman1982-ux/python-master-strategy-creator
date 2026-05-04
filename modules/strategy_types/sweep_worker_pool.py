@@ -12,6 +12,13 @@ that drove the 5m sweep RAM crisis (~190 MB private-dirty per worker
 observed via pmap -X). The `RecyclingSweepPool` wrapper preserves the
 existing executor API surface (`.map()`, `.shutdown()`) so callers don't
 change.
+
+Sprint 100: ``sweep_worker_init`` accepts either a pandas DataFrame
+(legacy copy-on-fork path) or a :class:`ShmMeta` (shared-memory backing).
+When a ShmMeta is passed, the worker attaches to the named segments and
+hands the resulting zero-copy DataFrame to the per-family globals. The
+attach handles are stashed at module level on each strategy_types module
+to keep them alive for the worker's lifetime.
 """
 from __future__ import annotations
 
@@ -24,14 +31,32 @@ import pandas as pd
 
 from modules.config_loader import get_nested, load_config
 from modules.engine import EngineConfig
+from modules.shared_memory_features import ShmMeta, attach_from_shm
 
 
-def sweep_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
-    """Initialise worker globals for ALL sweep families at once."""
+def sweep_worker_init(data_or_meta: pd.DataFrame | ShmMeta, cfg: EngineConfig) -> None:
+    """Initialise worker globals for ALL sweep families at once.
+
+    Sprint 100: accepts either a DataFrame (copy-on-fork legacy path) or a
+    :class:`ShmMeta` (shared-memory zero-copy path). For ShmMeta, attaches
+    once and shares the same DataFrame view across all 3 family modules.
+    """
     # Import lazily inside the worker to avoid circular imports at module level
     import modules.strategy_types.trend_strategy_type as trend_mod
     import modules.strategy_types.mean_reversion_strategy_type as mr_mod
     import modules.strategy_types.breakout_strategy_type as bo_mod
+
+    if isinstance(data_or_meta, ShmMeta):
+        df, handles = attach_from_shm(data_or_meta)
+        # Stash handles on each module so they outlive this initializer call.
+        # SharedMemory objects must remain referenced or the buffer gets
+        # released and subsequent reads segfault.
+        trend_mod._trend_shm_handles = handles
+        mr_mod._mr_shm_handles = handles
+        bo_mod._breakout_shm_handles = handles
+        data = df
+    else:
+        data = data_or_meta
 
     trend_mod._trend_shared_data = data
     trend_mod._trend_shared_cfg = cfg
@@ -173,7 +198,7 @@ def reset_pool_flag_cache() -> None:
 
 
 def create_shared_sweep_pool(
-    data: pd.DataFrame,
+    data: pd.DataFrame | ShmMeta,
     cfg: EngineConfig,
     max_workers: int,
 ):
@@ -182,6 +207,9 @@ def create_shared_sweep_pool(
     Returns a `RecyclingSweepPool` (when `pipeline.recycling_pool: true`) or
     a `ProcessPoolExecutor` (default, backward-compatible). Both expose the
     same `.map()` and `.shutdown()` surface used by the family workers.
+
+    Sprint 100: ``data`` may be a DataFrame (legacy copy-on-fork) or a
+    :class:`ShmMeta` (zero-copy shared-memory backing).
     """
     if _is_recycling_enabled():
         return RecyclingSweepPool(

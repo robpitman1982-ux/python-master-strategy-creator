@@ -79,11 +79,24 @@ class _InlineBreakoutStrategy:
 # the full DataFrame with every task (critical for large datasets like 5m).
 _breakout_shared_data: pd.DataFrame | None = None
 _breakout_shared_cfg: EngineConfig | None = None
+# Sprint 100: handles for shared-memory backing. MUST stay referenced for the
+# worker's lifetime.
+_breakout_shm_handles: list = []
 
 
-def _breakout_worker_init(data: pd.DataFrame, cfg: EngineConfig) -> None:
-    global _breakout_shared_data, _breakout_shared_cfg
-    _breakout_shared_data = data
+def _breakout_worker_init(data, cfg: EngineConfig) -> None:
+    """Initialise breakout worker globals.
+
+    Sprint 100: ``data`` may be a DataFrame or a :class:`ShmMeta`.
+    """
+    global _breakout_shared_data, _breakout_shared_cfg, _breakout_shm_handles
+    from modules.shared_memory_features import ShmMeta, attach_from_shm
+    if isinstance(data, ShmMeta):
+        df, handles = attach_from_shm(data)
+        _breakout_shm_handles = handles
+        _breakout_shared_data = df
+    else:
+        _breakout_shared_data = data
     _breakout_shared_cfg = cfg
 
 

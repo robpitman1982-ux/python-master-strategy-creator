@@ -1090,6 +1090,31 @@ def _run_dataset(
     )
     print(f"   {len(precomputed_data.columns)} columns on {len(precomputed_data):,} rows in {time.perf_counter() - feat_start:.1f}s")
 
+    # ── Sprint 100: shared-memory feature backing ──────────────────────
+    # When `pipeline.shared_memory_features: true`, materialise the
+    # precomputed features into named POSIX shm segments. Workers attach
+    # by name and use zero-copy DataFrame views — drops per-worker RSS
+    # from ~800 MB to ~250 MB on 5m datasets, lifting the worker ceiling
+    # from ~40 to ~70 on r630. The parent retains the original DataFrame
+    # (`precomputed_data`) for status checks, sanity runs, and rebuild.
+    _shm_enabled = bool(get_nested(_cfg, "pipeline", "shared_memory_features", default=False))
+    _shm_owner = None
+    _worker_data: Any = precomputed_data  # what we pass to worker pool init
+    if _shm_enabled:
+        try:
+            from modules.shared_memory_features import materialise_to_shm
+            _shm_owner = materialise_to_shm(precomputed_data, run_id=f"{ds_market}_{ds_timeframe}")
+            _worker_data = _shm_owner.meta
+            print(
+                f"   [shm] features materialised to shared memory "
+                f"({len(precomputed_data.columns)} cols × {len(precomputed_data):,} rows); "
+                f"workers will attach via meta instead of copy-on-fork."
+            )
+        except Exception as exc:
+            print(f"   [shm] materialise failed ({exc}); falling back to copy-on-fork.")
+            _shm_owner = None
+            _worker_data = precomputed_data
+
     # ── Split families into large (sequential) and small (concurrent) ──
     SMALL_FAMILY_THRESHOLD = 200
     large_families: list[tuple[str, int]] = []
@@ -1142,7 +1167,7 @@ def _run_dataset(
     else:
         try:
             shared_sweep_pool = create_shared_sweep_pool(
-                data=precomputed_data,
+                data=_worker_data,
                 cfg=_pool_cfg,
                 max_workers=MAX_WORKERS_SWEEP,
             )
@@ -1195,7 +1220,7 @@ def _run_dataset(
             # family starts. Caps peak worker count at single-pool size.
             if _sequential_families:
                 _per_family_pool = create_shared_sweep_pool(
-                    data=precomputed_data,
+                    data=_worker_data,
                     cfg=_pool_cfg,
                     max_workers=MAX_WORKERS_SWEEP,
                 )
@@ -1276,6 +1301,11 @@ def _run_dataset(
         if shared_sweep_pool is not None:
             shared_sweep_pool.shutdown(wait=True)
             print("  Shared sweep pool shut down")
+        # Sprint 100: release the SHM segments now that all workers have exited.
+        # Idempotent + atexit-registered so a crash before this still cleans up.
+        if _shm_owner is not None:
+            _shm_owner.close()
+            print("  [shm] feature segments unlinked")
 
     family_summary_df = pd.DataFrame(dataset_summaries)
     family_summary_df.to_csv(ds_output_dir / "family_summary_results.csv", index=False)
