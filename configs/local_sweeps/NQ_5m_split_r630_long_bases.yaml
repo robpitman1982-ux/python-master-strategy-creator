@@ -1,0 +1,61 @@
+# NQ 5m family-split sprint 98 launch — r630 hosts the 3 long-side base families.
+# Output dir suffixed `_long_bases` to avoid colliding with other hosts'
+# parallel runs. After all 3 hosts complete, the per-family CSVs are
+# combined into a single dataset directory via manual ingest pass.
+
+instrument_universe: "cfd_dukascopy"
+price_source: "dukascopy"
+
+sweep:
+  name: "nq_5m_sprint98_long_bases"
+  output_dir: "Outputs/nq_5m_long_bases"
+
+datasets:
+  - path: "/data/market_data/cfds/ohlc_engine/NQ_5m_dukascopy.csv"
+    market: "NQ"
+    timeframe: "5m"
+
+# Sprint 91: subset of the 15 families. r630 takes the 3 heaviest base
+# long-side families.
+strategy_types:
+  - "mean_reversion"
+  - "trend"
+  - "breakout"
+
+output_dir: "Outputs/nq_5m_long_bases"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
+  use_vectorized_trades: true
+
+pipeline:
+  max_workers_sweep: 40
+  max_workers_refinement: 40
+  max_candidates_to_refine: 5
+  oos_split_date: "2020-01-01"
+  skip_portfolio_evaluation: true
+  skip_portfolio_selector: true
+
+  # Sprint 98 flags ON (verified RAM stability in session 96)
+  recycling_pool: true
+  maxtasksperchild: 200
+  sequential_families: true
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 60

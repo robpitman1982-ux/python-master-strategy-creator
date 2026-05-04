@@ -1,0 +1,65 @@
+# NQ 5m family-split sprint 98 launch — g9 hosts the 9 subtypes.
+# g9 has 31 GB RAM (smallest box). Subtypes are small families (~42 combos
+# each); engine runs them 3-concurrent so effective peak is ~24 workers.
+
+instrument_universe: "cfd_dukascopy"
+price_source: "dukascopy"
+
+sweep:
+  name: "nq_5m_sprint98_subtypes"
+  output_dir: "Outputs/nq_5m_subtypes"
+
+datasets:
+  - path: "/data/market_data/cfds/ohlc_engine/NQ_5m_dukascopy.csv"
+    market: "NQ"
+    timeframe: "5m"
+
+strategy_types:
+  - "mean_reversion_vol_dip"
+  - "mean_reversion_mom_exhaustion"
+  - "mean_reversion_trend_pullback"
+  - "trend_pullback_continuation"
+  - "trend_momentum_breakout"
+  - "trend_slope_recovery"
+  - "breakout_compression_squeeze"
+  - "breakout_range_expansion"
+  - "breakout_higher_low_structure"
+
+output_dir: "Outputs/nq_5m_subtypes"
+
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 0
+  slippage_ticks: 1
+  tick_value: 0.01
+  dollars_per_point: 1.0
+  use_vectorized_trades: true
+
+pipeline:
+  # g9 has 31 GB RAM; cap workers conservatively so subtypes 3-concurrent
+  # can't over-subscribe.
+  max_workers_sweep: 24
+  max_workers_refinement: 24
+  max_candidates_to_refine: 5
+  oos_split_date: "2020-01-01"
+  skip_portfolio_evaluation: true
+  skip_portfolio_selector: true
+
+  recycling_pool: true
+  maxtasksperchild: 200
+  sequential_families: true
+
+promotion_gate:
+  min_profit_factor: 1.00
+  min_average_trade: 0.00
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.00
+  min_oos_pf: 1.00
+  min_total_trades: 60

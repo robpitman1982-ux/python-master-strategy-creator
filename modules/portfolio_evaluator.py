@@ -334,6 +334,11 @@ def _rebuild_strategy_from_leaderboard_row(
     # commission_per_contract, slippage_ticks). Without this, rebuild uses futures
     # defaults (50x dollars_per_point) on CFD data, causing massive parity divergence.
     market_engine = _load_cfd_market_engine_values(market_symbol) or {}
+    # Session 97: pull engine direction from the strategy_type the same way the
+    # sweep/refinement does. Without this, ShortMR/ShortTrend/ShortBreakout
+    # rebuild as longs (EngineConfig.direction default is "long") and produce
+    # opposite-sign PnL → PARITY_FAILED on every accepted short row.
+    direction = getattr(strategy_type_inst, "get_engine_direction", lambda: "long")()
     cfg = EngineConfig(
         initial_capital=250_000.0,
         risk_per_trade=0.01,
@@ -343,6 +348,7 @@ def _rebuild_strategy_from_leaderboard_row(
         tick_value=float(market_engine.get("tick_value", 12.50)),
         dollars_per_point=float(market_engine.get("dollars_per_point", 50.0)),
         timeframe=timeframe,
+        direction=direction,
         use_vectorized_trades=True,  # 14-23x speedup, zero-tolerance parity (Session 61)
     )
 
