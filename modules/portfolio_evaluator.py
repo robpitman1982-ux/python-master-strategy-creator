@@ -353,10 +353,23 @@ def _rebuild_strategy_from_leaderboard_row(
     )
 
     engine = MasterStrategyEngine(data=eval_data, config=cfg)
-    if precomputed_signals is not None:
-        engine.run(strategy=strategy, precomputed_signals=precomputed_signals)
+    # Session 97: dispatch to vectorized vs Python loop the same way the sweep
+    # workers do (mean_reversion_strategy_type.py:116). The Python-loop
+    # engine.run() has long-only signal_exit logic (close >= fast_sma) that
+    # silently falls back to time_stop for short strategies. Vectorized path
+    # handles direction correctly. Without this, short MR with signal_exit/
+    # fast_sma rebuild matches the time_stop refinement variant, not the
+    # signal_exit one.
+    if cfg.use_vectorized_trades:
+        if precomputed_signals is not None:
+            engine.run_vectorized(strategy=strategy, precomputed_signals=precomputed_signals)
+        else:
+            engine.run_vectorized(strategy=strategy)
     else:
-        engine.run(strategy=strategy)
+        if precomputed_signals is not None:
+            engine.run(strategy=strategy, precomputed_signals=precomputed_signals)
+        else:
+            engine.run(strategy=strategy)
 
     trades_df = _normalize_trade_columns(engine.trades_dataframe())
     filters_str = str(combo_row.get("filters", "")) if combo_row else str(row.get("best_combo_filter_class_names", ""))

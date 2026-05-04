@@ -51,6 +51,8 @@ def _build_leaderboard_row(
     filter_classes: list[str],
     hold_bars: int = 24,
     stop_distance_atr: float = 1.0,
+    exit_type: str = "time_stop",
+    signal_exit_reference: str | float = float("nan"),
 ) -> pd.Series:
     return pd.Series(
         {
@@ -63,10 +65,10 @@ def _build_leaderboard_row(
             "leader_stop_distance_atr": stop_distance_atr,
             "leader_min_avg_range": 0.0,
             "leader_momentum_lookback": 0,
-            "leader_exit_type": "time_stop",
+            "leader_exit_type": exit_type,
             "leader_trailing_stop_atr": float("nan"),
             "leader_profit_target_atr": float("nan"),
-            "leader_signal_exit_reference": float("nan"),
+            "leader_signal_exit_reference": signal_exit_reference,
             "leader_net_pnl": 0.0,
         }
     )
@@ -80,6 +82,8 @@ def _run_strategy_native(
     market_symbol: str,
     hold_bars: int,
     stop_distance_atr: float,
+    exit_type: str = "time_stop",
+    signal_exit_reference: str | None = None,
 ) -> float:
     """Run a strategy through the engine the way the sweep does — with direction
     pulled from strategy_type.get_engine_direction(). Returns net_pnl."""
@@ -102,7 +106,8 @@ def _run_strategy_native(
         0.0,
         0,
         timeframe=timeframe,
-        exit_type="time_stop",
+        exit_type=exit_type,
+        signal_exit_reference=signal_exit_reference,
     )
 
     filter_objects = strategy_type.build_filter_objects_from_classes(
@@ -123,7 +128,8 @@ def _run_strategy_native(
         use_vectorized_trades=True,
     )
     engine = MasterStrategyEngine(data=eval_data, config=cfg)
-    engine.run(strategy=strategy, precomputed_signals=precomputed_signals)
+    # Match sweep dispatch (mean_reversion_strategy_type.py:116)
+    engine.run_vectorized(strategy=strategy, precomputed_signals=precomputed_signals)
 
     trades_df = _normalize_trade_columns(engine.trades_dataframe())
     if trades_df is None or trades_df.empty:
@@ -140,8 +146,13 @@ def _run_strategy_via_rebuild(
     hold_bars: int,
     stop_distance_atr: float,
     tmp_path,
+    exit_type: str = "time_stop",
+    signal_exit_reference: str | float = float("nan"),
 ) -> float:
-    row = _build_leaderboard_row(strategy_type_name, filter_class_names, hold_bars, stop_distance_atr)
+    row = _build_leaderboard_row(
+        strategy_type_name, filter_class_names, hold_bars, stop_distance_atr,
+        exit_type=exit_type, signal_exit_reference=signal_exit_reference,
+    )
     trades_df, _filters_str, _cfg = _rebuild_strategy_from_leaderboard_row(
         row=row,
         data=data,
@@ -237,4 +248,54 @@ def test_rebuild_parity_short_breakout(synthetic_data, tmp_path):
     )
     assert rebuilt_pnl == pytest.approx(native_pnl, rel=1e-6, abs=0.01), (
         f"Short Breakout rebuild mismatch: native=${native_pnl:,.2f} vs rebuilt=${rebuilt_pnl:,.2f}"
+    )
+
+
+def test_rebuild_parity_short_mr_signal_exit_fast_sma(synthetic_data, tmp_path):
+    """Regression: ShortMR with exit_type=signal_exit/fast_sma must rebuild
+    identically to the sweep path.
+
+    Bug #2 (Session 97): rebuild called engine.run() (Python loop) regardless
+    of cfg.use_vectorized_trades. The Python-loop signal_exit logic is
+    long-only (close >= fast_sma), which never fires for shorts → silent
+    fallback to time_stop. Sweep dispatches engine.run_vectorized() which
+    correctly handles direction (close <= fast_sma for shorts).
+    """
+    filter_class_names = ["AboveFastSMAFilter", "DistanceAboveSMAFilter", "UpCloseShortFilter"]
+    native_pnl = _run_strategy_native(
+        "short_mean_reversion", filter_class_names, synthetic_data,
+        timeframe="5m", market_symbol="NQ",
+        hold_bars=24, stop_distance_atr=0.4,
+        exit_type="signal_exit", signal_exit_reference="fast_sma",
+    )
+    rebuilt_pnl = _run_strategy_via_rebuild(
+        "short_mean_reversion", filter_class_names, synthetic_data,
+        timeframe="5m", market_symbol="NQ",
+        hold_bars=24, stop_distance_atr=0.4,
+        tmp_path=tmp_path,
+        exit_type="signal_exit", signal_exit_reference="fast_sma",
+    )
+    assert rebuilt_pnl == pytest.approx(native_pnl, rel=1e-6, abs=0.01), (
+        f"Short MR signal_exit rebuild mismatch: native=${native_pnl:,.2f} vs rebuilt=${rebuilt_pnl:,.2f}"
+    )
+
+
+def test_rebuild_parity_long_mr_signal_exit_fast_sma(synthetic_data, tmp_path):
+    """Sanity: long MR with signal_exit/fast_sma also rebuilds with parity."""
+    filter_class_names = ["DistanceBelowSMAFilter", "DownCloseFilter", "TwoBarDownFilter"]
+    native_pnl = _run_strategy_native(
+        "mean_reversion", filter_class_names, synthetic_data,
+        timeframe="5m", market_symbol="NQ",
+        hold_bars=24, stop_distance_atr=0.4,
+        exit_type="signal_exit", signal_exit_reference="fast_sma",
+    )
+    rebuilt_pnl = _run_strategy_via_rebuild(
+        "mean_reversion", filter_class_names, synthetic_data,
+        timeframe="5m", market_symbol="NQ",
+        hold_bars=24, stop_distance_atr=0.4,
+        tmp_path=tmp_path,
+        exit_type="signal_exit", signal_exit_reference="fast_sma",
+    )
+    assert rebuilt_pnl == pytest.approx(native_pnl, rel=1e-6, abs=0.01), (
+        f"Long MR signal_exit rebuild mismatch: native=${native_pnl:,.2f} vs rebuilt=${rebuilt_pnl:,.2f}"
     )
