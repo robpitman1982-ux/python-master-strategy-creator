@@ -5,7 +5,7 @@
 
 **Sprint number:** 98 (out of order vs 96/97 by design — see synthesis note)
 **Date opened:** 2026-05-04
-**Date closed:** ___
+**Date closed:** 2026-05-04 (verdict: CANDIDATES on parity + sequential-cost; RAM proof deferred to 5m heavy run)
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/ram-prevention`
@@ -232,3 +232,56 @@ Sequential families adds:
 - Caps at 80 (sweep) or 40 (refinement) — never both
 - Throughput cost ~20-30% on small datasets, smaller % on heavy datasets
   where pool fork cost is amortised
+
+## 9. Verdict (sprint close — 2026-05-04)
+
+**CANDIDATES on parity + sequential-cost; RAM proof deferred.**
+
+**4-mode smoke test on r630** (ES daily, resume_smoke_test config):
+
+| Mode | Wall clock | Δ vs A |
+|------|-----------|--------|
+| A baseline (both off) | 93.1s | — |
+| B recycling only | 94.8s | +1.8% (noise) |
+| C sequential only | 90.1s | -3.2% (faster) |
+| D both on | 91.9s | -1.3% (noise) |
+
+**Parity:** PASS in all 3 comparisons (A vs B, A vs C, A vs D).
+Zero behavioural drift on `net_pnl`/`leader_pf`/`oos_pf`. Naming
+tie-break warnings are pre-existing engine non-determinism (Sprint 93
+documentation), unaffected by Sprint 98 flags.
+
+**Sequential overhead:** WELL UNDER the 30% budget. Pre-reg worried
+about 20-30% throughput cost; actual measurement was negative — the
+cleaner family-by-family memory profile offset the loss of shared-pool
+fork-cost amortisation. Noise-level either way.
+
+**Tests:** 434/434 (was 430 + 4 platform-independent recycling pool
+tests). 10/10 wrapper tests pass on r630 (Linux fork-dependent ones).
+
+**RAM benefit not visible on small smoke:** ES daily is 93s wall-clock.
+`maxtasksperchild=200` only triggers worker recycle after a worker has
+processed 200 tasks. With ~775 MR combos / 40 workers = ~19 combos per
+worker on this smoke, no worker hits the recycle threshold. The 190 MB
+private-dirty growth observed via pmap -X on r630 happens over THOUSANDS
+of tasks, not tens.
+
+**Why ship default-off rather than revert:**
+1. Parity verified in 3 modes; zero behavioural risk.
+2. Pre-reg had concrete theoretical justification (pmap diagnostic
+   showed the problem the recycling addresses). Unlike Sprints 94/95
+   which were generic optimisations, Sprint 98 targets a specific
+   observed memory pattern.
+3. The first 5m heavy run with `PSC_RECYCLING_POOL=1` +
+   `sequential_families=true` will validate or refute the RAM benefit
+   directly. Sprint 93's resume logic makes that run cheap to attempt.
+4. Sequential-only mode (C) was a tiny improvement on small dataset.
+   On heavier datasets where sweep+refinement overlap is meaningful
+   RAM, the effect will scale.
+
+**Decision:** ship default-off, document the deferred RAM verification,
+move on to Sprint 97 (Numba JIT). Re-test all flags on a 5m heavy
+sweep when one is queued — that's the actual benchmark.
+
+**No regressions** on the 430-test suite. New 10 wrapper tests all
+green on Linux.

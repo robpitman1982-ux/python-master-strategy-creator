@@ -43,6 +43,19 @@ engine:
 pipeline:
   max_workers_sweep: 2
   max_workers_refinement: 2
+
+  # Sprint 98: RAM prevention for 5m sweeps.
+  # `recycling_pool` swaps the sweep ProcessPoolExecutor for a
+  # multiprocessing.Pool with maxtasksperchild, so workers recycle
+  # periodically and per-worker private-dirty heap accumulation drops.
+  # `sequential_families` forces a fresh pool per family so peak worker
+  # count is capped at single-pool size (eliminates sweep+refinement
+  # overlap that doubles peak RAM use).
+  # Both default OFF for backward compat. Enable in 5m configs.
+  # Env override: PSC_RECYCLING_POOL=1/0 wins over config.
+  recycling_pool: false
+  maxtasksperchild: 200
+  sequential_families: false
   max_candidates_to_refine: 3
   oos_split_date: "2019-01-01"
   skip_portfolio_evaluation: false

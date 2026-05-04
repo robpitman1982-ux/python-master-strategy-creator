@@ -1117,16 +1117,29 @@ def _run_dataset(
         use_vectorized_trades=bool(get_nested(_cfg, "engine", "use_vectorized_trades", default=False)),
     )
 
-    try:
-        shared_sweep_pool = create_shared_sweep_pool(
-            data=precomputed_data,
-            cfg=_pool_cfg,
-            max_workers=MAX_WORKERS_SWEEP,
-        )
-        print(f"\n  Shared sweep pool created with {MAX_WORKERS_SWEEP} workers")
-    except (OSError, PermissionError) as exc:
-        print(f"\n  [WARN] Could not create shared sweep pool ({exc}). Each family will create its own.")
+    # Sprint 98: sequential_families forces a fresh pool per family so
+    # sweep+refinement of family N+1 cannot overlap with family N. Caps peak
+    # worker count at single-pool size; eliminates the offline-cycle pattern
+    # observed on 5m sweeps. Default false (backward-compatible).
+    _sequential_families = bool(get_nested(_cfg, "pipeline", "sequential_families", default=False))
+
+    if _sequential_families:
         shared_sweep_pool = None
+        print(
+            f"\n  [sequential_families] One pool per family (peak workers capped); "
+            f"shared pool DISABLED."
+        )
+    else:
+        try:
+            shared_sweep_pool = create_shared_sweep_pool(
+                data=precomputed_data,
+                cfg=_pool_cfg,
+                max_workers=MAX_WORKERS_SWEEP,
+            )
+            print(f"\n  Shared sweep pool created with {MAX_WORKERS_SWEEP} workers")
+        except (OSError, PermissionError) as exc:
+            print(f"\n  [WARN] Could not create shared sweep pool ({exc}). Each family will create its own.")
+            shared_sweep_pool = None
 
     def _try_resume_family(family_name: str, expected_n: int) -> dict[str, Any] | None:
         """Sprint 93: if family CSVs already exist on disk and pass integrity
@@ -1167,6 +1180,17 @@ def _run_dataset(
             if resumed is not None:
                 dataset_summaries.append(resumed)
                 continue
+            # Sprint 98: when sequential_families is enabled, each large
+            # family gets its own pool that's torn down before the next
+            # family starts. Caps peak worker count at single-pool size.
+            if _sequential_families:
+                _per_family_pool = create_shared_sweep_pool(
+                    data=precomputed_data,
+                    cfg=_pool_cfg,
+                    max_workers=MAX_WORKERS_SWEEP,
+                )
+            else:
+                _per_family_pool = shared_sweep_pool
             summary_row = run_single_family(
                 strategy_type_name=family_name,
                 data=precomputed_data,
@@ -1177,10 +1201,14 @@ def _run_dataset(
                 market_symbol=ds_market,
                 timeframe=ds_timeframe,
                 tracker=tracker,
-                sweep_executor=shared_sweep_pool,
+                sweep_executor=_per_family_pool,
             )
             summary_row["resumed_from_disk"] = False
             dataset_summaries.append(summary_row)
+            # Sprint 98: tear down the per-family pool here so peak workers
+            # don't overlap with the next family's sweep.
+            if _sequential_families and _per_family_pool is not None:
+                _per_family_pool.shutdown(wait=True)
 
         # ── Run small families concurrently ─────────────────────────────────
         if small_families:
