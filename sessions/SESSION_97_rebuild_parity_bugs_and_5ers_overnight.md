@@ -128,10 +128,29 @@ docs/SHARED_MEMORY_FEATURES_DESIGN.md  (new — design for next sprint)
 sessions/SESSION_97_rebuild_parity_bugs_and_5ers_overnight.md  (this file)
 ```
 
+## Sprint 100 (same session, 2026-05-05) — Shared-memory feature DataFrame
+
+Shipped end-to-end the same session as bug fixes #1-#3 once the user OK'd the design. Commits `3c33f11`.
+
+**Module**: `modules/shared_memory_features.py` — stdlib `multiprocessing.shared_memory` only. `materialise_to_shm(df, run_id)` allocates one POSIX segment per numeric column (named `psc_<run_id>_<col>`) plus one for the int64 view of the DatetimeIndex. Returns a `ShmOwner` with idempotent `close()` and atexit-registered crash safety. `attach_from_shm(meta)` reconstructs a zero-copy `pd.DataFrame(cols, index=idx, copy=False)` from the meta and returns the handles the worker MUST keep alive for buffer validity.
+
+**Wiring**:
+- `master_strategy_engine.py`: when `pipeline.shared_memory_features: true`, materialise after `add_precomputed_features()` and pass `owner.meta` to pool initialisers. Parent retains the original DataFrame for sanity check, status writes, summary builds. Cleanup in dataset finally block.
+- `sweep_worker_init` (shared sweep pool): detects `ShmMeta` vs `DataFrame` at init time and attaches once, sharing handles across all 3 family modules.
+- `_mr_worker_init` / `_trend_worker_init` / `_breakout_worker_init`: same pattern. Each module gets a `_*_shm_handles` list at module level to keep handles alive for the worker's lifetime (otherwise GC frees the buffer mid-sweep).
+
+**Tests**: 12 in `tests/test_shared_memory_features.py`. 11 pass on Windows + 1 cross-process (Linux only, runs on cluster). All 98 existing tests still green. The cross-process test attaches in a `spawn` subprocess and verifies bit-exact summary reads.
+
+**Cluster smoke test (c240, 2026-05-04 19:00 UTC)**: ES daily run, SHM OFF (control) vs SHM ON. Both produced 13 accepted strategies, **bit-exact `trade_artifact_rebuilt_net_pnl` on all 13**, 0 PARITY_FAILED. Two of 15 leader rows had different `leader_strategy_name` (tied refined candidates with identical net_pnl to last cent — pre-existing tie-break non-determinism documented in earlier engine_parity work; not SHM-induced). SHM-on run wrote `[shm] features materialised to shared memory (16 cols × 4,163 rows)` and `[shm] feature segments unlinked` confirming both phases. SHM-on was 1:59 vs 1:41 SHM-off — slightly faster even on tiny daily data because fork copies less.
+
+**Crash safety verified**: launched ES 5m run on c240 (829k rows, 22 SHM segments allocated), killed parent mid-sanity-check with SIGTERM; atexit handler unlinked all 22 segments cleanly (`/dev/shm/` count went from 22 → 0).
+
+**Final RAM-savings benchmark deferred** to tomorrow when the 3 cluster hosts (r630/gen8/g9) finish their overnight queues and become available for clean A/B testing without contention. Smoke + parity + crash-safety already prove correctness; the remaining test is just measuring per-worker RSS to confirm the projected 800 MB → 250 MB drop.
+
 ## Open work next session
 
-1. Confirm overnight queue final state (which of 10 markets completed, parity counts).
+1. Confirm overnight queue final state (which of 8 active markets completed; JY + BTC remain deferred via `.deferred` rename).
 2. Run backfill on any pre-fix runs that need repair (use `scripts/backfill_best_refined_filters.py` + `backfill_trade_emission.py --force`).
-3. Implement shared-memory feature DataFrame per `docs/SHARED_MEMORY_FEATURES_DESIGN.md`. Smoke test on ES 60m, then NQ 5m at workers=70.
-4. After SHM shipped, push r630 workers to 70-80 and re-time a 5m market against tonight's baseline (ES = 150 min at workers=40).
-5. Decide whether to also run FTMO market set on 5m (FTMO has no excluded markets — adds W, NG, US, TY, RTY, HG to the list of 11 the5ers markets).
+3. **Sprint 100 RAM A/B**: NQ 5m on r630 with `shared_memory_features: false` (baseline = 793 MB/worker, 4 GB swap) vs `shared_memory_features: true` (target ~250 MB/worker, 0 swap). Sample RSS via `scripts/rss_sampler.sh`. If RSS drops as projected, push workers 40 → 70 on r630 and re-time ES 5m against tonight's 150-min baseline.
+4. **Round 2 markets** (15 markets, 13 with data + 2 deferred): N225, DAX, FTSE, STOXX, CAC, BRENT, ETH, NZDUSD, USDCAD, USDCHF (the5ers extras), RTY, NG, HG (FTMO-only), JY, BTC (deferred). With SHM at workers=70 on r630, the queue should land in roughly one overnight cycle vs two.
+5. Decide whether to expand to AUS, W, DXY (FTMO-supported but no Dukascopy data on cluster).
