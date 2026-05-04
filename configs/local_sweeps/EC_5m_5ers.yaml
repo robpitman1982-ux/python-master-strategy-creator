@@ -1,0 +1,41 @@
+instrument_universe: cfd_dukascopy
+price_source: dukascopy
+sweep:
+  name: ec_5m_5ers_overnight
+  output_dir: Outputs/ec_5m_5ers
+datasets:
+- path: /data/market_data/cfds/ohlc_engine/EC_5m_dukascopy.csv
+  market: EC
+  timeframe: 5m
+strategy_types: all
+output_dir: Outputs/ec_5m_5ers
+engine:
+  initial_capital: 250000.0
+  risk_per_trade: 0.01
+  commission_per_contract: 0
+  slippage_ticks: 0
+  tick_value: 6.25
+  dollars_per_point: 125000.0
+  use_vectorized_trades: true
+pipeline:
+  max_workers_sweep: 36
+  max_workers_refinement: 36
+  max_candidates_to_refine: 5
+  oos_split_date: '2016-01-01'
+  skip_portfolio_evaluation: true
+  skip_portfolio_selector: true
+  recycling_pool: true
+  maxtasksperchild: 200
+  sequential_families: true
+promotion_gate:
+  min_profit_factor: 1.0
+  min_average_trade: 0.0
+  require_positive_net_pnl: false
+  min_trades: 50
+  min_trades_per_year: 3.0
+  max_promoted_candidates: 20
+leaderboard:
+  min_net_pnl: 0.0
+  min_pf: 1.0
+  min_oos_pf: 1.0
+  min_total_trades: 60
