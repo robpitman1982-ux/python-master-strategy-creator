@@ -1579,11 +1579,12 @@ def _sweep_worker_init(
     eq_curves: dict[str, np.ndarray],
     eq_peaks: dict[str, np.ndarray],
     sweep_params: dict,
+    cluster_map: dict[str, int] | None = None,
 ) -> None:
     """Initializer for sweep worker processes — shared data via globals."""
     global _sw_abs_corr, _sw_col_idx, _sw_cands, _sw_cand_idx
     global _sw_ml_active, _sw_ml_dd, _sw_ml_tail
-    global _sw_eq_curves, _sw_eq_peaks, _sw_params
+    global _sw_eq_curves, _sw_eq_peaks, _sw_params, _sw_cluster_map
     _sw_abs_corr = abs_corr_arr
     _sw_col_idx = col_index
     _sw_cands = cand_list
@@ -1594,6 +1595,8 @@ def _sweep_worker_init(
     _sw_eq_curves = eq_curves
     _sw_eq_peaks = eq_peaks
     _sw_params = sweep_params
+    # Sprint 96: HRP cluster_map (empty dict when use_hrp_clustering is off)
+    _sw_cluster_map = cluster_map if cluster_map is not None else {}
 
 
 def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
@@ -1757,6 +1760,26 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
         calmar_norm = min(calmar_proxy / 5.0, 1.0) * 10.0
 
         dd_overlap_penalty = combo_max_dd_overlap * 10
+
+        # Sprint 96: HRP cluster diversity bonus + optional per-cluster cap.
+        # When use_hrp_clustering is enabled, cluster_map is non-empty and we:
+        # 1. Reject combos that put more than max_per_cluster strategies in
+        #    any single cluster (mirrors max_per_market structurally).
+        # 2. Add a diversity bonus proportional to the fraction of distinct
+        #    clusters spanned by the combo.
+        cluster_div_score = 0.0
+        if _sw_cluster_map:
+            cluster_counts: dict[int, int] = {}
+            for label in combo:
+                cid = _sw_cluster_map.get(label, -1)
+                cluster_counts[cid] = cluster_counts.get(cid, 0) + 1
+            max_per_cluster = int(_sw_params.get("max_per_cluster", 2))
+            if max_per_cluster > 0 and any(
+                v > max_per_cluster for v in cluster_counts.values()
+            ):
+                continue  # reject - too many strategies in one cluster
+            cluster_div_score = len(cluster_counts) / max(len(combo), 1)
+
         score = (
             0.25 * avg_oos_pf
             + 0.20 * calmar_norm
@@ -1764,6 +1787,7 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
             + 0.10 * (market_div * 10)
             + 0.10 * (10.0 if (has_long and has_short) else 0.0)
             + 0.10 * (logic_div * 10)
+            + 0.10 * (cluster_div_score * 10)  # Sprint 96
             - 0.25 * dd_overlap_penalty
         )
 
@@ -1773,6 +1797,7 @@ def _sweep_chunk(chunk: list[tuple[str, ...]], k: int) -> list[dict]:
             "avg_oos_pf": avg_oos_pf,
             "avg_corr": avg_corr,
             "diversity": diversity,
+            "cluster_diversity": cluster_div_score,
             "n_strategies": k,
         })
 
@@ -1837,8 +1862,19 @@ def sweep_combinations(
     max_ecd: float = 0.03,
     candidate_cap: int = 50,
     max_combinations: int = 10_000_000_000,
+    use_hrp_clustering: bool = False,
+    hrp_cut_threshold: float = 0.5,
+    max_per_cluster: int = 2,
 ) -> list[dict]:
-    """Sweep all C(n,k) combinations with parallel ProcessPoolExecutor."""
+    """Sweep all C(n,k) combinations with parallel ProcessPoolExecutor.
+
+    Sprint 96: when `use_hrp_clustering=True`, computes Hierarchical Risk
+    Parity clusters on the active correlation matrix and:
+      - rejects combinations putting more than `max_per_cluster` strategies
+        in a single cluster (structural orthogonality enforcement)
+      - adds a `cluster_diversity` term to the composite score
+    Default OFF for backward compat; existing threshold-based gates remain.
+    """
     # Only use candidates that are in the return matrix
     available_names = set(return_matrix.columns)
     cand_by_name: dict[str, dict] = {}
@@ -1913,7 +1949,30 @@ def sweep_combinations(
         "max_dd_overlap": max_dd_overlap,
         "max_per_market": max_per_market,
         "max_equity_index": max_equity_index,
+        "max_per_cluster": max_per_cluster,  # Sprint 96
     }
+
+    # Sprint 96: HRP clustering on the active correlation matrix.
+    # Empty dict when disabled -> _sweep_chunk treats cluster_map falsy as
+    # "no clustering active" and skips the bonus + per-cluster cap.
+    cluster_map: dict[str, int] = {}
+    if use_hrp_clustering and multi_layer_corr is not None:
+        try:
+            from modules.hrp_clustering import cluster_strategies, cluster_summary
+            active_corr = multi_layer_corr.get("active_corr")
+            if active_corr is not None and not active_corr.empty:
+                cluster_map = cluster_strategies(
+                    active_corr.loc[strategy_names, strategy_names],
+                    cut_threshold=hrp_cut_threshold,
+                )
+                logger.info(
+                    f"HRP clustering: {len(set(cluster_map.values()))} clusters "
+                    f"across {len(cluster_map)} strategies "
+                    f"(cut={hrp_cut_threshold}); summary: {cluster_summary(cluster_map)}"
+                )
+        except Exception as exc:
+            logger.warning(f"HRP clustering failed ({exc}); falling back to no clustering")
+            cluster_map = {}
 
     # For small problems, run single-threaded (avoid process overhead)
     if total_combos < 10_000 or n_cores <= 1:
@@ -1922,6 +1981,7 @@ def sweep_combinations(
             abs_corr_arr, col_index, cand_list, cand_name_to_idx,
             ml_active_arr, ml_dd_arr, ml_tail_arr,
             eq_curves, eq_peaks, sweep_params,
+            cluster_map,  # Sprint 96
         )
         all_results: list[dict] = []
         for k in range(n_min, n_max + 1):
@@ -1944,6 +2004,7 @@ def sweep_combinations(
                     abs_corr_arr, col_index, cand_list, cand_name_to_idx,
                     ml_active_arr, ml_dd_arr, ml_tail_arr,
                     eq_curves, eq_peaks, sweep_params,
+                    cluster_map,  # Sprint 96
                 ),
             ) as executor:
                 futures = [executor.submit(_sweep_chunk, chunk, k) for chunk in chunks]
@@ -3187,6 +3248,10 @@ def run_portfolio_selection(
         max_ecd=float(ps_cfg.get("max_ecd", 0.03)),
         candidate_cap=int(ps_cfg.get("sweep_top_n", 50)),
         max_combinations=int(ps_cfg.get("max_combinations", 10_000_000_000)),
+        # Sprint 96: HRP clustering (default OFF; enables structural diversity bonus)
+        use_hrp_clustering=bool(ps_cfg.get("use_hrp_clustering", False)),
+        hrp_cut_threshold=float(ps_cfg.get("hrp_cut_threshold", 0.5)),
+        max_per_cluster=int(ps_cfg.get("max_strategies_per_cluster", 2)),
     )
     if not combinations:
         logger.warning("No valid combinations found. Aborting.")

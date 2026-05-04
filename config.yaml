@@ -90,6 +90,18 @@ pipeline:
     max_strategies_per_market: 3  # was 2 — allow more per market in larger portfolios
     max_equity_index_strategies: 5  # was 3 — too tight for k=5+ portfolios
 
+    # Sprint 96: Hierarchical Risk Parity clustering. When enabled, clusters
+    # strategies by correlation distance and adds structural orthogonality
+    # to the combinatorial sweep:
+    #   - Rejects combos that put more than max_strategies_per_cluster in
+    #     a single cluster (replaces hand-tuned correlation thresholds with
+    #     a structural mechanism that scales as the candidate pool evolves).
+    #   - Adds a `cluster_diversity` term to the composite score.
+    # Default OFF; the loosened thresholds above remain the active gate.
+    use_hrp_clustering: false
+    hrp_cut_threshold: 0.5         # dendrogram cut (lower = more clusters)
+    max_strategies_per_cluster: 2  # cap per HRP cluster (when enabled)
+
 # --- Promotion gate (global defaults, strategy types can override) ---
 promotion_gate:
   min_profit_factor: 1.00
