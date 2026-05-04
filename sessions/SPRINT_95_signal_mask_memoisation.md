@@ -5,7 +5,7 @@
 
 **Sprint number:** 95
 **Date opened:** 2026-05-04
-**Date closed:** ___
+**Date closed:** 2026-05-04 (verdict: SUSPICIOUS on small-dataset smoke; bigger-dataset re-test deferred)
 **Operator:** Rob
 **Author:** Claude Code on Latitude
 **Branch:** `feat/signal-mask-memoisation`
@@ -247,3 +247,53 @@ If collision rate is 50% (best plausible):
 The honest range is 6-28%. Pre-reg verdict gate set at 10% to discriminate
 between "real win" and "noise". 15% hit rate threshold ensures we're not
 just measuring random variance.
+
+## 9. Verdict (sprint close — 2026-05-04)
+
+**SUSPICIOUS** per pre-registered threshold.
+
+**Smoke test on r630** (ES daily, resume_smoke_test config, 4163 bars):
+
+| Run | Wall clock |
+|-----|------------|
+| Memo OFF (control) | 78.1s |
+| Memo ON           | 77.1s |
+| Delta             | -1.0s = 1.3% (within noise; below the 10% CANDIDATES threshold) |
+
+**Parity:** PASS. `verify_resume_parity.py` shows zero behavioural
+drift (`net_pnl`/`leader_pf`/`oos_pf` identical row-by-row). The 1
+tie-break warning on `short_breakout` is the same engine non-determinism
+documented in Sprint 93/94 — independent of the memo flag.
+
+**Test counts:** 430/430 (was 416 + 14 new memo tests).
+
+**Why no measurable speedup on this profile:**
+
+1. Per-worker collision rate is much lower than family-wide. Each
+   ProcessPoolExecutor worker sees ~775 of 31,008 MR combos.
+   Subsumption-based mask collisions are sparse within that slice.
+   Worker caches don't share post-fork.
+2. ES daily (4163 bars, low trade frequency) makes per-combo trade-sim
+   work small in absolute terms. Even a 30% hit rate within a worker
+   would save sub-millisecond per combo.
+3. Hash/dict overhead approximately matches the work it saves on
+   cheap simulations.
+
+**Hit rate not measurable** without per-worker stats aggregation.
+Workers fork from parent post-CoW and their cache state doesn't flow
+back. Adding aggregation would require a side-channel (file or shared
+dict via Manager) and was scoped out of this sprint.
+
+**Decision:** ship default-off, infrastructure stays. The integration
+points in `_run_*_combo_case` are minimal and low-risk; reverting them
+loses optionality for the bigger smoke tests where memo's value is
+expected to actually appear (5m or 60m datasets where per-combo
+trade-sim is materially heavier).
+
+**Follow-up:** when a 5m sweep is queued (now safer thanks to Sprint
+93's resume logic), enable the memo and measure. If it pays off there,
+flip default to ON. If not, the integration cost is two small `from
+modules import signal_mask_memo` blocks and can be removed in a single
+revert commit.
+
+**No regressions** on the 416-test suite. New 14 memo tests all green.

@@ -29,6 +29,14 @@ engine:
   filter_mask_cache:
     enabled: false
 
+  # Sprint 95: signal-mask memoisation (trade-sim dedup by combined-mask hash).
+  # When enabled, the engine.run -> engine.results() output is cached keyed on
+  # hash(signal_mask) + strategy params + cfg fingerprint. Many filter combos
+  # produce identical signal masks; this skips redundant trade simulations.
+  # Default OFF. Override via env var PSC_SIGNAL_MASK_MEMO=1 (or 0).
+  signal_mask_memo:
+    enabled: false
+
 # --- Pipeline controls ---
 # Local (many cores): max_workers_sweep: 10, max_workers_refinement: 10
 # Cloud 2-core droplet: set both to 2

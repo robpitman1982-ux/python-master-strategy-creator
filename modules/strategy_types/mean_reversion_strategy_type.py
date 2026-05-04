@@ -106,12 +106,27 @@ def _run_mr_combo_case(args) -> dict[str, Any]:
     # Vectorized path: compute signal mask once, pass to engine
     signal_mask = compute_combined_signal_mask(filter_objects, data)
 
-    engine = MasterStrategyEngine(data=data, config=cfg, copy_data=False)
-    if cfg.use_vectorized_trades:
-        engine.run_vectorized(strategy=strategy, precomputed_signals=signal_mask)
-    else:
-        engine.run(strategy=strategy, precomputed_signals=signal_mask)
-    summary = engine.results()
+    # Sprint 95: trade-sim memoisation by signal-mask hash.
+    # When `engine.signal_mask_memo.enabled` (or PSC_SIGNAL_MASK_MEMO=1),
+    # combos with identical signal masks share a single trade-sim result.
+    from modules import signal_mask_memo
+
+    def _run_engine() -> dict:
+        engine = MasterStrategyEngine(data=data, config=cfg, copy_data=False)
+        if cfg.use_vectorized_trades:
+            engine.run_vectorized(strategy=strategy, precomputed_signals=signal_mask)
+        else:
+            engine.run(strategy=strategy, precomputed_signals=signal_mask)
+        return engine.results()
+
+    summary = signal_mask_memo.get_or_compute_summary(
+        signal_mask=signal_mask,
+        hold_bars=strat_type.default_hold_bars,
+        stop_distance=strat_type.default_stop_distance_points,
+        data=data,
+        cfg=cfg,
+        run_fn=_run_engine,
+    )
 
     total_trades = int(str(summary.get("Total Trades", 0)).replace(",", ""))
     years_in_sample = (data.index.max() - data.index.min()).days / 365.25
