@@ -37,6 +37,14 @@ from modules.progress import ProgressTracker
 from modules.statistics import annotate_dataframe_with_pvalues
 from modules.strategy_types import get_strategy_type, list_strategy_types
 from modules.trade_emission import apply_parity_status, emit_trade_artifacts
+from modules.engine_resume import (
+    compute_dataset_fingerprint,
+    is_family_resumable,
+    load_resumed_family,
+    make_synthetic_sanity_check,
+    read_fingerprint,
+    write_fingerprint,
+)
 
 # =============================================================================
 # CONFIGURATION
@@ -202,6 +210,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="config.yaml",
         help="Path to config YAML file (default: config.yaml)",
+    )
+    parser.add_argument(
+        "--force-fresh",
+        action="store_true",
+        help="Disable per-family resume; re-run every family from scratch even if "
+             "valid output CSVs exist on disk (Sprint 93).",
     )
     return parser.parse_args()
 
@@ -918,6 +932,16 @@ def run_single_family(
             ).reset_index(drop=True)
             refinement_df = combined_refinements
 
+    # Sprint 93: persist refinement results per family so resume can reload
+    # the refined leader instead of falling back to the combo-stage leader.
+    refinement_csv_path = outputs_dir / f"{strategy_type_name}_top_combo_refinement_results_narrow.csv"
+    if refinement_df is not None and not refinement_df.empty:
+        refinement_df.to_csv(refinement_csv_path, index=False)
+    elif refinement_csv_path.exists():
+        # Stale CSV from a prior run with refined results - remove it so resume
+        # doesn't pick a stale refinement when the current run produced none.
+        refinement_csv_path.unlink()
+
     family_summary_row = build_family_summary_row(
         strategy_type_name=strategy_type_name,
         dataset_path=dataset_path,
@@ -957,12 +981,65 @@ def _run_dataset(
     ds_market: str,
     ds_timeframe: str,
     ds_output_dir: Path,
+    force_fresh: bool = False,
 ) -> None:
-    """Run the full pipeline for a single dataset and save results to ds_output_dir."""
+    """Run the full pipeline for a single dataset and save results to ds_output_dir.
+
+    Sprint 93: per-family resume. If `force_fresh=False` (default) and
+    `<ds_output_dir>/.engine_config.fingerprint` exists matching the current
+    config, families with valid `*_filter_combination_sweep_results.csv` and
+    `*_promoted_candidates.csv` are skipped (loaded from disk into the
+    family-summary path). If fingerprint is present but mismatched, the run
+    aborts with a clear error to avoid stale-CSV bugs - rerun with
+    `--force-fresh` to override and recompute.
+    """
     ds_output_dir.mkdir(parents=True, exist_ok=True)
 
     family_names = normalize_strategy_type_names(STRATEGY_TYPE_SELECTION)
     dataset_summaries: list[dict[str, Any]] = []
+
+    # ── Sprint 93: fingerprint check + write ────────────────────────────────
+    # The fingerprint covers the dataset config block + engine git short-sha.
+    # If a prior partial run left a fingerprint and it matches, on-disk family
+    # CSVs are eligible for resume. If it mismatches, refuse to mix outputs.
+    _fingerprint_payload = {
+        "dataset_path": str(ds_path),
+        "market": ds_market,
+        "timeframe": ds_timeframe,
+        "strategy_types": list(family_names),
+        "engine": dict(get_nested(_cfg, "engine", default={}) or {}),
+        "pipeline_oos_split_date": get_nested(_cfg, "pipeline", "oos_split_date", default="2019-01-01"),
+        "promotion_gate": dict(get_nested(_cfg, "promotion_gate", default={}) or {}),
+        "leaderboard": dict(get_nested(_cfg, "leaderboard", default={}) or {}),
+    }
+    _current_fingerprint = compute_dataset_fingerprint(_fingerprint_payload)
+    _on_disk_fingerprint = read_fingerprint(ds_output_dir)
+    _resume_enabled = False
+    if _on_disk_fingerprint is None:
+        write_fingerprint(ds_output_dir, _current_fingerprint)
+        print(f"\n  [resume] First run on {ds_output_dir}; fingerprint written.")
+    elif _on_disk_fingerprint != _current_fingerprint:
+        if force_fresh:
+            print(
+                f"\n  [resume] Fingerprint mismatch on {ds_output_dir} but --force-fresh set; "
+                f"overwriting fingerprint and re-running all families."
+            )
+            write_fingerprint(ds_output_dir, _current_fingerprint)
+        else:
+            print(
+                f"\n  [resume] FINGERPRINT MISMATCH on {ds_output_dir}.\n"
+                f"  Stored: {_on_disk_fingerprint[:16]}...\n"
+                f"  Current: {_current_fingerprint[:16]}...\n"
+                f"  Refusing to resume - prior CSVs reflect a different config.\n"
+                f"  Re-run with --force-fresh to overwrite, or restore the prior config."
+            )
+            raise SystemExit(2)
+    else:
+        _resume_enabled = not force_fresh
+        if force_fresh:
+            print(f"\n  [resume] Fingerprint matches but --force-fresh set; running all families fresh.")
+        else:
+            print(f"\n  [resume] Fingerprint matches on {ds_output_dir}; resume enabled.")
 
     tracker = ProgressTracker(
         output_dir=ds_output_dir,
@@ -1051,9 +1128,45 @@ def _run_dataset(
         print(f"\n  [WARN] Could not create shared sweep pool ({exc}). Each family will create its own.")
         shared_sweep_pool = None
 
+    def _try_resume_family(family_name: str, expected_n: int) -> dict[str, Any] | None:
+        """Sprint 93: if family CSVs already exist on disk and pass integrity
+        checks, build a summary row from them and return it (skipping the
+        family's compute). Returns None when full sweep+refinement must run.
+        """
+        if not _resume_enabled:
+            return None
+        check = is_family_resumable(ds_output_dir, family_name, expected_n)
+        if not check.resumable:
+            print(f"  [resume] {family_name}: {check.reason} -> running fresh")
+            return None
+        print(f"  [resume] {family_name}: {check.reason} -> SKIPPING SWEEP")
+        combo_df, promoted_df, refinement_df = load_resumed_family(check)
+        sanity = make_synthetic_sanity_check()
+        sanity["strategy_name"] = "RESUMED_FROM_DISK"
+        sanity["total_trades"] = 0
+        summary = build_family_summary_row(
+            strategy_type_name=family_name,
+            dataset_path=ds_path,
+            data=precomputed_data,
+            sanity_check=sanity,
+            combo_results_df=combo_df,
+            promoted_df=promoted_df,
+            refinement_df=refinement_df,
+        )
+        summary["resumed_from_disk"] = True
+        summary["family_runtime_seconds"] = 0.0
+        if tracker is not None:
+            tracker.start_family(family_name)
+            tracker.end_family(family_name)
+        return summary
+
     try:
         # ── Run large families sequentially (they saturate cores) ───────────
         for family_name, _combo_count in large_families:
+            resumed = _try_resume_family(family_name, _combo_count)
+            if resumed is not None:
+                dataset_summaries.append(resumed)
+                continue
             summary_row = run_single_family(
                 strategy_type_name=family_name,
                 data=precomputed_data,
@@ -1066,17 +1179,20 @@ def _run_dataset(
                 tracker=tracker,
                 sweep_executor=shared_sweep_pool,
             )
+            summary_row["resumed_from_disk"] = False
             dataset_summaries.append(summary_row)
 
         # ── Run small families concurrently ─────────────────────────────────
         if small_families:
             from concurrent.futures import ThreadPoolExecutor, as_completed
 
+            # max_concurrent here is the closure value seen by _run_small_family
+            # for worker count division. It is rebound below after the resume
+            # check sets the real concurrency for the executor.
             max_concurrent = min(3, len(small_families))
-            print(f"\n  Running {len(small_families)} small families with concurrency={max_concurrent}")
 
             def _run_small_family(family_name: str) -> dict[str, Any]:
-                return run_single_family(
+                row = run_single_family(
                     strategy_type_name=family_name,
                     data=precomputed_data,
                     dataset_path=ds_path,
@@ -1088,19 +1204,36 @@ def _run_dataset(
                     tracker=tracker,
                     sweep_executor=shared_sweep_pool,
                 )
+                row["resumed_from_disk"] = False
+                return row
 
-            with ThreadPoolExecutor(max_workers=max_concurrent) as thread_executor:
-                futures = {
-                    thread_executor.submit(_run_small_family, name): name
-                    for name, _ in small_families
-                }
-                for future in as_completed(futures):
-                    family_name = futures[future]
-                    try:
-                        summary_row = future.result()
-                        dataset_summaries.append(summary_row)
-                    except Exception as e:
-                        print(f"\n  Family {family_name} failed: {e}")
+            # Sprint 93: resume any small families whose CSVs are already on disk
+            small_families_to_run: list[tuple[str, int]] = []
+            for name, count in small_families:
+                resumed = _try_resume_family(name, count)
+                if resumed is not None:
+                    dataset_summaries.append(resumed)
+                else:
+                    small_families_to_run.append((name, count))
+
+            if small_families_to_run:
+                max_concurrent = min(3, len(small_families_to_run))
+                print(
+                    f"\n  Running {len(small_families_to_run)} small families "
+                    f"with concurrency={max_concurrent} (after resume check)"
+                )
+                with ThreadPoolExecutor(max_workers=max_concurrent) as thread_executor:
+                    futures = {
+                        thread_executor.submit(_run_small_family, name): name
+                        for name, _ in small_families_to_run
+                    }
+                    for future in as_completed(futures):
+                        family_name = futures[future]
+                        try:
+                            summary_row = future.result()
+                            dataset_summaries.append(summary_row)
+                        except Exception as e:
+                            print(f"\n  Family {family_name} failed: {e}")
     finally:
         if shared_sweep_pool is not None:
             shared_sweep_pool.shutdown(wait=True)
@@ -1261,6 +1394,7 @@ if __name__ == "__main__":
             ds_market=ds_market,
             ds_timeframe=ds_timeframe,
             ds_output_dir=ds_output_dir,
+            force_fresh=args.force_fresh,
         )
 
     if len(datasets) > 1:
